@@ -1,6 +1,6 @@
 // Configuración de Supabase - REEMPLAZA ESTOS VALORES
-const supabaseUrl = 'https://tu-proyecto.supabase.co'; // Cambia esto por tu URL
-const supabaseKey = 'tu-clave-anonima-publica'; // Cambia esto por tu clave
+const supabaseUrl = 'https://uriqltengefxiijgonih.supabase.co'; // Cambia esto por tu URL
+const supabaseKey = 'sb_publishable_lHmMGjQnXl0Bm4FOF5YV5w_jQN_lNRP'; // Cambia esto por tu clave
 
 // Inicializar Supabase
 const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
