@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Sistema de Login</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <div class="login-box">
+            <div class="dashboard-header">
+                <div class="user-info">
+                    <i class="fas fa-user-circle"></i>
+                    <div class="user-details">
+                        <h2>Bienvenido, <span id="userDisplay">Usuario</span></h2>
+                        <p>Sesión iniciada: <span id="loginTimeDisplay">--:--</span></p>
+                    </div>
+                </div>
+                <button id="logoutBtn" class="btn-logout">
+                    <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+                </button>
+            </div>
+            
+            <div class="dashboard-content">
+                <i class="fas fa-check-circle"></i>
+                <h3>¡Login Exitoso!</h3>
+                <p>Has accedido correctamente al sistema de demostración. Esta es una página de dashboard sencilla que se muestra después del login.</p>
+                
+                <div class="credentials" style="margin-top: 30px;">
+                    <h4>Información de la aplicación:</h4>
+                    <ul>
+                        <li>Base de datos: Supabase</li>
+                        <li>Autenticación: Texto plano (solo para demo)</li>
+                        <li>Hosting: Netlify</li>
+                        <li>Control de versiones: GitHub</li>
+                    </ul>
+                    <p class="note">⚠️ Esta es una aplicación de demostración con fines educativos.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Sistema de Login Sencillo | Dashboard</p>
+        </div>
+    </div>
+    
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Sencillo</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <div class="login-box">
+            <div class="header">
+                <i class="fas fa-user-circle"></i>
+                <h1>Iniciar Sesión</h1>
+                <p class="subtitle">Ingresa tus credenciales</p>
+            </div>
+            
+            <form id="loginForm">
+                <div class="form-group">
+                    <label for="usuario">
+                        <i class="fas fa-user"></i> Usuario
+                    </label>
+                    <input type="text" id="usuario" name="usuario" required placeholder="Ingresa tu usuario">
+                </div>
+                
+                <div class="form-group">
+                    <label for="contra">
+                        <i class="fas fa-lock"></i> Contraseña
+                    </label>
+                    <input type="password" id="contra" name="contra" required placeholder="Ingresa tu contraseña">
+                </div>
+                
+                <div class="form-group">
+                    <button type="submit" class="btn-login">
+                        <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
+                    </button>
+                </div>
+                
+                <div class="message" id="message"></div>
+                
+                <div class="credentials">
+                    <p><strong>Usuarios de prueba:</strong></p>
+                    <ul>
+                        <li><strong>admin</strong> / admin123</li>
+                        <li><strong>usuario1</strong> / password1</li>
+                        <li><strong>usuario2</strong> / password2</li>
+                    </ul>
+                    <p class="note">⚠️ Las contraseñas están en texto plano (solo para demostración)</p>
+                </div>
+            </form>
+        </div>
+        
+        <div class="footer">
+            <p>Sitio de Login Sencillo | Usando Supabase + Netlify</p>
+        </div>
+    </div>
+    
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="app.js"></script>
+</body>
+</html>
