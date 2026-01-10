@@ -1,8 +1,8 @@
-// Configuración de Supabase - REEMPLAZA ESTOS VALORES
-const supabaseUrl = 'https://uriqltengefxiijgonih.supabase.co'; // Cambia esto por tu URL
-const supabaseKey = 'sb_publishable_lHmMGjQnXl0Bm4FOF5YV5w_jQN_lNRP'; // Cambia esto por tu clave
+// Configuración de Supabase
+const supabaseUrl = 'https://uriqltengefxiijgonih.supabase.co';
+const supabaseKey = 'sb_publishable_lHmMGjQnXl0Bm4FOF5YV5w_jQN_lNRP';
 
-// Inicializar Supabase
+// Inicializar Supabase (SOLO UNA VEZ)
 const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 
 // Cuando el DOM esté listo
@@ -11,7 +11,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const messageDiv = document.getElementById('message');
     
     if (loginForm) {
-        // Manejar el envío del formulario de login
         loginForm.addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -23,7 +22,6 @@ document.addEventListener('DOMContentLoaded', function() {
             messageDiv.textContent = '';
             messageDiv.style.display = 'none';
             
-            // Validar que los campos no estén vacíos
             if (!usuario || !contra) {
                 showMessage('Por favor, completa todos los campos', 'error');
                 return;
@@ -47,18 +45,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     throw error;
                 }
                 
-                // Verificar si encontró el usuario
                 if (data && data.length > 0) {
-                    // Login exitoso
                     showMessage('¡Login exitoso! Redirigiendo...', 'success');
                     
-                    // Guardar usuario en localStorage
                     localStorage.setItem('loggedInUser', JSON.stringify({
                         usuario: data[0].usuario,
                         loginTime: new Date().toISOString()
                     }));
                     
-                    // Redirigir al dashboard después de 1.5 segundos
                     setTimeout(() => {
                         window.location.href = 'dashboard.html';
                     }, 1500);
@@ -71,18 +65,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 console.error('Error en login:', error);
                 showMessage('Error al conectar con la base de datos', 'error');
             } finally {
-                // Restaurar botón
                 submitBtn.innerHTML = originalText;
                 submitBtn.disabled = false;
             }
         });
     }
     
-    // Verificar si estamos en dashboard y cargar información del usuario
     if (window.location.pathname.includes('dashboard.html')) {
         checkLoginStatus();
         
-        // Manejar logout
         const logoutBtn = document.getElementById('logoutBtn');
         if (logoutBtn) {
             logoutBtn.addEventListener('click', function() {
@@ -93,27 +84,25 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Función para mostrar mensajes
 function showMessage(text, type) {
     const messageDiv = document.getElementById('message');
-    messageDiv.textContent = text;
-    messageDiv.className = `message ${type}`;
-    messageDiv.style.display = 'block';
+    if (messageDiv) {
+        messageDiv.textContent = text;
+        messageDiv.className = `message ${type}`;
+        messageDiv.style.display = 'block';
+    }
 }
 
-// Función para verificar si el usuario está logueado
 function checkLoginStatus() {
     const userData = localStorage.getItem('loggedInUser');
     
     if (!userData) {
-        // No hay usuario logueado, redirigir al login
         window.location.href = 'index.html';
         return;
     }
     
     try {
         const user = JSON.parse(userData);
-        // Mostrar información del usuario en el dashboard
         const userDisplay = document.getElementById('userDisplay');
         const loginTimeDisplay = document.getElementById('loginTimeDisplay');
         
