@@ -79,21 +79,19 @@
     import { requireSession, loadSidebar } from "../../assets/js/app.js";
 
     const session = requireSession();
-    if (!session) return;
+    if (!session) return; // Si no hay sesión, requireSession redirige.
 
     if (session.rol !== "gerente") {
       alert("Acceso restringido");
       window.location.href = "../dashboard/dashboard.html";
     }
 
- loadSidebar({
-  activeKey: "cuentas_fb",
-  basePath: "../"
- });
-
-
-
-
+    // 🛠️ CORRECCIÓN AQUI:
+    // Cambiamos "../" por "../../" para ir a la raíz real
+    loadSidebar({
+      activeKey: "cuentas_fb",
+      basePath: "../"      // ✅ Esto busca en la carpeta 'templates' donde sí está
+    });
   </script>
 
    <!-- JS de esta página -->
