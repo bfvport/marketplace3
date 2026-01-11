@@ -1,4 +1,3 @@
-// templates/cuentas_fb/cuentas_fb.js
 const $ = (sel) => document.querySelector(sel);
 
 async function waitSupabaseClient(timeoutMs = 2000) {
@@ -11,78 +10,120 @@ async function waitSupabaseClient(timeoutMs = 2000) {
 }
 
 let supabase = null;
-const tbody = document.getElementById("cuentas_facebook"); // ✅ id real del tbody
+const tbody = document.getElementById("cuentas_facebook");
 let cuentaEditandoId = null;
 
+/* ===============================
+   CARGAR OPERADORES
+================================ */
+async function cargarOperadores() {
+  const { data, error } = await supabase
+    .from("usuarios")
+    .select("usuario")
+    .neq("rol", "gerente");
+
+  if (error) {
+    alert("Error cargando operadores");
+    console.error(error);
+    return;
+  }
+
+  const select = $("#ocupada_por");
+  select.innerHTML = `<option value="">Libre</option>`;
+
+  data.forEach(u => {
+    select.innerHTML += `<option value="${u.usuario}">${u.usuario}</option>`;
+  });
+}
+
+/* ===============================
+   CARGAR CUENTAS
+================================ */
 async function cargarCuentas() {
   const { data, error } = await supabase
     .from("cuentas_facebook")
     .select("*")
-    .order("id", { ascending: true });
+    .order("id");
 
   if (error) {
+    alert("Error cargando cuentas");
     console.error(error);
-    alert("Error cargando cuentas: " + error.message);
     return;
   }
 
   tbody.innerHTML = "";
 
-  data.forEach((cuenta) => {
+  data.forEach(cuenta => {
+    const estadoBadge = `<span class="badge ${cuenta.estado}">${cuenta.estado}</span>`;
+    const calidadBadge = `<span class="badge ${cuenta.calidad}">${cuenta.calidad}</span>`;
+
+    const ocupada = cuenta.ocupada_por
+      ? `<span class="badge activo">Ocupada</span><br><small>${cuenta.ocupada_por}</small>`
+      : `<span class="badge inactivo">Libre</span>`;
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${cuenta.id}</td>
       <td>${cuenta.email}</td>
-      <td>${cuenta.estado}</td>
-      <td>${cuenta.calidad}</td>
-      <td>${cuenta.ocupada_por ?? "-"}</td>
+      <td>${estadoBadge}</td>
+      <td>${calidadBadge}</td>
+      <td>${ocupada}</td>
       <td>
-        <button class="btn-small edit" data-id="${cuenta.id}">Editar</button>
-        <button class="btn-small danger" data-id="${cuenta.id}">Eliminar</button>
+        <button class="btn edit" data-id="${cuenta.id}">Editar</button>
+        <button class="btn danger" data-id="${cuenta.id}">Eliminar</button>
       </td>
     `;
+
     tbody.appendChild(tr);
   });
 }
 
+/* ===============================
+   MODAL
+================================ */
 function openModal() {
-  $("#modal-cuenta")?.classList.remove("hidden");
+  $("#modal-cuenta").classList.remove("hidden");
 }
+
 function closeModal() {
-  $("#modal-cuenta")?.classList.add("hidden");
+  $("#modal-cuenta").classList.add("hidden");
   cuentaEditandoId = null;
+
   $("#email").value = "";
   $("#contra").value = "";
   $("#nombre").value = "";
   $("#estado").value = "activo";
   $("#calidad").value = "caliente";
+  $("#ocupada_por").value = "";
 }
 
+/* ===============================
+   INIT
+================================ */
 document.addEventListener("DOMContentLoaded", async () => {
-  if (!tbody) {
-    console.error("No existe tbody#cuentas_facebook");
-    return;
-  }
-
-  supabase = await waitSupabaseClient(2000);
+  supabase = await waitSupabaseClient();
   if (!supabase) {
-    alert("Supabase client no está inicializado (window.supabaseClient). Revisá assets/js/supabase.js");
+    alert("Supabase no inicializado");
     return;
   }
 
+  await cargarOperadores();
   await cargarCuentas();
 
-  $("#btn-nueva").onclick = () => openModal();
-  $("#cancelar").onclick = () => closeModal();
+  $("#btn-nueva").onclick = openModal;
+  $("#cancelar").onclick = closeModal;
 
   $("#guardar").onclick = async () => {
-    const email = $("#email").value.trim();
-    const contra = $("#contra").value.trim();
-    const nombre = $("#nombre").value.trim();
-    const estado = $("#estado").value;
-    const calidad = $("#calidad").value;
+    const payload = {
+      email: $("#email").value.trim(),
+      contra: $("#contra").value.trim(),
+      nombre: $("#nombre").value.trim(),
+      estado: $("#estado").value,
+      calidad: $("#calidad").value,
+      ocupada_por: $("#ocupada_por").value || null
+    };
 
-    if (!email || !contra || !nombre) {
+    if (!payload.email || !payload.contra || !payload.nombre) {
       alert("Completá todos los campos");
       return;
     }
@@ -91,17 +132,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (cuentaEditandoId) {
       ({ error } = await supabase
         .from("cuentas_facebook")
-        .update({ email, contra, nombre, estado, calidad })
+        .update(payload)
         .eq("id", cuentaEditandoId));
     } else {
       ({ error } = await supabase
         .from("cuentas_facebook")
-        .insert([{ email, contra, nombre, estado, calidad }]));
+        .insert(payload));
     }
 
     if (error) {
+      alert("Error guardando cuenta");
       console.error(error);
-      alert("Error al guardar: " + error.message);
       return;
     }
 
@@ -109,27 +150,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     await cargarCuentas();
   };
 
-  tbody.addEventListener("click", async (e) => {
+  tbody.onclick = async (e) => {
     const btn = e.target.closest("button");
     if (!btn) return;
 
     const id = btn.dataset.id;
-    if (!id) return;
 
     if (btn.classList.contains("danger")) {
       if (!confirm("¿Eliminar esta cuenta Facebook?")) return;
-
-      const { error } = await supabase
-        .from("cuentas_facebook")
-        .delete()
-        .eq("id", id);
-
-      if (error) {
-        console.error(error);
-        alert("No se pudo eliminar: " + error.message);
-        return;
-      }
-
+      await supabase.from("cuentas_facebook").delete().eq("id", id);
       await cargarCuentas();
       return;
     }
@@ -142,8 +171,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         .single();
 
       if (error) {
-        console.error(error);
-        alert("Error cargando la cuenta: " + error.message);
+        alert("Error cargando cuenta");
         return;
       }
 
@@ -152,9 +180,10 @@ document.addEventListener("DOMContentLoaded", async () => {
       $("#nombre").value = data.nombre ?? "";
       $("#estado").value = data.estado ?? "activo";
       $("#calidad").value = data.calidad ?? "caliente";
+      $("#ocupada_por").value = data.ocupada_por ?? "";
 
       cuentaEditandoId = id;
       openModal();
     }
-  });
+  };
 });

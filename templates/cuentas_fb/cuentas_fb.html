@@ -10,18 +10,18 @@
 <body>
 
   <!-- Sidebar (se carga desde app.js) -->
-  <div id="sidebar-host"></div>
+  <div class="layout">
+    <div id="sidebar-host"></div>
 
-
-  <main class="content">
+   <main class="content">
     <h1>Gestión de Cuentas Facebook</h1>
 
     <p class="muted">
       Acceso exclusivo para el rol <strong>GERENTE</strong>
     </p>
- <button id="btn-nueva" class="btn-primary">
+   <button id="btn-nueva" class="btn-primary">
   ➕ Nueva Cuenta Facebook
-</button>
+   </button>
 
     <table class="table">
       <thead>
@@ -52,9 +52,15 @@
     </select>
 
     <select id="calidad">
+      
       <option value="caliente">Caliente</option>
       <option value="frio">Frío</option>
+    
     </select>
+    <label>Asignar a operador</label>
+    <select id="ocupada_por">
+     <option value="">Libre</option>
+</select>
 
     <button id="guardar">Guardar</button>
     <button id="cancelar">Cancelar</button>
@@ -80,17 +86,16 @@
       window.location.href = "../dashboard/dashboard.html";
     }
 
-    loadSidebar({
-  activeKey: "categoria",
+loadSidebar({
+  activeKey: "cuentas_fb",
   basePath: "../"
 });
 
+
+
   </script>
 
-  <script type="module" src="cuentas_fb.js"></script>
-
-
-  <!-- JS de esta página -->
+   <!-- JS de esta página -->
   <script type="module" src="cuentas_fb.js"></script>
 </body>
 </html>
