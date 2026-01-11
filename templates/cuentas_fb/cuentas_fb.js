@@ -1,9 +1,3 @@
-import {
-loadSidebar
-} from "../../assets/js/app.js";
-
-await loadSidebar({ activeKey: "cuenta_fb", basePath: "../" });
-
 const $ = (sel) => document.querySelector(sel);
 
 async function waitSupabaseClient(timeoutMs = 2000) {
