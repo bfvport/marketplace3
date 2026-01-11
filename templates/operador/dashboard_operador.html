@@ -3,19 +3,191 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mi Dashboard - Operador</title>
+    <title>Dashboard - Marketplace Manager</title>
     <link rel="stylesheet" href="../../static/css/main.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* Estilos específicos para dashboard */
+        .dashboard-header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+            color: white;
+            padding: 30px;
+            border-radius: var(--radius-lg);
+            margin-bottom: 30px;
+        }
+        
+        .dashboard-header h1 {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        
+        .dashboard-header p {
+            opacity: 0.9;
+            font-size: 16px;
+        }
+        
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .dashboard-card {
+            background: var(--card-bg);
+            border-radius: var(--radius-lg);
+            padding: 25px;
+            box-shadow: var(--shadow);
+        }
+        
+        .dashboard-card h2 {
+            margin-bottom: 20px;
+            color: var(--text-dark);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-bottom: 2px solid var(--light-bg);
+            padding-bottom: 10px;
+        }
+        
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .quick-stat {
+            text-align: center;
+            padding: 15px;
+            background: var(--light-bg);
+            border-radius: var(--radius);
+        }
+        
+        .quick-stat i {
+            font-size: 24px;
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+        
+        .quick-stat .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--text-dark);
+            display: block;
+        }
+        
+        .quick-stat .label {
+            font-size: 12px;
+            color: var(--text-light);
+            text-transform: uppercase;
+            margin-top: 5px;
+        }
+        
+        .recent-activity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .activity-item {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            padding: 15px;
+            background: var(--light-bg);
+            border-radius: var(--radius);
+        }
+        
+        .activity-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+        }
+        
+        .activity-content {
+            flex: 1;
+        }
+        
+        .activity-content h4 {
+            margin: 0 0 5px 0;
+            color: var(--text-dark);
+        }
+        
+        .activity-content p {
+            margin: 0;
+            color: var(--text-light);
+            font-size: 14px;
+        }
+        
+        .activity-time {
+            font-size: 12px;
+            color: var(--text-light);
+        }
+        
+        .empty-activity {
+            text-align: center;
+            padding: 30px;
+            color: var(--text-light);
+        }
+        
+        .empty-activity i {
+            font-size: 48px;
+            margin-bottom: 15px;
+            opacity: 0.5;
+        }
+        
+        .action-buttons {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .quick-stats {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .action-buttons {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .quick-stats {
+                grid-template-columns: 1fr;
+            }
+            
+            .dashboard-header {
+                padding: 20px;
+            }
+            
+            .dashboard-header h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar">
         <div class="nav-brand">
-            <i class="fas fa-user-tie"></i>
-            <span>Panel Operador</span>
+            <i class="fas fa-store"></i>
+            <span>Marketplace Manager</span>
         </div>
         <div class="nav-user">
-            <span id="userDisplay">Operador1</span>
-            <span class="role-badge badge-operador">OPERADOR</span>
+            <span id="userDisplay">Usuario</span>
+            <span class="role-badge" id="roleBadge">ROL</span>
             <button onclick="window.location.href='../../dashboard.html'" class="btn-secondary">
                 <i class="fas fa-home"></i> Principal
             </button>
@@ -25,130 +197,732 @@
         </div>
     </nav>
     
-    <div class="sidebar">
-        <div class="menu-section">
-            <h3><i class="fas fa-tasks"></i> Operaciones</h3>
-            <a href="dashboard_operador.html" class="menu-item active">
-                <i class="fas fa-home"></i> Mi Dashboard
-            </a>
-            <a href="tareas_diarias.html" class="menu-item">
-                <i class="fas fa-calendar-day"></i> Tareas Diarias
-            </a>
-            <a href="nueva_publicacion.html" class="menu-item">
-                <i class="fas fa-plus-circle"></i> Nueva Publicación
-            </a>
-            <a href="mis_publicaciones.html" class="menu-item">
-                <i class="fas fa-history"></i> Mi Historial
-            </a>
-            <a href="cuentas_asignadas.html" class="menu-item">
-                <i class="fas fa-user-friends"></i> Mis Cuentas
-            </a>
-            <a href="mi_rendimiento.html" class="menu-item">
-                <i class="fas fa-chart-line"></i> Mi Rendimiento
-            </a>
-        </div>
+    <div class="sidebar" id="sidebar">
+        <!-- Se llena dinámicamente con core.js -->
     </div>
     
     <main class="main-content">
-        <!-- Resumen rápido del día -->
-        <div class="daily-summary">
-            <h1><i class="fas fa-sun"></i> Buen día, <span id="nombreOperador">Operador</span></h1>
-            <p id="fechaHoy">Lunes 10 de Enero, 2024</p>
+        <!-- Encabezado del dashboard -->
+        <div class="dashboard-header">
+            <h1><i class="fas fa-sun"></i> ¡Buen día, <span id="userName">Usuario</span>!</h1>
+            <p id="welcomeMessage">Gestiona tus publicaciones de Marketplace</p>
+            <div class="header-stats">
+                <span id="headerDate">Cargando fecha...</span>
+                <span class="badge badge-success" id="headerStatus">Conectado</span>
+            </div>
+        </div>
+        
+        <!-- Grid principal -->
+        <div class="dashboard-grid">
+            <!-- Estadísticas rápidas -->
+            <div class="dashboard-card">
+                <h2><i class="fas fa-chart-bar"></i> Estadísticas Hoy</h2>
+                <div class="quick-stats" id="quickStats">
+                    <div class="quick-stat">
+                        <i class="fas fa-bullseye"></i>
+                        <span class="value" id="statTarget">0</span>
+                        <span class="label">Objetivo</span>
+                    </div>
+                    <div class="quick-stat">
+                        <i class="fas fa-check-circle"></i>
+                        <span class="value" id="statCompleted">0</span>
+                        <span class="label">Completadas</span>
+                    </div>
+                    <div class="quick-stat">
+                        <i class="fas fa-clock"></i>
+                        <span class="value" id="statPending">0</span>
+                        <span class="label">Pendientes</span>
+                    </div>
+                    <div class="quick-stat">
+                        <i class="fas fa-percentage"></i>
+                        <span class="value" id="statProgress">0%</span>
+                        <span class="label">Progreso</span>
+                    </div>
+                </div>
+                
+                <div class="progress-summary" style="margin-top: 20px;">
+                    <div class="progress-item">
+                        <div class="progress-header">
+                            <span>Marketplace</span>
+                            <span id="marketplaceProgress">0/0</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="marketplaceFill" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="progress-item">
+                        <div class="progress-header">
+                            <span>Historias</span>
+                            <span id="historiaProgress">0/0</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="historiaFill" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             
-            <div class="progress-summary">
-                <div class="progress-item" data-tipo="marketplace">
-                    <h3>Marketplace</h3>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: 0%"></div>
+            <!-- Asignación actual -->
+            <div class="dashboard-card">
+                <h2><i class="fas fa-clipboard-check"></i> Asignación Actual</h2>
+                <div id="currentAssignment">
+                    <div class="loading-state">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p>Cargando asignación...</p>
                     </div>
-                    <span>0/0 publicaciones</span>
                 </div>
-                <div class="progress-item" data-tipo="historia">
-                    <h3>Historias</h3>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: 0%"></div>
-                    </div>
-                    <span>0/0 publicaciones</span>
+                
+                <div class="action-buttons">
+                    <button onclick="window.location.href='tareas_diarias.html'" class="btn-primary">
+                        <i class="fas fa-tasks"></i> Ver Todas las Tareas
+                    </button>
+                    <button onclick="window.location.href='nueva_publicacion.html'" class="btn-secondary">
+                        <i class="fas fa-plus"></i> Nueva Publicación
+                    </button>
                 </div>
-                <div class="progress-item" data-tipo="muro">
-                    <h3>Muro</h3>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: 0%"></div>
+            </div>
+            
+            <!-- Actividad reciente -->
+            <div class="dashboard-card">
+                <h2><i class="fas fa-history"></i> Actividad Reciente</h2>
+                <div class="recent-activity-list" id="recentActivity">
+                    <div class="loading-state">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p>Cargando actividad...</p>
                     </div>
-                    <span>0/0 publicaciones</span>
                 </div>
-                <div class="progress-item" data-tipo="grupo">
-                    <h3>Grupos</h3>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: 0%"></div>
+                
+                <div class="text-center" style="margin-top: 20px;">
+                    <button onclick="window.location.href='mis_publicaciones.html'" class="btn-outline">
+                        <i class="fas fa-eye"></i> Ver Historial Completo
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Mis cuentas -->
+            <div class="dashboard-card">
+                <h2><i class="fas fa-user-friends"></i> Mis Cuentas</h2>
+                <div id="myAccounts">
+                    <div class="loading-state">
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <p>Cargando cuentas...</p>
                     </div>
-                    <span>0/0 publicaciones</span>
+                </div>
+                
+                <div class="action-buttons">
+                    <button onclick="window.location.href='cuentas_asignadas.html'" class="btn-secondary">
+                        <i class="fas fa-list"></i> Ver Todas las Cuentas
+                    </button>
                 </div>
             </div>
         </div>
         
         <!-- Acciones rápidas -->
-        <div class="quick-grid">
-            <a href="tareas_diarias.html" class="quick-card">
-                <i class="fas fa-tasks"></i>
-                <h3>Ver Tareas</h3>
-                <p>Revisa tus asignaciones del día</p>
-            </a>
-            
-            <a href="nueva_publicacion.html" class="quick-card">
-                <i class="fas fa-plus-circle"></i>
-                <h3>Nueva Publicación</h3>
-                <p>Crea una publicación en Marketplace</p>
-            </a>
-            
-            <a href="mis_publicaciones.html" class="quick-card">
-                <i class="fas fa-history"></i>
-                <h3>Mi Historial</h3>
-                <p>Ver todas mis publicaciones</p>
-            </a>
-            
-            <a href="cuentas_asignadas.html" class="quick-card">
-                <i class="fas fa-user-friends"></i>
-                <h3>Mis Cuentas</h3>
-                <p>Cuentas Facebook asignadas</p>
-            </a>
-            
-            <a href="reportar_problema.html" class="quick-card">
-                <i class="fas fa-exclamation-triangle"></i>
-                <h3>Reportar Problema</h3>
-                <p>Reporta un problema con tu cuenta</p>
-            </a>
-            
-            <a href="mi_rendimiento.html" class="quick-card">
-                <i class="fas fa-chart-line"></i>
-                <h3>Mi Rendimiento</h3>
-                <p>Ver mis estadísticas</p>
-            </a>
-        </div>
-        
-        <!-- Tareas pendientes -->
-        <div class="pending-tasks">
-            <h2><i class="fas fa-clock"></i> Pendientes para hoy</h2>
-            <div id="listaTareas">
-                <!-- Se llena con JS -->
-                <div class="loading-state">
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <p>Cargando tareas...</p>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Últimas publicaciones -->
-        <div class="recent-activity">
-            <h2><i class="fas fa-history"></i> Últimas Publicaciones</h2>
-            <div id="ultimasPublicaciones">
-                <!-- Se llena con JS -->
+        <div class="dashboard-card">
+            <h2><i class="fas fa-bolt"></i> Acciones Rápidas</h2>
+            <div class="quick-actions-grid">
+                <button onclick="window.location.href='nueva_publicacion.html'" class="quick-action-btn">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>Nueva Publicación</span>
+                    <small>Crear publicación en Marketplace</small>
+                </button>
+                
+                <button onclick="marcarTareaRapida('marketplace')" class="quick-action-btn">
+                    <i class="fas fa-check"></i>
+                    <span>Marcar Marketplace</span>
+                    <small>Registrar publicación realizada</small>
+                </button>
+                
+                <button onclick="marcarTareaRapida('historia')" class="quick-action-btn">
+                    <i class="fas fa-history"></i>
+                    <span>Marcar Historia</span>
+                    <small>Registrar historia publicada</small>
+                </button>
+                
+                <button onclick="window.location.href='reportar_problema.html'" class="quick-action-btn">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Reportar Problema</span>
+                    <small>Reportar cuenta bloqueada o error</small>
+                </button>
             </div>
         </div>
     </main>
     
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="../../static/js/core.js"></script>
-    <script src="../../static/js/operador.js"></script>
+    <script>
+        // Variables del dashboard
+        let dashboardData = {
+            asignacion: null,
+            actividad: null,
+            publicaciones: [],
+            cuentas: []
+        };
+        
+        // Inicializar dashboard
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Esperar a que core.js cargue el usuario
+            setTimeout(async () => {
+                if (!window.currentUser) {
+                    window.location.href = '../../login.html';
+                    return;
+                }
+                
+                // Actualizar nombre de usuario
+                document.getElementById('userName').textContent = window.currentUser.usuario;
+                document.getElementById('userDisplay').textContent = window.currentUser.usuario;
+                document.getElementById('roleBadge').textContent = window.currentUser.rol.toUpperCase();
+                document.getElementById('roleBadge').className = `role-badge badge-${window.currentUser.rol}`;
+                
+                // Configurar logout
+                document.getElementById('logoutBtn').addEventListener('click', window.cerrarSesion);
+                
+                // Actualizar fecha
+                const hoy = new Date();
+                document.getElementById('headerDate').textContent = hoy.toLocaleDateString('es-ES', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+                
+                // Cargar datos del dashboard
+                await cargarDashboard();
+                
+                // Actualizar cada 60 segundos
+                setInterval(async () => {
+                    await actualizarDashboard();
+                }, 60000);
+                
+            }, 500);
+        });
+        
+        async function cargarDashboard() {
+            try {
+                // Mostrar estado de carga
+                mostrarEstadoCarga();
+                
+                // Cargar datos en paralelo
+                await Promise.all([
+                    cargarAsignacionActual(),
+                    cargarActividadHoy(),
+                    cargarPublicacionesRecientes(),
+                    cargarCuentasAsignadas()
+                ]);
+                
+                // Actualizar UI
+                actualizarUI();
+                
+            } catch (error) {
+                console.error('Error cargando dashboard:', error);
+                mostrarMensaje('Error al cargar el dashboard', 'error');
+            }
+        }
+        
+        async function cargarAsignacionActual() {
+            try {
+                dashboardData.asignacion = await window.obtenerAsignacionActual();
+                
+                if (dashboardData.asignacion) {
+                    // Actualizar card de asignación
+                    const container = document.getElementById('currentAssignment');
+                    const fechaDesde = window.formatearFecha(dashboardData.asignacion.fecha_desde);
+                    const fechaHasta = window.formatearFecha(dashboardData.asignacion.fecha_hasta);
+                    
+                    container.innerHTML = `
+                        <div class="assignment-info">
+                            <div class="assignment-item">
+                                <i class="fas fa-tag"></i>
+                                <div>
+                                    <strong>Categoría:</strong>
+                                    <span>${dashboardData.asignacion.categoria || 'No asignada'}</span>
+                                </div>
+                            </div>
+                            <div class="assignment-item">
+                                <i class="fas fa-calendar"></i>
+                                <div>
+                                    <strong>Período:</strong>
+                                    <span>${fechaDesde} - ${fechaHasta}</span>
+                                </div>
+                            </div>
+                            <div class="assignment-item">
+                                <i class="fas fa-bullseye"></i>
+                                <div>
+                                    <strong>Objetivos diarios:</strong>
+                                    <span>
+                                        Marketplace: ${dashboardData.asignacion.marketplace_daily || 0} | 
+                                        Historias: ${dashboardData.asignacion.historia_daily || 0} |
+                                        Muro: ${dashboardData.asignacion.muro_daily || 0} |
+                                        Grupos: ${dashboardData.asignacion.grupos_daily || 0}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    document.getElementById('currentAssignment').innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-calendar-times"></i>
+                            <p>No tienes asignaciones activas</p>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error('Error cargando asignación:', error);
+            }
+        }
+        
+        async function cargarActividadHoy() {
+            try {
+                const hoy = new Date().toISOString().split('T')[0];
+                
+                const { data, error } = await window.supabaseClient
+                    .from('usuarios_actividad')
+                    .select('*')
+                    .eq('usuario', window.currentUser.usuario)
+                    .eq('fecha_logueo', hoy)
+                    .single();
+                
+                if (error && error.code !== 'PGRST116') throw error;
+                
+                dashboardData.actividad = data || null;
+                
+            } catch (error) {
+                console.error('Error cargando actividad:', error);
+            }
+        }
+        
+        async function cargarPublicacionesRecientes() {
+            try {
+                dashboardData.publicaciones = await window.obtenerMisPublicaciones(null, 5);
+                
+                const container = document.getElementById('recentActivity');
+                
+                if (!dashboardData.publicaciones || dashboardData.publicaciones.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-activity">
+                            <i class="fas fa-inbox"></i>
+                            <p>No hay actividad reciente</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                let html = '';
+                
+                dashboardData.publicaciones.forEach(pub => {
+                    const fecha = window.formatearFecha(pub.created_at);
+                    const hora = window.formatearHora(pub.created_at);
+                    
+                    html += `
+                        <div class="activity-item">
+                            <div class="activity-icon">
+                                <i class="fas fa-store"></i>
+                            </div>
+                            <div class="activity-content">
+                                <h4>${pub.titulo || 'Publicación'}</h4>
+                                <p>${pub.categoria || 'Sin categoría'} - ${pub.facebook_account_usada || 'Cuenta no especificada'}</p>
+                            </div>
+                            <div class="activity-time">
+                                ${fecha}<br>${hora}
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                container.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Error cargando publicaciones:', error);
+            }
+        }
+        
+        async function cargarCuentasAsignadas() {
+            try {
+                dashboardData.cuentas = await window.obtenerCuentasAsignadas();
+                
+                const container = document.getElementById('myAccounts');
+                
+                if (!dashboardData.cuentas || dashboardData.cuentas.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fas fa-user-slash"></i>
+                            <p>No tienes cuentas asignadas</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                let html = '<div class="accounts-mini-list">';
+                
+                dashboardData.cuentas.slice(0, 3).forEach(cuenta => {
+                    const calidadClass = cuenta.calidad === 'caliente' ? 'badge-warning' : 'badge-info';
+                    
+                    html += `
+                        <div class="account-mini-item">
+                            <i class="fas fa-user-circle"></i>
+                            <div class="account-mini-info">
+                                <strong>${cuenta.nombre}</strong>
+                                <small>${cuenta.email}</small>
+                            </div>
+                            <span class="badge ${calidadClass}">${cuenta.calidad}</span>
+                        </div>
+                    `;
+                });
+                
+                if (dashboardData.cuentas.length > 3) {
+                    html += `
+                        <div class="account-mini-more">
+                            +${dashboardData.cuentas.length - 3} cuenta(s) más
+                        </div>
+                    `;
+                }
+                
+                html += '</div>';
+                container.innerHTML = html;
+                
+            } catch (error) {
+                console.error('Error cargando cuentas:', error);
+            }
+        }
+        
+        function actualizarUI() {
+            // Calcular estadísticas
+            let objetivoTotal = 0;
+            let completadoTotal = 0;
+            
+            if (dashboardData.asignacion) {
+                objetivoTotal = (dashboardData.asignacion.marketplace_daily || 0) + 
+                               (dashboardData.asignacion.historia_daily || 0) + 
+                               (dashboardData.asignacion.muro_daily || 0) + 
+                               (dashboardData.asignacion.grupos_daily || 0);
+            }
+            
+            if (dashboardData.actividad) {
+                completadoTotal = (dashboardData.actividad.marketplace_quest || 0) + 
+                                 (dashboardData.actividad.historia_quest || 0) + 
+                                 (dashboardData.actividad.muro_quest || 0) + 
+                                 (dashboardData.actividad.grupo_quest || 0);
+            }
+            
+            const pendienteTotal = objetivoTotal - completadoTotal;
+            const progresoTotal = objetivoTotal > 0 ? Math.round((completadoTotal / objetivoTotal) * 100) : 0;
+            
+            // Actualizar estadísticas rápidas
+            document.getElementById('statTarget').textContent = objetivoTotal;
+            document.getElementById('statCompleted').textContent = completadoTotal;
+            document.getElementById('statPending').textContent = pendienteTotal;
+            document.getElementById('statProgress').textContent = `${progresoTotal}%`;
+            
+            // Actualizar barras de progreso
+            const marketplaceObj = dashboardData.asignacion?.marketplace_daily || 0;
+            const marketplaceComp = dashboardData.actividad?.marketplace_quest || 0;
+            const marketplacePorc = marketplaceObj > 0 ? Math.round((marketplaceComp / marketplaceObj) * 100) : 0;
+            
+            const historiaObj = dashboardData.asignacion?.historia_daily || 0;
+            const historiaComp = dashboardData.actividad?.historia_quest || 0;
+            const historiaPorc = historiaObj > 0 ? Math.round((historiaComp / historiaObj) * 100) : 0;
+            
+            document.getElementById('marketplaceProgress').textContent = `${marketplaceComp}/${marketplaceObj}`;
+            document.getElementById('historiaProgress').textContent = `${historiaComp}/${historiaObj}`;
+            
+            document.getElementById('marketplaceFill').style.width = `${marketplacePorc}%`;
+            document.getElementById('historiaFill').style.width = `${historiaPorc}%`;
+            
+            // Actualizar colores de barras
+            if (marketplacePorc >= 100) {
+                document.getElementById('marketplaceFill').className = 'progress-fill progress-complete';
+            } else if (marketplacePorc >= 50) {
+                document.getElementById('marketplaceFill').className = 'progress-fill progress-half';
+            } else {
+                document.getElementById('marketplaceFill').className = 'progress-fill progress-low';
+            }
+            
+            if (historiaPorc >= 100) {
+                document.getElementById('historiaFill').className = 'progress-fill progress-complete';
+            } else if (historiaPorc >= 50) {
+                document.getElementById('historiaFill').className = 'progress-fill progress-half';
+            } else {
+                document.getElementById('historiaFill').className = 'progress-fill progress-low';
+            }
+            
+            // Actualizar mensaje de bienvenida
+            const mensajes = [
+                "¡Vamos a publicar!",
+                "Hoy es un gran día para vender",
+                "Gestiona tus publicaciones eficientemente",
+                "Maximiza tu rendimiento hoy",
+                "Cada publicación cuenta"
+            ];
+            
+            const mensajeAleatorio = mensajes[Math.floor(Math.random() * mensajes.length)];
+            document.getElementById('welcomeMessage').textContent = mensajeAleatorio;
+        }
+        
+        function mostrarEstadoCarga() {
+            // Puedes agregar indicadores de carga aquí si lo deseas
+        }
+        
+        async function actualizarDashboard() {
+            await cargarActividadHoy();
+            await cargarPublicacionesRecientes();
+            actualizarUI();
+        }
+        
+        async function marcarTareaRapida(tipo) {
+            try {
+                const hoy = new Date().toISOString().split('T')[0];
+                const campo = `${tipo}_quest`;
+                
+                // Obtener actividad actual
+                const { data: actividadExistente } = await window.supabaseClient
+                    .from('usuarios_actividad')
+                    .select('*')
+                    .eq('usuario', window.currentUser.usuario)
+                    .eq('fecha_logueo', hoy)
+                    .single();
+                
+                let updateData = {};
+                
+                if (actividadExistente) {
+                    // Actualizar existente
+                    updateData[campo] = (actividadExistente[campo] || 0) + 1;
+                    
+                    await window.supabaseClient
+                        .from('usuarios_actividad')
+                        .update(updateData)
+                        .eq('id', actividadExistente.id);
+                        
+                } else {
+                    // Crear nueva actividad
+                    updateData = {
+                        usuario: window.currentUser.usuario,
+                        fecha_logueo: hoy,
+                        [campo]: 1
+                    };
+                    
+                    await window.supabaseClient
+                        .from('usuarios_actividad')
+                        .insert(updateData);
+                }
+                
+                // Actualizar dashboard
+                await cargarActividadHoy();
+                actualizarUI();
+                
+                // Mostrar mensaje
+                const nombres = {
+                    'marketplace': 'Marketplace',
+                    'historia': 'Historia',
+                    'muro': 'Muro',
+                    'grupo': 'Grupo'
+                };
+                
+                window.mostrarMensaje(`✅ ${nombres[tipo] || tipo} registrado exitosamente`, 'success');
+                
+            } catch (error) {
+                console.error('Error registrando tarea rápida:', error);
+                window.mostrarMensaje('❌ Error al registrar la tarea', 'error');
+            }
+        }
+        
+        // Estilos adicionales
+        const style = document.createElement('style');
+        style.textContent = `
+            .header-stats {
+                display: flex;
+                gap: 15px;
+                margin-top: 15px;
+                font-size: 14px;
+            }
+            
+            .assignment-info {
+                display: flex;
+                flex-direction: column;
+                gap: 15px;
+            }
+            
+            .assignment-item {
+                display: flex;
+                align-items: flex-start;
+                gap: 15px;
+            }
+            
+            .assignment-item i {
+                color: var(--primary-color);
+                margin-top: 3px;
+            }
+            
+            .assignment-item div {
+                flex: 1;
+            }
+            
+            .assignment-item strong {
+                display: block;
+                margin-bottom: 3px;
+                color: var(--text-dark);
+            }
+            
+            .assignment-item span {
+                color: var(--text-light);
+                font-size: 14px;
+            }
+            
+            .progress-item {
+                margin-bottom: 15px;
+            }
+            
+            .progress-header {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 5px;
+                font-size: 14px;
+                color: var(--text-dark);
+            }
+            
+            .progress-bar {
+                height: 8px;
+                background: var(--border-color);
+                border-radius: 4px;
+                overflow: hidden;
+            }
+            
+            .progress-fill {
+                height: 100%;
+                background: var(--primary-color);
+                border-radius: 4px;
+                transition: width 0.3s ease;
+            }
+            
+            .progress-fill.progress-complete {
+                background: #4ade80;
+            }
+            
+            .progress-fill.progress-half {
+                background: #fbbf24;
+            }
+            
+            .progress-fill.progress-low {
+                background: #f87171;
+            }
+            
+            .quick-actions-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 15px;
+            }
+            
+            .quick-action-btn {
+                background: var(--light-bg);
+                border: 2px solid transparent;
+                border-radius: var(--radius);
+                padding: 20px;
+                cursor: pointer;
+                transition: all 0.3s;
+                text-align: left;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .quick-action-btn:hover {
+                border-color: var(--primary-color);
+                transform: translateY(-2px);
+                box-shadow: var(--shadow);
+            }
+            
+            .quick-action-btn i {
+                font-size: 24px;
+                color: var(--primary-color);
+            }
+            
+            .quick-action-btn span {
+                font-weight: 600;
+                color: var(--text-dark);
+            }
+            
+            .quick-action-btn small {
+                color: var(--text-light);
+                font-size: 12px;
+            }
+            
+            .accounts-mini-list {
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+            }
+            
+            .account-mini-item {
+                display: flex;
+                align-items: center;
+                gap: 15px;
+                padding: 12px;
+                background: var(--light-bg);
+                border-radius: var(--radius);
+            }
+            
+            .account-mini-item i {
+                font-size: 20px;
+                color: var(--primary-color);
+            }
+            
+            .account-mini-info {
+                flex: 1;
+            }
+            
+            .account-mini-info strong {
+                display: block;
+                font-size: 14px;
+                color: var(--text-dark);
+            }
+            
+            .account-mini-info small {
+                font-size: 12px;
+                color: var(--text-light);
+            }
+            
+            .account-mini-more {
+                text-align: center;
+                padding: 10px;
+                color: var(--text-light);
+                font-size: 12px;
+                background: var(--light-bg);
+                border-radius: var(--radius);
+            }
+            
+            .btn-outline {
+                background: transparent;
+                border: 1px solid var(--border-color);
+                color: var(--text-dark);
+                padding: 10px 20px;
+                border-radius: var(--radius);
+                cursor: pointer;
+                transition: all 0.3s;
+            }
+            
+            .btn-outline:hover {
+                background: var(--light-bg);
+                border-color: var(--primary-color);
+            }
+            
+            .text-center {
+                text-align: center;
+            }
+            
+            @media (max-width: 768px) {
+                .assignment-item {
+                    flex-direction: column;
+                    gap: 5px;
+                }
+                
+                .quick-actions-grid {
+                    grid-template-columns: 1fr;
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
 </body>
 </html>

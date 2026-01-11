@@ -106,7 +106,7 @@ function configurarNavegacion() {
     
     let menuHTML = '';
     
-    // Menú según rol
+    // Menú según rol - Gerentes ven TODO
     if (window.currentUser.rol === 'gerente') {
         menuHTML = `
             <div class="menu-section">
@@ -115,7 +115,7 @@ function configurarNavegacion() {
                     <i class="fas fa-user-friends"></i> Cuentas Facebook
                 </a>
                 <a href="../templates/asignaciones/gestionar.html" class="menu-item">
-                    <i class="fas fa-tasks"></i> Asignaciones
+                    <i class="fas fa-tasks"></i> Asignar Tareas
                 </a>
                 <a href="../templates/categorias/listar.html" class="menu-item">
                     <i class="fas fa-tags"></i> Categorías
@@ -127,23 +127,24 @@ function configurarNavegacion() {
         `;
     }
     
-    // Menú común para todos
+    // Menú para AMBOS roles (operaciones comunes)
     menuHTML += `
         <div class="menu-section">
             <h3><i class="fas fa-tasks"></i> Operaciones</h3>
-            ${window.currentUser.rol === 'operador' ? `
-                <a href="../templates/operador/dashboard_operador.html" class="menu-item">
-                    <i class="fas fa-home"></i> Mi Dashboard
-                </a>
-                <a href="../templates/operador/tareas_diarias.html" class="menu-item">
-                    <i class="fas fa-calendar-day"></i> Tareas Diarias
-                </a>
-                <a href="../templates/operador/nueva_publicacion.html" class="menu-item">
-                    <i class="fas fa-plus-circle"></i> Nueva Publicación
-                </a>
-            ` : ''}
-            <a href="../dashboard.html" class="menu-item">
-                <i class="fas fa-home"></i> Dashboard Principal
+            <a href="../templates/operador/dashboard_operador.html" class="menu-item">
+                <i class="fas fa-home"></i> ${window.currentUser.rol === 'operador' ? 'Mi Dashboard' : 'Panel Operaciones'}
+            </a>
+            <a href="../templates/operador/tareas_diarias.html" class="menu-item">
+                <i class="fas fa-calendar-day"></i> Tareas Diarias
+            </a>
+            <a href="../templates/operador/nueva_publicacion.html" class="menu-item">
+                <i class="fas fa-plus-circle"></i> Nueva Publicación
+            </a>
+            <a href="../templates/operador/mis_publicaciones.html" class="menu-item">
+                <i class="fas fa-history"></i> Mi Historial
+            </a>
+            <a href="../templates/operador/cuentas_asignadas.html" class="menu-item">
+                <i class="fas fa-user-friends"></i> Mis Cuentas
             </a>
         </div>
         
@@ -269,14 +270,24 @@ function verificarAccesoPagina() {
     
     // Si hay usuario, verificar permisos por rol
     if (window.currentUser) {
-        const isGerentePage = path.includes('/templates/') && (
-            path.includes('cuentas_facebook/') ||
-            path.includes('asignaciones/') ||
-            path.includes('categorias/') ||
-            path.includes('reportes/')
-        );
+        // Páginas SOLO para gerentes (gestión administrativa)
+        const soloGerentePages = [
+            'cuentas_facebook/listar.html',
+            'cuentas_facebook/crear.html',
+            'cuentas_facebook/editar.html',
+            'asignaciones/gestionar.html',
+            'asignaciones/nueva.html',
+            'asignaciones/editar.html',
+            'categorias/listar.html',
+            'categorias/nueva.html',
+            'reportes/dashboard_reportes.html',
+            'reportes/rendimiento.html',
+            'reportes/actividad.html'
+        ];
         
-        if (isGerentePage && window.currentUser.rol !== 'gerente') {
+        const isSoloGerentePage = soloGerentePages.some(page => path.includes(page));
+        
+        if (isSoloGerentePage && window.currentUser.rol !== 'gerente') {
             mostrarMensaje('No tienes permisos para acceder a esta página', 'error');
             setTimeout(() => {
                 window.location.href = 'dashboard.html';
@@ -284,14 +295,11 @@ function verificarAccesoPagina() {
             return;
         }
         
-        const isOperadorPage = path.includes('/templates/operador/');
-        
-        if (isOperadorPage && window.currentUser.rol !== 'operador') {
-            mostrarMensaje('Esta página es solo para operadores', 'error');
-            setTimeout(() => {
-                window.location.href = 'dashboard.html';
-            }, 2000);
-            return;
+        // Páginas para AMBOS roles (operaciones comunes) - SIN RESTRICCIONES
+        // Dashboard específico por rol
+        if (path.includes('dashboard_operador.html') && window.currentUser.rol === 'gerente') {
+            // Los gerentes también pueden ver el dashboard de operador si quieren
+            console.log('Gerente accediendo a dashboard de operador');
         }
     }
 }
@@ -693,6 +701,147 @@ async function obtenerCuentasFacebook(estado = 'activo') {
 }
 
 // ================================================
+// FUNCIONES PARA PUBLICACIONES
+// ================================================
+
+async function obtenerCuentasAsignadas(usuario = null) {
+    try {
+        const user = usuario || window.currentUser.usuario;
+        
+        const { data, error } = await window.supabaseClient
+            .from('cuentas_facebook')
+            .select('*')
+            .eq('ocupada_por', user)
+            .eq('estado', 'activo')
+            .order('nombre');
+        
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('Error obteniendo cuentas asignadas:', error);
+        return [];
+    }
+}
+
+async function obtenerAsignacionActual(usuario = null) {
+    try {
+        const user = usuario || window.currentUser.usuario;
+        const hoy = new Date().toISOString().split('T')[0];
+        
+        const { data, error } = await window.supabaseClient
+            .from('usuarios_asignado')
+            .select('*')
+            .eq('usuario', user)
+            .lte('fecha_desde', hoy)
+            .gte('fecha_hasta', hoy)
+            .single();
+        
+        if (error && error.code !== 'PGRST116') throw error; // PGRST116 = no encontrado
+        
+        return data || null;
+    } catch (error) {
+        console.error('Error obteniendo asignación:', error);
+        return null;
+    }
+}
+
+async function crearPublicacion(publicacionData) {
+    try {
+        // Validar datos requeridos
+        if (!publicacionData.titulo || !publicacionData.categoria || !publicacionData.facebook_account_usada) {
+            throw new Error('Faltan datos requeridos');
+        }
+        
+        // Agregar usuario actual si no viene
+        if (!publicacionData.usuario) {
+            publicacionData.usuario = window.currentUser.usuario;
+        }
+        
+        // Agregar timestamp
+        publicacionData.created_at = new Date().toISOString();
+        
+        const { data, error } = await window.supabaseClient
+            .from('marketplace_actividad')
+            .insert([publicacionData])
+            .select()
+            .single();
+        
+        if (error) throw error;
+        
+        // Actualizar actividad del usuario
+        await actualizarActividadUsuario(publicacionData.usuario, 'marketplace');
+        
+        return data;
+    } catch (error) {
+        console.error('Error creando publicación:', error);
+        throw error;
+    }
+}
+
+async function actualizarActividadUsuario(usuario, tipo) {
+    try {
+        const hoy = new Date().toISOString().split('T')[0];
+        const campo = `${tipo}_quest`;
+        
+        // Obtener actividad actual
+        const { data: actividadExistente } = await window.supabaseClient
+            .from('usuarios_actividad')
+            .select('*')
+            .eq('usuario', usuario)
+            .eq('fecha_logueo', hoy)
+            .single();
+        
+        let updateData = {};
+        
+        if (actividadExistente) {
+            // Actualizar existente
+            updateData[campo] = (actividadExistente[campo] || 0) + 1;
+            
+            await window.supabaseClient
+                .from('usuarios_actividad')
+                .update(updateData)
+                .eq('id', actividadExistente.id);
+                
+        } else {
+            // Crear nueva actividad
+            updateData = {
+                usuario: usuario,
+                fecha_logueo: hoy,
+                [campo]: 1
+            };
+            
+            await window.supabaseClient
+                .from('usuarios_actividad')
+                .insert(updateData);
+        }
+        
+        return true;
+    } catch (error) {
+        console.error('Error actualizando actividad:', error);
+        return false;
+    }
+}
+
+async function obtenerMisPublicaciones(usuario = null, limite = 50) {
+    try {
+        const user = usuario || window.currentUser.usuario;
+        
+        const { data, error } = await window.supabaseClient
+            .from('marketplace_actividad')
+            .select('*')
+            .eq('usuario', user)
+            .order('created_at', { ascending: false })
+            .limit(limite);
+        
+        if (error) throw error;
+        return data || [];
+    } catch (error) {
+        console.error('Error obteniendo publicaciones:', error);
+        return [];
+    }
+}
+
+// ================================================
 // EXPORTAR FUNCIONES GLOBALES
 // ================================================
 window.mostrarMensaje = mostrarMensaje;
@@ -708,6 +857,11 @@ window.validarNumero = validarNumero;
 window.obtenerOperadores = obtenerOperadores;
 window.obtenerCategorias = obtenerCategorias;
 window.obtenerCuentasFacebook = obtenerCuentasFacebook;
+window.obtenerCuentasAsignadas = obtenerCuentasAsignadas;
+window.obtenerAsignacionActual = obtenerAsignacionActual;
+window.crearPublicacion = crearPublicacion;
+window.actualizarActividadUsuario = actualizarActividadUsuario;
+window.obtenerMisPublicaciones = obtenerMisPublicaciones;
 
 // ================================================
 // INICIALIZACIÓN DE ESTILOS DINÁMICOS
@@ -807,6 +961,101 @@ function injectGlobalStyles() {
             font-size: 12px;
             opacity: 0.8;
             text-transform: uppercase;
+        }
+        
+        /* Estilos para formularios */
+        .form-card {
+            background: var(--card-bg);
+            border-radius: var(--radius-lg);
+            padding: 30px;
+            box-shadow: var(--shadow);
+            margin-bottom: 30px;
+        }
+        
+        .form-section {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        .form-section:last-child {
+            border-bottom: none;
+        }
+        
+        .form-section h3 {
+            margin-bottom: 20px;
+            color: var(--text-dark);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .form-actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+        }
+        
+        /* Etiquetas para inputs */
+        .input-with-tags {
+            position: relative;
+        }
+        
+        .tag-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+            margin-top: 5px;
+        }
+        
+        .tag {
+            background: var(--primary-color);
+            color: white;
+            padding: 4px 10px;
+            border-radius: 15px;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .tag-remove {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+            padding: 0;
+        }
+        
+        /* Preview de publicación */
+        .publication-preview {
+            background: white;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .preview-header {
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: var(--text-dark);
+        }
+        
+        .preview-content {
+            border: 1px dashed var(--border-color);
+            padding: 15px;
+            border-radius: var(--radius);
         }
     `;
     
