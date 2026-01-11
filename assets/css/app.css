@@ -254,3 +254,26 @@ textarea{ min-height:92px; resize:vertical; }
   padding: 4px 10px;
   border-radius: 6px;
 }
+/* Agrega esto al final de app.css para que los modales funcionen */
+.hidden {
+  display: none !important;
+}
+
+.modal {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.modal-box {
+  background: #1e293b; /* O el color de tus tarjetas */
+  padding: 20px;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 400px;
+  border: 1px solid rgba(255,255,255,0.1);
+}
