@@ -1,3 +1,10 @@
+import {
+  requireSession, loadSidebar
+} from "../../assets/js/app.js";
+
+const s = requireSession();
+await loadSidebar({ activeKey: "cuentas_fb", basePath: "../" });
+
 const $ = (sel) => document.querySelector(sel);
 
 async function waitSupabaseClient(timeoutMs = 2000) {
