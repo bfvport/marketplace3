@@ -1,9 +1,8 @@
 import {
-  requireSession, loadSidebar
+loadSidebar
 } from "../../assets/js/app.js";
 
-const s = requireSession();
-await loadSidebar({ activeKey: "diario", basePath: "../" });
+await loadSidebar({ activeKey: "cuenta_fb", basePath: "../" });
 
 const $ = (sel) => document.querySelector(sel);
 
