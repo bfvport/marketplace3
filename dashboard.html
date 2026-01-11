@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard - Marketplace Manager</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="static/css/main.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
@@ -23,41 +23,12 @@
     </nav>
     
     <div class="sidebar" id="sidebar">
-        <!-- Menú para Gerentes -->
-        <div class="menu-section" id="gerenteMenu" style="display: none;">
-            <h3><i class="fas fa-crown"></i> Gerencia</h3>
-            <a href="cuentas.html" class="menu-item">
-                <i class="fas fa-user-friends"></i> Cuentas Facebook
-            </a>
-            <a href="asignaciones.html" class="menu-item">
-                <i class="fas fa-tasks"></i> Asignar Tareas
-            </a>
-            <a href="categorias.html" class="menu-item">
-                <i class="fas fa-tags"></i> Categorías
-            </a>
-            <a href="reportes.html" class="menu-item">
-                <i class="fas fa-chart-bar"></i> Reportes
-            </a>
-        </div>
-        
-        <!-- Menú para Operadores -->
-        <div class="menu-section">
-            <h3><i class="fas fa-tasks"></i> Operaciones</h3>
-            <a href="diario.html" class="menu-item active">
-                <i class="fas fa-calendar-day"></i> Tareas Diarias
-            </a>
-            <a href="publicar.html" class="menu-item">
-                <i class="fas fa-plus-circle"></i> Nueva Publicación
-            </a>
-            <a href="historial.html" class="menu-item">
-                <i class="fas fa-history"></i> Mi Historial
-            </a>
-        </div>
+        <!-- Se llena dinámicamente según rol -->
     </div>
     
     <main class="main-content">
         <div class="welcome-card">
-            <h2><i class="fas fa-home"></i> Dashboard</h2>
+            <h2><i class="fas fa-home"></i> Dashboard Principal</h2>
             <p>Bienvenido al sistema de gestión de Marketplace</p>
             
             <div class="stats-grid">
@@ -90,9 +61,17 @@
                 <!-- Se llena dinámicamente según rol -->
             </div>
         </div>
+        
+        <!-- Notificaciones para gerentes -->
+        <div id="gerenteNotifications" style="display: none;">
+            <h3><i class="fas fa-bell"></i> Alertas del Sistema</h3>
+            <div class="alerts-grid" id="alertsContainer">
+                <!-- Se llena con JS -->
+            </div>
+        </div>
     </main>
     
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <script src="app.js"></script>
+    <script src="static/js/core.js"></script>
 </body>
 </html>

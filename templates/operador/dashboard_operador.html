@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Dashboard - Operador</title>
+    <link rel="stylesheet" href="../../static/css/main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-brand">
+            <i class="fas fa-user-tie"></i>
+            <span>Panel Operador</span>
+        </div>
+        <div class="nav-user">
+            <span id="userDisplay">Operador1</span>
+            <span class="role-badge badge-operador">OPERADOR</span>
+            <button onclick="window.location.href='../../dashboard.html'" class="btn-secondary">
+                <i class="fas fa-home"></i> Principal
+            </button>
+            <button id="logoutBtn" class="btn-logout">
+                <i class="fas fa-sign-out-alt"></i>
+            </button>
+        </div>
+    </nav>
+    
+    <div class="sidebar">
+        <div class="menu-section">
+            <h3><i class="fas fa-tasks"></i> Operaciones</h3>
+            <a href="dashboard_operador.html" class="menu-item active">
+                <i class="fas fa-home"></i> Mi Dashboard
+            </a>
+            <a href="tareas_diarias.html" class="menu-item">
+                <i class="fas fa-calendar-day"></i> Tareas Diarias
+            </a>
+            <a href="nueva_publicacion.html" class="menu-item">
+                <i class="fas fa-plus-circle"></i> Nueva Publicación
+            </a>
+            <a href="mis_publicaciones.html" class="menu-item">
+                <i class="fas fa-history"></i> Mi Historial
+            </a>
+            <a href="cuentas_asignadas.html" class="menu-item">
+                <i class="fas fa-user-friends"></i> Mis Cuentas
+            </a>
+            <a href="mi_rendimiento.html" class="menu-item">
+                <i class="fas fa-chart-line"></i> Mi Rendimiento
+            </a>
+        </div>
+    </div>
+    
+    <main class="main-content">
+        <!-- Resumen rápido del día -->
+        <div class="daily-summary">
+            <h1><i class="fas fa-sun"></i> Buen día, <span id="nombreOperador">Operador</span></h1>
+            <p id="fechaHoy">Lunes 10 de Enero, 2024</p>
+            
+            <div class="progress-summary">
+                <div class="progress-item" data-tipo="marketplace">
+                    <h3>Marketplace</h3>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <span>0/0 publicaciones</span>
+                </div>
+                <div class="progress-item" data-tipo="historia">
+                    <h3>Historias</h3>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <span>0/0 publicaciones</span>
+                </div>
+                <div class="progress-item" data-tipo="muro">
+                    <h3>Muro</h3>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <span>0/0 publicaciones</span>
+                </div>
+                <div class="progress-item" data-tipo="grupo">
+                    <h3>Grupos</h3>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: 0%"></div>
+                    </div>
+                    <span>0/0 publicaciones</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Acciones rápidas -->
+        <div class="quick-grid">
+            <a href="tareas_diarias.html" class="quick-card">
+                <i class="fas fa-tasks"></i>
+                <h3>Ver Tareas</h3>
+                <p>Revisa tus asignaciones del día</p>
+            </a>
+            
+            <a href="nueva_publicacion.html" class="quick-card">
+                <i class="fas fa-plus-circle"></i>
+                <h3>Nueva Publicación</h3>
+                <p>Crea una publicación en Marketplace</p>
+            </a>
+            
+            <a href="mis_publicaciones.html" class="quick-card">
+                <i class="fas fa-history"></i>
+                <h3>Mi Historial</h3>
+                <p>Ver todas mis publicaciones</p>
+            </a>
+            
+            <a href="cuentas_asignadas.html" class="quick-card">
+                <i class="fas fa-user-friends"></i>
+                <h3>Mis Cuentas</h3>
+                <p>Cuentas Facebook asignadas</p>
+            </a>
+            
+            <a href="reportar_problema.html" class="quick-card">
+                <i class="fas fa-exclamation-triangle"></i>
+                <h3>Reportar Problema</h3>
+                <p>Reporta un problema con tu cuenta</p>
+            </a>
+            
+            <a href="mi_rendimiento.html" class="quick-card">
+                <i class="fas fa-chart-line"></i>
+                <h3>Mi Rendimiento</h3>
+                <p>Ver mis estadísticas</p>
+            </a>
+        </div>
+        
+        <!-- Tareas pendientes -->
+        <div class="pending-tasks">
+            <h2><i class="fas fa-clock"></i> Pendientes para hoy</h2>
+            <div id="listaTareas">
+                <!-- Se llena con JS -->
+                <div class="loading-state">
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <p>Cargando tareas...</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Últimas publicaciones -->
+        <div class="recent-activity">
+            <h2><i class="fas fa-history"></i> Últimas Publicaciones</h2>
+            <div id="ultimasPublicaciones">
+                <!-- Se llena con JS -->
+            </div>
+        </div>
+    </main>
+    
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script src="../../static/js/core.js"></script>
+    <script src="../../static/js/operador.js"></script>
+</body>
+</html>
