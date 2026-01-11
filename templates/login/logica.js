@@ -1,34 +1,33 @@
-<!doctype html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Login | Marketplace Manager</title>
+import { setSession, getSession } from "../../assets/js/app.js";
 
-  <link rel="stylesheet" href="../../assets/css/app.css" />
+const sb = window.supabaseClient;
+const $ = (id) => document.getElementById(id);
+const msg = (t) => ($("msg").textContent = t || "");
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../../assets/js/supabase.js"></script>
-</head>
-<body>
-  <div style="max-width:420px;margin:60px auto;padding:16px;">
-    <div class="card">
-      <h1>🔐 Login</h1>
+const existing = getSession();
+if (existing?.usuario) window.location.href = "../dashboard/dashboard.html";
 
-      <label>Usuario</label>
-      <input id="usuario" autocomplete="username" />
+async function login(){
+  msg("Logueando...");
+  const usuario = $("usuario").value.trim();
+  const contra = $("contra").value;
 
-      <label>Contraseña</label>
-      <input id="contra" type="password" autocomplete="current-password" />
+  if (!usuario || !contra) return msg("Falta usuario o contraseña.");
 
-      <div class="row" style="margin-top:14px;">
-        <button class="btn" id="btnLogin">Entrar</button>
-      </div>
+  const { data, error } = await sb
+    .from("usuarios")
+    .select("id, usuario, rol")
+    .eq("usuario", usuario)
+    .eq("contra", contra)
+    .limit(1);
 
-      <div class="muted" style="margin-top:10px;" id="msg"></div>
-    </div>
-  </div>
+  if (error) return msg("Error DB: " + error.message);
+  if (!data || data.length === 0) return msg("Usuario o contraseña incorrectos.");
 
-  <script type="module" src="./logica.js"></script>
-</body>
-</html>
+  const u = data[0];
+  setSession({ usuario: u.usuario, rol: u.rol, user_id: u.id });
+  window.location.href = "../dashboard/dashboard.html";
+}
+
+$("btnLogin").addEventListener("click", login);
+document.addEventListener("keydown", (e) => { if (e.key === "Enter") login(); });
