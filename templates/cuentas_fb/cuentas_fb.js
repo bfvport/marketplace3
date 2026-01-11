@@ -1,5 +1,6 @@
 const $ = (sel) => document.querySelector(sel);
 
+// Función de espera robusta para conectar con Supabase
 async function waitSupabaseClient(timeoutMs = 2000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -17,7 +18,6 @@ let cuentaEditandoId = null;
    CARGAR OPERADORES
 ================================ */
 async function cargarOperadores() {
-  // Protección: Si supabase falló, no seguimos
   if (!supabase) return;
 
   const { data, error } = await supabase
@@ -26,23 +26,22 @@ async function cargarOperadores() {
     .neq("rol", "gerente");
 
   if (error) {
-    console.error("❌ Error operadores:", error);
-    return; // No alertamos para no molestar, pero queda en consola
+    console.error("Error operadores:", error);
+    return;
   }
 
   const select = $("#ocupada_por");
-  if (!select) return; // Protección por si no existe el modal
-  
-  select.innerHTML = `<option value="">Libre</option>`;
-
-  // 🛡️ CORRECCIÓN CLAVE: Usamos (data || []) para evitar error si es null
-  (data || []).forEach(u => {
-    select.innerHTML += `<option value="${u.usuario}">${u.usuario}</option>`;
-  });
+  if (select) {
+    select.innerHTML = `<option value="">Libre</option>`;
+    // Protección contra nulos (data || [])
+    (data || []).forEach(u => {
+      select.innerHTML += `<option value="${u.usuario}">${u.usuario}</option>`;
+    });
+  }
 }
 
 /* ===============================
-   CARGAR CUENTAS (Aquí estaba el problema)
+   CARGAR CUENTAS (Mejorado)
 ================================ */
 async function cargarCuentas() {
   if (!supabase) return;
@@ -53,29 +52,26 @@ async function cargarCuentas() {
     .order("id", { ascending: true });
 
   if (error) {
-    alert("❌ Error de conexión: " + error.message);
-    console.error(error);
+    console.error("Error cuentas:", error);
+    alert("Error cargando cuentas: " + error.message);
     return;
   }
 
   tbody.innerHTML = "";
-
-  // 🛡️ Si data es null, usamos lista vacía para que no se rompa el JS
-  const cuentas = data || [];
+  const cuentas = data || []; // 🛡️ Evita que se rompa si es null
 
   if (cuentas.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:20px;">No hay cuentas cargadas (o no llegan los datos)</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:15px; opacity:0.7;">No hay cuentas cargadas todavía.</td></tr>`;
     return;
   }
 
   cuentas.forEach(cuenta => {
-    // Badges con colores seguros
-    const estadoClass = cuenta.estado === 'activo' ? 'success' : 'danger'; 
-    const estadoBadge = `<span class="badge ${cuenta.estado}">${cuenta.estado}</span>`;
-    
-    // Validamos que calidad exista
-    const calidad = cuenta.calidad || '-';
-    const calidadBadge = `<span class="badge ${calidad}">${calidad}</span>`;
+    // Badges con clases seguras
+    const estadoClass = cuenta.estado === 'activo' ? 'activo' : 'inactivo';
+    const calidadClass = cuenta.calidad === 'caliente' ? 'caliente' : 'frio';
+
+    const estadoBadge = `<span class="badge ${estadoClass}">${cuenta.estado}</span>`;
+    const calidadBadge = `<span class="badge ${calidadClass}">${cuenta.calidad || '-'}</span>`;
 
     const ocupada = cuenta.ocupada_por
       ? `<span class="badge warning">Ocupada</span><br><small>${cuenta.ocupada_por}</small>`
@@ -84,7 +80,7 @@ async function cargarCuentas() {
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${cuenta.id}</td>
-      <td>${cuenta.email || 'Sin email'}</td>
+      <td title="${cuenta.email}">${cuenta.email}</td>
       <td>${estadoBadge}</td>
       <td>${calidadBadge}</td>
       <td>${ocupada}</td>
@@ -93,7 +89,6 @@ async function cargarCuentas() {
         <button class="btn danger" data-id="${cuenta.id}">Eliminar</button>
       </td>
     `;
-
     tbody.appendChild(tr);
   });
 }
@@ -102,93 +97,98 @@ async function cargarCuentas() {
    MODAL
 ================================ */
 function openModal() {
-  const m = $("#modal-cuenta");
-  if(m) m.classList.remove("hidden");
+  $("#modal-cuenta").classList.remove("hidden");
 }
 
 function closeModal() {
-  const m = $("#modal-cuenta");
-  if(m) m.classList.add("hidden");
-  
+  $("#modal-cuenta").classList.add("hidden");
   cuentaEditandoId = null;
-  if($("#email")) $("#email").value = "";
-  if($("#contra")) $("#contra").value = "";
-  if($("#nombre")) $("#nombre").value = "";
-  if($("#estado")) $("#estado").value = "activo";
-  if($("#calidad")) $("#calidad").value = "caliente";
-  if($("#ocupada_por")) $("#ocupada_por").value = "";
+
+  // Limpiamos form
+  $("#email").value = "";
+  $("#contra").value = "";
+  $("#nombre").value = "";
+  $("#estado").value = "activo";
+  $("#calidad").value = "caliente";
+  $("#ocupada_por").value = "";
 }
 
 /* ===============================
-   INIT
+   INIT (Arranque)
 ================================ */
 document.addEventListener("DOMContentLoaded", async () => {
-  // 1. Intentamos conectar
+  // 1. Conectar
   supabase = await waitSupabaseClient();
   
   if (!supabase) {
-    // Si falla, mostramos alerta y detenemos todo
-    alert("🚨 Error Crítico: No se pudo conectar con Supabase. Revisa supabase.js");
+    console.error("Supabase no inicializado en window.");
     return;
   }
 
-  // 2. Cargamos datos
-  console.log("✅ Supabase conectado. Cargando datos...");
+  // 2. Cargar datos iniciales
   await cargarOperadores();
   await cargarCuentas();
 
-  // 3. Eventos botones
-  if($("#btn-nueva")) $("#btn-nueva").onclick = openModal;
-  if($("#cancelar")) $("#cancelar").onclick = closeModal;
+  // 3. Configurar botones
+  const btnNueva = $("#btn-nueva");
+  if (btnNueva) btnNueva.onclick = openModal;
+  
+  const btnCancelar = $("#cancelar");
+  if (btnCancelar) btnCancelar.onclick = closeModal;
 
-  if($("#guardar")) $("#guardar").onclick = async () => {
-    const payload = {
-      email: $("#email").value.trim(),
-      contra: $("#contra").value.trim(),
-      nombre: $("#nombre").value.trim(),
-      estado: $("#estado").value,
-      calidad: $("#calidad").value,
-      ocupada_por: $("#ocupada_por").value || null
+  // 4. Guardar (Crear / Editar)
+  const btnGuardar = $("#guardar");
+  if (btnGuardar) {
+    btnGuardar.onclick = async () => {
+      const payload = {
+        email: $("#email").value.trim(),
+        contra: $("#contra").value.trim(),
+        nombre: $("#nombre").value.trim(),
+        estado: $("#estado").value,
+        calidad: $("#calidad").value,
+        ocupada_por: $("#ocupada_por").value || null
+      };
+
+      if (!payload.email || !payload.contra || !payload.nombre) {
+        alert("Completá todos los campos obligatorios");
+        return;
+      }
+
+      let errorOp;
+      if (cuentaEditandoId) {
+        const res = await supabase.from("cuentas_facebook").update(payload).eq("id", cuentaEditandoId);
+        errorOp = res.error;
+      } else {
+        const res = await supabase.from("cuentas_facebook").insert(payload);
+        errorOp = res.error;
+      }
+
+      if (errorOp) {
+        alert("Error al guardar: " + errorOp.message);
+        return;
+      }
+
+      closeModal();
+      await cargarCuentas();
     };
+  }
 
-    if (!payload.email || !payload.contra || !payload.nombre) {
-      alert("Completá todos los campos");
-      return;
-    }
-
-    let errorOp;
-    if (cuentaEditandoId) {
-      const res = await supabase.from("cuentas_facebook").update(payload).eq("id", cuentaEditandoId);
-      errorOp = res.error;
-    } else {
-      const res = await supabase.from("cuentas_facebook").insert(payload);
-      errorOp = res.error;
-    }
-
-    if (errorOp) {
-      alert("Error guardando: " + errorOp.message);
-      return;
-    }
-
-    closeModal();
-    await cargarCuentas();
-  };
-
+  // 5. Acciones en la tabla (Delegación de eventos)
   tbody.onclick = async (e) => {
     const btn = e.target.closest("button");
     if (!btn) return;
 
     const id = btn.dataset.id;
 
-    // ELIMINAR
+    // -- Eliminar --
     if (btn.classList.contains("danger")) {
-      if (!confirm("¿Eliminar esta cuenta Facebook?")) return;
-      await supabase.from("cuentas_facebook").delete().eq("id", id);
-      await cargarCuentas();
-      return;
+      if (!confirm("¿Seguro que querés eliminar esta cuenta?")) return;
+      const { error } = await supabase.from("cuentas_facebook").delete().eq("id", id);
+      if (error) alert("No se pudo eliminar: " + error.message);
+      else await cargarCuentas();
     }
 
-    // EDITAR
+    // -- Editar --
     if (btn.classList.contains("edit")) {
       const { data, error } = await supabase
         .from("cuentas_facebook")
@@ -197,16 +197,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         .single();
 
       if (error) {
-        alert("Error cargando cuenta: " + error.message);
+        alert("No se pudo cargar la cuenta.");
         return;
       }
 
-      $("#email").value = data.email ?? "";
-      $("#contra").value = data.contra ?? "";
-      $("#nombre").value = data.nombre ?? "";
-      $("#estado").value = data.estado ?? "activo";
-      $("#calidad").value = data.calidad ?? "caliente";
-      $("#ocupada_por").value = data.ocupada_por ?? "";
+      $("#email").value = data.email || "";
+      $("#contra").value = data.contra || "";
+      $("#nombre").value = data.nombre || "";
+      $("#estado").value = data.estado || "activo";
+      $("#calidad").value = data.calidad || "caliente";
+      $("#ocupada_por").value = data.ocupada_por || "";
 
       cuentaEditandoId = id;
       openModal();

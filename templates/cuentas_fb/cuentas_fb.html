@@ -75,24 +75,25 @@
 
 
   <!-- Supabase -->
-  <script type="module">
-    import { requireSession, loadSidebar } from "../../assets/js/app.js";
+ <script type="module">
+  import { requireSession, loadSidebar } from "../../assets/js/app.js";
 
-    const session = requireSession();
-    if (!session) return; // Si no hay sesión, requireSession redirige.
+  const session = requireSession();
+  
+  // ✅ CORRECCIÓN: Quitamos el "return" ilegal.
+  // requireSession ya redirige si no hay usuario, así que solo envolvemos el resto.
+  if (session) {
+      if (session.rol !== "gerente") {
+        alert("Acceso restringido");
+        window.location.href = "../dashboard/dashboard.html";
+      }
 
-    if (session.rol !== "gerente") {
-      alert("Acceso restringido");
-      window.location.href = "../dashboard/dashboard.html";
-    }
-
-    // 🛠️ CORRECCIÓN AQUI:
-    // Cambiamos "../" por "../../" para ir a la raíz real
-    loadSidebar({
-      activeKey: "cuentas_fb",
-      basePath: "../"      // ✅ Esto busca en la carpeta 'templates' donde sí está
-    });
-  </script>
+      loadSidebar({
+        activeKey: "cuentas_fb",
+        basePath: "../" 
+      });
+  }
+</script>
 
    <!-- JS de esta página -->
   <script type="module" src="cuentas_fb.js"></script>
