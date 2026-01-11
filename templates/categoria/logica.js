@@ -1,9 +1,23 @@
 // ./logica.js
-import {
-  requireSession,
-  loadSidebar,
-  escapeHtml,
-} from "../../assets/js/app.js";
+console.log("PATH:", location.pathname);
+console.log("SESSION mp_session_v1:", localStorage.getItem("mp_session_v1"));
+
+import { getSession, loadSidebar } from "../../assets/js/app.js";
+
+function gotoLogin() {
+  // arma la URL correcta desde donde estés parado
+  const url = new URL("../login/login.html", location.href);
+  location.href = url.pathname; 
+}
+
+const s = getSession();
+if (!s || !s.usuario || !s.rol) {
+  gotoLogin();      // <- esto evita “page not found”
+  throw new Error("No session");
+}
+
+// si llegaste acá, hay sesión:
+await loadSidebar({ activeKey: "categorias", basePath: "../" });
 
 const $ = (sel) => document.querySelector(sel);
 

@@ -1,58 +1,63 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Cuentas Facebook - Gerente</title>
-    <link rel="stylesheet" href="../../assets/css/app.css" />
+  <meta charset="UTF-8" />
+  <title>Cuentas Facebook</title>
+
+  <!-- CSS global -->
+  <link rel="stylesheet" href="../../assets/css/app.css" />
 </head>
 <body>
 
-    <!-- Sidebar -->
-    <aside>
-        <h3>Panel Gerente</h3>
-        <p>Usuario: <span id="sb-usuario">-</span></p>
-        <p>Rol: <span id="sb-rol">-</span></p>
+  <!-- Sidebar (se carga desde app.js) -->
+  <div id="sidebar-container"></div>
 
-        <ul>
-            <li><a href="../dashboard/dashboard.html">Dashboard</a></li>
-            <li data-only="gerente">
-                <a href="#">Cuentas Facebook</a>
-            </li>
-        </ul>
-    </aside>
+  <main class="content">
+    <h1>Gestión de Cuentas Facebook</h1>
 
-    <!-- Contenido principal -->
-    <main>
-        <h1>Gestión de Cuentas Facebook</h1>
+    <p class="muted">
+      Acceso exclusivo para el rol <strong>GERENTE</strong>
+    </p>
 
-        <section data-only="gerente">
-            <p>Acceso total para el gerente.</p>
+    <table class="table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Email</th>
+          <th>Estado</th>
+          <th>Calidad</th>
+          <th>Ocupada por</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-cuentas">
+        <!-- JS carga los datos -->
+      </tbody>
+    </table>
+  </main>
 
-            <!-- Acá después podés meter tabla -->
-            <table border="1" cellpadding="8">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Cuenta</th>
-                        <th>Estado</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td>1</td>
-                        <td>FB Ads Negocio 01</td>
-                        <td>Activa</td>
-                    </tr>
-                </tbody>
-            </table>
-        </section>
-    </main>
+  <!-- Supabase -->
+  <script src="../../assets/js/supabase.js"></script>
 
-   <!-- Supabase (credenciales globales) -->
-<script src="../../assets/js/supabase.js"></script>
+  <!-- App: sesión + sidebar + rol -->
+  <script type="module">
+    import { requireSession, loadSidebar } from "../../assets/js/app.js";
 
-<!-- Guard de rol (solo gerente) -->
-<script src="./cuentas_fb_guard.js"></script>
+    const session = requireSession();
+    if (!session) return;
 
+    if (session.rol !== "gerente") {
+      alert("Acceso restringido");
+      window.location.href = "../dashboard/dashboard.html";
+    }
+
+    loadSidebar({
+      activeKey: "cuentas",
+      basePath: "../"
+    });
+  </script>
+
+  <!-- JS de esta página -->
+  <script type="module" src="./cuentas_fb.js"></script>
 </body>
 </html>
