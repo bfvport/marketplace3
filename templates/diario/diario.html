@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Diario | Marketplace Manager</title>
+
+  <link rel="stylesheet" href="../../assets/css/app.css" />
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <div id="sidebar-host"></div>
+
+    <main class="content">
+      <h1>📅 Diario</h1>
+      <div class="muted" id="subtitle"></div>
+
+      <div class="grid">
+        <section class="card">
+          <div style="font-weight:800;">🎯 Asignación de hoy</div>
+          <div class="muted" id="asigHint">Cargando...</div>
+          <div style="margin-top:10px;" id="asigBox"></div>
+
+          <hr style="border:none;border-top:1px solid rgba(255,255,255,0.12); margin: 12px 0;">
+
+          <div class="row">
+            <button class="btn" id="btnTakeAcc">Tomar cuenta Facebook</button>
+            <span class="pill" id="accStatus">Cuenta: -</span>
+          </div>
+
+          <div class="muted" style="margin-top:10px;">
+            Marca una cuenta disponible como ocupada para vos.
+          </div>
+        </section>
+
+        <section class="card">
+          <div style="font-weight:800;">🧾 Registrar publicación</div>
+          <div class="muted">Guarda un registro en <code>marketplace_actividad</code>.</div>
+
+          <label>Categoría</label>
+          <select id="categoriaSelect"></select>
+
+          <label>Título</label>
+          <input id="titulo" />
+
+          <label>Descripción</label>
+          <textarea id="descripcion"></textarea>
+
+          <label>Etiquetas usadas (coma separada)</label>
+          <input id="etiquetas" placeholder="ropa, oferta, envio" />
+
+          <label>Link publicación (marketplace)</label>
+          <input id="link" placeholder="https://facebook.com/marketplace/item/..." />
+
+          <div class="row" style="margin-top:12px;">
+            <button class="btn" id="btnSave">Guardar actividad</button>
+            <button class="btn2" id="btnClear">Limpiar</button>
+          </div>
+
+          <div style="margin-top:12px;">
+            <div style="font-weight:700; margin-bottom:6px;">🖥️ Logs</div>
+            <div class="log" id="log"></div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="./logica.js"></script>
+</body>
+</html>

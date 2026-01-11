@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard | Marketplace Manager</title>
+
+  <link rel="stylesheet" href="../../assets/css/app.css" />
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <div id="sidebar-host"></div>
+
+    <main class="content">
+      <div class="title">🏠 Dashboard</div>
+      <div class="muted" id="hello"></div>
+
+      <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
+        <div class="card">
+          <div style="font-weight:800;">📅 Diario</div>
+          <div class="muted">Tu página diaria para publicar y registrar actividad.</div>
+          <div style="margin-top:10px;">
+            <a class="btn" href="../diario/diario.html" style="text-decoration:none;display:inline-block;">Abrir Diario</a>
+          </div>
+        </div>
+
+        <div class="card" id="gerenteBox" style="display:none;">
+          <div style="font-weight:800;">🧠 Gerente</div>
+          <div class="muted">Acceso a paneles avanzados.</div>
+          <div class="muted" style="margin-top:8px;">(los armamos después)</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="./logica.js"></script>
+</body>
+</html>

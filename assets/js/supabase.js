@@ -1,6 +1,4 @@
-// assets/supabase.js
-// Requiere que exista window.supabase (CDN) cargado en el HTML
-
+// assets/js/supabase.js
 const supabaseUrl = 'https://uriqltengefxiijgonih.supabase.co';
 const supabaseKey = 'sb_publishable_lHmMGjQnXl0Bm4FOF5YV5w_jQN_lNRP';
 
