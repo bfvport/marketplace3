@@ -1,73 +1,68 @@
-// ================================================
-// CONFIGURACIÓN Y DEPURACIÓN
-// ================================================
-console.log('🚀 app.js INICIANDO...');
-
-// Configuración de Supabase
+// Configuración Supabase
 const supabaseUrl = 'https://uriqltengefxiijgonih.supabase.co';
 const supabaseKey = 'sb_publishable_lHmMGjQnXl0Bm4FOF5YV5w_jQN_lNRP';
+const supabaseClient = window.supabase.createClient(supabaseUrl, supabaseKey);
 
-console.log('🔗 URL:', supabaseUrl);
-console.log('🔑 Key:', supabaseKey ? 'PRESENTE' : 'FALTANTE');
+// Estado global
+let currentUser = null;
 
-// ================================================
-// IMPORTANTE: NO CREES UNA NUEVA VARIABLE 'supabase'
-// ================================================
-
-// En lugar de esto (❌ MAL):
-// const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-
-// Usa esto (✅ BIEN):
-const client = window.supabase.createClient(supabaseUrl, supabaseKey);
-console.log('✅ Cliente Supabase inicializado:', !!client);
-
-// ================================================
-// CUANDO EL DOM ESTÉ LISTO
-// ================================================
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('📄 DOM completamente cargado');
+// Cuando el DOM esté listo
+document.addEventListener('DOMContentLoaded', async function() {
+    console.log('🚀 Marketplace Manager iniciando...');
     
-    // Verificar si estamos en login o dashboard
-    if (window.location.pathname.includes('dashboard.html')) {
-        console.log('🏠 Estamos en DASHBOARD');
-        checkLoginStatus();
-        setupLogoutButton();
-    } else {
-        console.log('🔐 Estamos en LOGIN');
+    // Verificar autenticación
+    await checkAuth();
+    
+    // Configurar según la página
+    const path = window.location.pathname;
+    
+    if (path.includes('dashboard.html')) {
+        await loadDashboard();
+    } else if (path.includes('index.html') || path === '/') {
         setupLoginForm();
     }
 });
 
 // ================================================
-// CONFIGURAR FORMULARIO DE LOGIN
+// AUTENTICACIÓN
 // ================================================
-function setupLoginForm() {
-    console.log('🔧 Configurando formulario de login...');
+async function checkAuth() {
+    const userData = localStorage.getItem('marketplaceUser');
     
-    const loginForm = document.getElementById('loginForm');
-    const messageDiv = document.getElementById('message');
-    
-    console.log('🔍 Formulario encontrado:', !!loginForm);
-    console.log('💬 Div de mensaje encontrado:', !!messageDiv);
-    
-    if (!loginForm) {
-        console.error('❌ NO SE ENCONTRÓ EL FORMULARIO');
+    if (!userData && !window.location.pathname.includes('index.html') && window.location.pathname !== '/') {
+        window.location.href = 'index.html';
         return;
     }
     
-    // Agregar listener
+    if (userData) {
+        try {
+            currentUser = JSON.parse(userData);
+            console.log('👤 Usuario:', currentUser.usuario, 'Rol:', currentUser.rol);
+            
+            // Actualizar última fecha de login
+            await updateLastLogin();
+            
+        } catch (error) {
+            console.error('Error al parsear usuario:', error);
+            localStorage.removeItem('marketplaceUser');
+            window.location.href = 'index.html';
+        }
+    }
+}
+
+function setupLoginForm() {
+    const loginForm = document.getElementById('loginForm');
+    if (!loginForm) return;
+    
     loginForm.addEventListener('submit', async function(e) {
-        console.log('🎯 EVENTO SUBMIT DETECTADO');
         e.preventDefault();
-        console.log('✅ Formulario prevenido');
         
-        const usuario = document.getElementById('usuario').value.trim();
+        const usuario = document.getElementById('usuario').value;
         const contra = document.getElementById('contra').value;
-        
-        console.log('📝 Datos:', { usuario, contra });
+        const messageDiv = document.getElementById('message');
         
         if (!usuario || !contra) {
-            showMessage('Por favor, completa todos los campos', 'error');
+            showMessage('Por favor, completa todos los campos', 'error', messageDiv);
             return;
         }
         
@@ -78,44 +73,50 @@ function setupLoginForm() {
         submitBtn.disabled = true;
         
         try {
-            console.log('🔗 Consultando Supabase...');
-            
-            // IMPORTANTE: Usar 'client' en lugar de 'supabase'
-            const { data, error } = await client
+            // Consultar usuario en Supabase
+            const { data, error } = await supabaseClient
                 .from('usuarios')
                 .select('*')
                 .eq('usuario', usuario)
-                .eq('contra', contra);
-            
-            console.log('📊 Respuesta:', { data, error });
+                .eq('contra', contra)
+                .single();
             
             if (error) {
-                console.error('❌ Error:', error);
-                showMessage('Error: ' + error.message, 'error');
-                return;
+                throw error;
             }
             
-            if (data && data.length > 0) {
-                console.log('✅ LOGIN EXITOSO!');
-                showMessage('¡Login exitoso! Redirigiendo...', 'success');
+            if (data) {
+                showMessage('¡Login exitoso! Redirigiendo...', 'success', messageDiv);
                 
-                localStorage.setItem('loggedInUser', JSON.stringify({
-                    usuario: data[0].usuario,
-                    loginTime: new Date().toISOString()
+                // Guardar usuario
+                localStorage.setItem('marketplaceUser', JSON.stringify({
+                    id: data.id,
+                    usuario: data.usuario,
+                    rol: data.rol
                 }));
                 
+                currentUser = data;
+                
+                // Actualizar fecha de login
+                await supabaseClient
+                    .from('usuarios_actividad')
+                    .insert({
+                        usuario: data.usuario,
+                        fecha_logueo: new Date().toISOString().split('T')[0]
+                    });
+                
+                // Redirigir
                 setTimeout(() => {
                     window.location.href = 'dashboard.html';
                 }, 1500);
                 
             } else {
-                console.log('❌ Credenciales incorrectas');
-                showMessage('Usuario o contraseña incorrectos', 'error');
+                showMessage('Usuario o contraseña incorrectos', 'error', messageDiv);
             }
             
         } catch (error) {
-            console.error('🔥 Error crítico:', error);
-            showMessage('Error inesperado', 'error');
+            console.error('Error en login:', error);
+            showMessage('Error al conectar con la base de datos', 'error', messageDiv);
         } finally {
             submitBtn.innerHTML = originalText;
             submitBtn.disabled = false;
@@ -123,53 +124,166 @@ function setupLoginForm() {
     });
 }
 
-// ================================================
-// CONFIGURAR BOTÓN DE LOGOUT
-// ================================================
-function setupLogoutButton() {
-    const logoutBtn = document.getElementById('logoutBtn');
-    if (logoutBtn) {
-        logoutBtn.addEventListener('click', function() {
-            localStorage.removeItem('loggedInUser');
-            window.location.href = 'index.html';
-        });
+async function updateLastLogin() {
+    if (!currentUser) return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Verificar si ya existe registro para hoy
+    const { data: existing } = await supabaseClient
+        .from('usuarios_actividad')
+        .select('id')
+        .eq('usuario', currentUser.usuario)
+        .eq('fecha_logueo', today)
+        .single();
+    
+    if (!existing) {
+        // Crear nuevo registro
+        await supabaseClient
+            .from('usuarios_actividad')
+            .insert({
+                usuario: currentUser.usuario,
+                fecha_logueo: today
+            });
     }
 }
 
 // ================================================
-// VERIFICAR ESTADO DE LOGIN
+// DASHBOARD
 // ================================================
-function checkLoginStatus() {
-    const userData = localStorage.getItem('loggedInUser');
+async function loadDashboard() {
+    if (!currentUser) return;
     
-    if (!userData) {
-        window.location.href = 'index.html';
-        return;
+    // Mostrar información del usuario
+    document.getElementById('userDisplay').textContent = currentUser.usuario;
+    const roleBadge = document.getElementById('roleBadge');
+    roleBadge.textContent = currentUser.rol.toUpperCase();
+    roleBadge.setAttribute('data-role', currentUser.rol);
+    
+    // Mostrar/ocultar menú de gerente
+    if (currentUser.rol === 'gerente') {
+        document.getElementById('gerenteMenu').style.display = 'block';
     }
+    
+    // Configurar logout
+    document.getElementById('logoutBtn').addEventListener('click', function() {
+        localStorage.removeItem('marketplaceUser');
+        window.location.href = 'index.html';
+    });
+    
+    // Cargar estadísticas
+    await loadDashboardStats();
+    
+    // Configurar fecha actual
+    const today = new Date();
+    document.getElementById('todayDate').textContent = today.toLocaleDateString('es-ES', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+    
+    // Cargar acciones rápidas según rol
+    loadQuickActions();
+}
+
+async function loadDashboardStats() {
+    if (!currentUser) return;
     
     try {
-        const user = JSON.parse(userData);
-        const userDisplay = document.getElementById('userDisplay');
-        const loginTimeDisplay = document.getElementById('loginTimeDisplay');
+        const today = new Date().toISOString().split('T')[0];
         
-        if (userDisplay) userDisplay.textContent = user.usuario;
-        if (loginTimeDisplay && user.loginTime) {
-            const loginDate = new Date(user.loginTime);
-            loginTimeDisplay.textContent = loginDate.toLocaleString('es-ES');
+        // Para operadores: obtener tareas del día
+        if (currentUser.rol === 'operador') {
+            // Obtener asignaciones activas
+            const { data: asignaciones } = await supabaseClient
+                .from('usuarios_asignado')
+                .select('*')
+                .eq('usuario', currentUser.usuario)
+                .lte('fecha_desde', today)
+                .gte('fecha_hasta', today);
+            
+            // Obtener actividad de hoy
+            const { data: actividad } = await supabaseClient
+                .from('usuarios_actividad')
+                .select('*')
+                .eq('usuario', currentUser.usuario)
+                .eq('fecha_logueo', today)
+                .single();
+            
+            // Calcular estadísticas
+            let totalTasks = 0;
+            let completedTasks = 0;
+            
+            if (asignaciones && asignaciones.length > 0) {
+                const asignacion = asignaciones[0];
+                totalTasks = asignacion.marketplace_daily + asignacion.historia_daily + 
+                            asignacion.muro_daily + asignacion.grupos_daily;
+                
+                if (actividad) {
+                    completedTasks = (actividad.marketplace_quest || 0) + 
+                                   (actividad.historia_quest || 0) + 
+                                   (actividad.muro_quest || 0) + 
+                                   (actividad.grupo_quest || 0);
+                }
+            }
+            
+            document.getElementById('pendingTasks').textContent = totalTasks - completedTasks;
+            document.getElementById('completedTasks').textContent = completedTasks;
+            document.getElementById('performance').textContent = totalTasks > 0 ? 
+                Math.round((completedTasks / totalTasks) * 100) + '%' : '0%';
         }
+        
     } catch (error) {
-        window.location.href = 'index.html';
+        console.error('Error cargando estadísticas:', error);
+    }
+}
+
+function loadQuickActions() {
+    const quickActions = document.getElementById('quickActions');
+    if (!quickActions) return;
+    
+    quickActions.innerHTML = '';
+    
+    if (currentUser.rol === 'gerente') {
+        quickActions.innerHTML = `
+            <button class="action-btn" onclick="window.location.href='cuentas.html'">
+                <i class="fas fa-user-friends"></i><br>Gestionar Cuentas
+            </button>
+            <button class="action-btn" onclick="window.location.href='asignaciones.html'">
+                <i class="fas fa-tasks"></i><br>Asignar Tareas
+            </button>
+            <button class="action-btn" onclick="window.location.href='reportes.html'">
+                <i class="fas fa-chart-bar"></i><br>Ver Reportes
+            </button>
+        `;
+    } else {
+        quickActions.innerHTML = `
+            <button class="action-btn" onclick="window.location.href='diario.html'">
+                <i class="fas fa-calendar-day"></i><br>Ver Tareas Diarias
+            </button>
+            <button class="action-btn" onclick="window.location.href='publicar.html'">
+                <i class="fas fa-plus-circle"></i><br>Nueva Publicación
+            </button>
+            <button class="action-btn" onclick="window.location.href='historial.html'">
+                <i class="fas fa-history"></i><br>Mi Historial
+            </button>
+        `;
     }
 }
 
 // ================================================
-// FUNCIÓN PARA MOSTRAR MENSAJES
+// FUNCIONES UTILITARIAS
 // ================================================
-function showMessage(text, type) {
-    const messageDiv = document.getElementById('message');
+function showMessage(text, type, element = null) {
+    const messageDiv = element || document.getElementById('message');
     if (messageDiv) {
         messageDiv.textContent = text;
         messageDiv.className = `message ${type}`;
         messageDiv.style.display = 'block';
     }
 }
+
+// Exportar para uso en otros archivos
+window.supabaseClient = supabaseClient;
+window.currentUser = currentUser;
