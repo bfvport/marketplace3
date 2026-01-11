@@ -51,42 +51,55 @@ document.getElementById("cancelar").onclick = () => {
 };
 
 document.getElementById("guardar").onclick = async () => {
-  const emailInput = document.getElementById("email");
-  const contraInput = document.getElementById("contra");
-  const nombreInput = document.getElementById("nombre");
-  const estadoInput = document.getElementById("estado");
-  const calidadInput = document.getElementById("calidad");
-
-  const email = emailInput.value.trim();
-  const contra = contraInput.value.trim();
-  const nombre = nombreInput.value.trim();
-  const estado = estadoInput.value;
-  const calidad = calidadInput.value;
+  const email = document.getElementById("email").value.trim();
+  const contra = document.getElementById("contra").value.trim();
+  const nombre = document.getElementById("nombre").value.trim();
+  const estado = document.getElementById("estado").value;
+  const calidad = document.getElementById("calidad").value;
 
   if (!email || !contra || !nombre) {
     alert("Completá todos los campos");
     return;
   }
 
-  const { error } = await supabase
-    .from("cuentas_facebook")
-    .insert([{
-      email,
-      contra,
-      nombre,
-      estado,
-      calidad
-    }]);
+  let error;
+
+  if (cuentaEditandoId) {
+    // UPDATE
+    ({ error } = await supabase
+      .from("cuentas_facebook")
+      .update({
+        email,
+        contra,
+        nombre,
+        estado,
+        calidad
+      })
+      .eq("id", cuentaEditandoId));
+  } else {
+    // INSERT
+    ({ error } = await supabase
+      .from("cuentas_facebook")
+      .insert([{
+        email,
+        contra,
+        nombre,
+        estado,
+        calidad
+      }]));
+  }
 
   if (error) {
     console.error(error);
-    alert("Error al guardar la cuenta");
+    alert("Error al guardar");
     return;
   }
 
+  cuentaEditandoId = null;
   document.getElementById("modal-cuenta").classList.add("hidden");
   cargarCuentas();
 };
+
 tabla.addEventListener("click", async (e) => {
   if (!e.target.classList.contains("danger")) return;
 
@@ -108,4 +121,33 @@ tabla.addEventListener("click", async (e) => {
   }
 
   cargarCuentas();
+});
+tabla.addEventListener("click", async (e) => {
+  if (!e.target.classList.contains("edit")) return;
+
+  const id = e.target.dataset.id;
+  if (!id) return;
+
+  const { data, error } = await supabase
+    .from("cuentas_facebook")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error) {
+    console.error(error);
+    alert("Error cargando la cuenta");
+    return;
+  }
+
+  // cargar datos en el modal
+  document.getElementById("email").value = data.email;
+  document.getElementById("contra").value = data.contra;
+  document.getElementById("nombre").value = data.nombre;
+  document.getElementById("estado").value = data.estado;
+  document.getElementById("calidad").value = data.calidad;
+
+  cuentaEditandoId = id;
+
+  document.getElementById("modal-cuenta").classList.remove("hidden");
 });
