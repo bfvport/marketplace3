@@ -1,53 +1,23 @@
-// ./logica.js  (type="module")
+// ./logica.js
+import {
+  requireSession,
+  loadSidebar,
+  escapeHtml,
+} from "../../assets/js/app.js";
+
 const $ = (sel) => document.querySelector(sel);
 
-function getSB() {
-  // soporta varias convenciones de supabase.js
-  if (window.supabaseClient) return window.supabaseClient;
-  if (window.sb) return window.sb;
-  if (window.supabase && window.SUPABASE_URL && window.SUPABASE_ANON_KEY) {
-    return window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
-  }
-  throw new Error("No encuentro el cliente de Supabase. Revisá ../../assets/js/supabase.js");
-}
-
-const sb = getSB();
-
+// Ajustes
 const BUCKET = "categoria_csv";
 const TABLE = "categoria";
+const BASE_PATH = "../../";      // <- IMPORTANTE: para sidebar.html y logout link
+const ACTIVE_KEY = "categorias"; // <- Asegurate que en sidebar.html exista data-nav="categorias"
 
-// --- Sesión ---
-function getSessionUser() {
-  // Ajustá acá si tu login guarda otra clave
-  // Ej esperado: localStorage.setItem("session_user", JSON.stringify({usuario:"operador1", rol:"operador"}))
-  try {
-    const raw = localStorage.getItem("session_user");
-    if (!raw) return null;
-    const obj = JSON.parse(raw);
-    if (!obj || !obj.usuario) return null;
-    return obj;
-  } catch {
-    return null;
-  }
-}
-
-function requireSession() {
-  const sess = getSessionUser();
-  if (!sess?.usuario) {
-    log("❌ No hay sesión. Volvé al login.");
-    return null;
-  }
-  return sess;
-}
-
-// --- Utils ---
-function escapeHtml(s) {
-  return String(s ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+// Supabase client: tu supabase.js debería setear window.supabaseClient
+function sb() {
+  if (window.supabaseClient) return window.supabaseClient;
+  if (window.sb) return window.sb;
+  throw new Error("No encuentro window.supabaseClient. Revisá ../../assets/js/supabase.js");
 }
 
 function log(msg) {
@@ -64,7 +34,6 @@ function disable(sel, v) {
 }
 
 function nowTsCompact() {
-  // 20260111T132012 -> compacta, segura para filename
   const d = new Date();
   const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
@@ -74,15 +43,12 @@ function safeName(name) {
   return String(name || "archivo.csv").replace(/[^\w.\-]+/g, "_");
 }
 
-// --- Form ---
-function clearForm() {
+function clearForm(session) {
   $("#cat_id").value = "";
   $("#cat_nombre").value = "";
   $("#cat_mensaje").value = "";
   $("#cat_csv_nombre").value = "(sin CSV)";
-
-  const sess = getSessionUser();
-  $("#cat_creado_por_view").value = sess?.usuario ? sess.usuario : "(sesión no encontrada)";
+  $("#cat_creado_por_view").value = session?.usuario ? session.usuario : "(sesión no encontrada)";
 }
 
 function fillForm(cat) {
@@ -90,14 +56,11 @@ function fillForm(cat) {
   $("#cat_nombre").value = cat.nombre || "";
   $("#cat_mensaje").value = cat.mensaje || "";
   $("#cat_csv_nombre").value = cat.csv_nombre || "(sin CSV)";
-
-  // creado_por siempre viene de DB; vista read-only
   $("#cat_creado_por_view").value = cat.creado_por || "(sin dato)";
 }
 
-// --- Data ---
 async function fetchCategorias() {
-  const { data, error } = await sb
+  const { data, error } = await sb()
     .from(TABLE)
     .select("id, nombre, mensaje, csv_nombre, creado_por, created_at, updated_at")
     .order("id", { ascending: false });
@@ -183,11 +146,7 @@ async function refreshUI() {
   renderTabla(cats);
 }
 
-// --- Actions ---
-async function guardarCategoria() {
-  const sess = requireSession();
-  if (!sess) return;
-
+async function guardarCategoria(session) {
   const id = ($("#cat_id")?.value || "").trim();
   const nombre = ($("#cat_nombre")?.value || "").trim();
   const mensaje = ($("#cat_mensaje")?.value || "").trim();
@@ -196,18 +155,17 @@ async function guardarCategoria() {
   if (!mensaje) return log("❌ Falta mensaje.");
 
   disable("#btnGuardar", true);
-
   try {
     if (!id) {
-      log(`🧾 Creando categoría: "${nombre}" (creado_por = sesión: ${sess.usuario})`);
+      log(`🧾 Creando categoría: "${nombre}" (creado_por = ${session.usuario})`);
 
-      const { data, error } = await sb
+      const { data, error } = await sb()
         .from(TABLE)
         .insert([{
           nombre,
           mensaje,
-          creado_por: sess.usuario,
-          // csv_nombre queda null hasta subir
+          creado_por: session.usuario,
+          // csv_nombre queda null hasta subir CSV
         }])
         .select("id, nombre, mensaje, csv_nombre, creado_por")
         .single();
@@ -217,17 +175,16 @@ async function guardarCategoria() {
       fillForm(data);
       log(`✅ Categoría creada (id interno ${data.id}).`);
     } else {
-      // Update: NO permitimos cambiar creado_por desde UI
       log(`🧾 Actualizando categoría (id interno oculto).`);
 
-      const { error } = await sb
+      const { error } = await sb()
         .from(TABLE)
         .update({ nombre, mensaje })
         .eq("id", Number(id));
 
       if (error) throw error;
 
-      log(`✅ Categoría actualizada.`);
+      log("✅ Categoría actualizada.");
     }
 
     await refreshUI();
@@ -238,12 +195,10 @@ async function guardarCategoria() {
   }
 }
 
-async function subirCSV() {
-  const sess = requireSession();
-  if (!sess) return;
-
+async function subirCSV(session) {
   const catId = ($("#selCategoria")?.value || "").trim();
   if (!catId) return log("❌ Seleccioná una categoría.");
+
   const file = $("#fileCsv")?.files?.[0];
   if (!file) return log("❌ Elegí un archivo CSV.");
 
@@ -251,29 +206,23 @@ async function subirCSV() {
 
   disable("#btnSubir", true);
   try {
-    log(`📤 Subiendo a bucket ${BUCKET}: ${path}`);
+    log(`📤 Subiendo: ${BUCKET}/${path}`);
 
-    const { error: upErr } = await sb.storage
+    const { error: upErr } = await sb().storage
       .from(BUCKET)
-      .upload(path, file, {
-        cacheControl: "3600",
-        upsert: true,
-        contentType: "text/csv"
-      });
+      .upload(path, file, { upsert: true, contentType: "text/csv" });
 
     if (upErr) throw upErr;
 
-    // Asocia el CSV en la categoría (guardar path como csv_nombre para que quede todo simple)
-    const { error: updErr } = await sb
+    const { error: updErr } = await sb()
       .from(TABLE)
       .update({ csv_nombre: path })
       .eq("id", Number(catId));
 
     if (updErr) throw updErr;
 
-    log(`✅ CSV subido y asociado: ${path}`);
+    log(`✅ CSV asociado: ${path}`);
 
-    // si justo estás editando esa categoría, actualizar el campo visual
     if ($("#cat_id")?.value?.trim() === String(catId)) {
       $("#cat_csv_nombre").value = path;
     }
@@ -300,18 +249,18 @@ async function listarCsvDeCategoria() {
 
   disable("#btnListarCsv", true);
   try {
-    log(`📚 Listando CSV en ${BUCKET}/${catId}/`);
+    log(`📚 Listando: ${BUCKET}/${catId}/`);
 
-    const { data, error } = await sb.storage
+    const { data, error } = await sb().storage
       .from(BUCKET)
       .list(`${catId}`, { limit: 100, sortBy: { column: "updated_at", order: "desc" } });
 
     if (error) throw error;
 
-    const files = (data || []).filter(x => x && x.name && x.name.toLowerCase().endsWith(".csv"));
+    const files = (data || []).filter(x => x?.name && x.name.toLowerCase().endsWith(".csv"));
 
     if (!files.length) {
-      if (tbody) tbody.innerHTML = `<tr><td colspan="3" class="muted">No hay CSV subidos para esta categoría.</td></tr>`;
+      if (tbody) tbody.innerHTML = `<tr><td colspan="3" class="muted">No hay CSV subidos.</td></tr>`;
       return;
     }
 
@@ -337,62 +286,19 @@ async function listarCsvDeCategoria() {
       btnCopy.onclick = async () => {
         try {
           await navigator.clipboard.writeText(fullPath);
-          log(`📋 Path copiado: ${fullPath}`);
+          log(`📋 Copiado: ${fullPath}`);
         } catch {
-          log(`❌ No pude copiar al portapapeles.`);
+          log("❌ No pude copiar al portapapeles.");
         }
       };
 
-      const btnDel = document.createElement("button");
-      btnDel.className = "btn2 danger";
-      btnDel.textContent = "Borrar";
-      btnDel.onclick = async () => {
-        if (!confirm(`¿Borrar ${fullPath}?`)) return;
-        await borrarCsv(fullPath, Number(catId));
-      };
-
       tdAcc.appendChild(btnCopy);
-      tdAcc.appendChild(btnDel);
       tr.appendChild(tdAcc);
 
       tbody.appendChild(tr);
     }
   } catch (e) {
     log(`❌ listar csv error: ${e.message || e}`);
-  } finally {
-    disable("#btnListarCsv", false);
-  }
-}
-
-async function borrarCsv(fullPath, catIdNum) {
-  disable("#btnListarCsv", true);
-  try {
-    log(`🗑️ Borrando: ${BUCKET}/${fullPath}`);
-
-    const { error } = await sb.storage.from(BUCKET).remove([fullPath]);
-    if (error) throw error;
-
-    log(`✅ Borrado OK: ${fullPath}`);
-
-    // Si la categoría apuntaba a ese path, limpiar csv_nombre
-    const { data: cat, error: catErr } = await sb
-      .from(TABLE)
-      .select("id, csv_nombre")
-      .eq("id", catIdNum)
-      .single();
-
-    if (!catErr && cat?.csv_nombre === fullPath) {
-      await sb.from(TABLE).update({ csv_nombre: null }).eq("id", catIdNum);
-      log(`🧹 csv_nombre limpiado en la categoría (porque apuntaba al archivo borrado).`);
-      if ($("#cat_id")?.value?.trim() === String(catIdNum)) {
-        $("#cat_csv_nombre").value = "(sin CSV)";
-      }
-    }
-
-    await listarCsvDeCategoria();
-    await refreshUI();
-  } catch (e) {
-    log(`❌ borrar csv error: ${e.message || e}`);
   } finally {
     disable("#btnListarCsv", false);
   }
@@ -413,26 +319,30 @@ function descargarPlantilla() {
   log("⬇️ Plantilla descargada.");
 }
 
-// --- Init ---
 document.addEventListener("DOMContentLoaded", async () => {
-  // Si faltan elementos, salimos sin romper
-  if (!$("#btnGuardar") || !$("#btnNuevo") || !$("#btnSubir") || !$("#btnListarCsv")) return;
+  // Si faltan elementos clave, evitamos romper
+  if (!$("#btnGuardar") || !$("#btnSubir") || !$("#tablaCats")) return;
 
-  const sess = getSessionUser();
+  const session = requireSession();
+  if (!session) return;
+
+  await loadSidebar({ activeKey: ACTIVE_KEY, basePath: BASE_PATH });
+
   const pill = $("#sessionPill");
-  if (pill && sess?.usuario) {
+  if (pill) {
     pill.style.display = "inline-block";
-    pill.textContent = `Sesión: ${sess.usuario}`;
+    pill.textContent = `Sesión: ${session.usuario} (${session.rol})`;
   }
 
-  clearForm();
+  clearForm(session);
 
-  $("#btnGuardar").addEventListener("click", guardarCategoria);
+  $("#btnGuardar").addEventListener("click", () => guardarCategoria(session));
   $("#btnNuevo").addEventListener("click", () => {
-    clearForm();
+    clearForm(session);
     log("🆕 Form limpio (modo crear).");
   });
-  $("#btnSubir").addEventListener("click", subirCSV);
+
+  $("#btnSubir").addEventListener("click", () => subirCSV(session));
   $("#btnListarCsv").addEventListener("click", listarCsvDeCategoria);
   $("#btnDescargarPlantilla").addEventListener("click", descargarPlantilla);
 

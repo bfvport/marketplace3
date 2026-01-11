@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Cuentas Facebook - Gerente</title>
-    <link rel="stylesheet" href="../assets/css/app.css">
+    <link rel="stylesheet" href="../../assets/css/app.css" />
 </head>
 <body>
 
@@ -48,7 +48,11 @@
         </section>
     </main>
 
-    <!-- Guard de rol -->
-    <script src="./cuentas_fb_guard.js"></script>
+   <!-- Supabase (credenciales globales) -->
+<script src="../../assets/js/supabase.js"></script>
+
+<!-- Guard de rol (solo gerente) -->
+<script src="./cuentas_fb_guard.js"></script>
+
 </body>
 </html>
