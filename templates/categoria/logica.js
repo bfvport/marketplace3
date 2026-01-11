@@ -1,44 +1,14 @@
-// ./logica.js
-console.log("PATH:", location.pathname);
-console.log("SESSION mp_session_v1:", localStorage.getItem("mp_session_v1"));
-
-import { getSession, loadSidebar } from "../../assets/js/app.js";
-
-function gotoLogin() {
-  // arma la URL correcta desde donde estés parado
-  const url = new URL("../login/login.html", location.href);
-  location.href = url.pathname; 
-}
-
-const s = getSession();
-if (!s || !s.usuario || !s.rol) {
-  gotoLogin();      // <- esto evita “page not found”
-  throw new Error("No session");
-}
-
-// si llegaste acá, hay sesión:
-await loadSidebar({ activeKey: "categorias", basePath: "../" });
+import { getSession, loadSidebar, escapeHtml } from "../../assets/js/app.js";
 
 const $ = (sel) => document.querySelector(sel);
-
-// Ajustes
-const BUCKET = "categoria_csv";
 const TABLE = "categoria";
-const BASE_PATH = "../../";      // <- IMPORTANTE: para sidebar.html y logout link
-const ACTIVE_KEY = "categorias"; // <- Asegurate que en sidebar.html exista data-nav="categorias"
-
-// Supabase client: tu supabase.js debería setear window.supabaseClient
-function sb() {
-  if (window.supabaseClient) return window.supabaseClient;
-  if (window.sb) return window.sb;
-  throw new Error("No encuentro window.supabaseClient. Revisá ../../assets/js/supabase.js");
-}
+const BUCKET = "categoria_csv";
 
 function log(msg) {
   const el = $("#log");
   if (!el) return;
-  const time = new Date().toTimeString().slice(0, 8);
-  el.innerHTML += `[${time}] ${escapeHtml(msg)}<br>`;
+  const t = new Date().toTimeString().slice(0, 8);
+  el.innerHTML += `[${t}] ${escapeHtml(msg)}<br>`;
   el.scrollTop = el.scrollHeight;
 }
 
@@ -57,6 +27,27 @@ function safeName(name) {
   return String(name || "archivo.csv").replace(/[^\w.\-]+/g, "_");
 }
 
+async function waitSupabaseClient(timeoutMs = 2000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (window.supabaseClient) return window.supabaseClient;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  return null;
+}
+
+function setSessionPill(session) {
+  const pill = $("#sessionPill");
+  if (!pill) return;
+  if (!session?.usuario) {
+    pill.style.display = "inline-block";
+    pill.textContent = "Sesión: NO encontrada";
+    return;
+  }
+  pill.style.display = "inline-block";
+  pill.textContent = `Sesión: ${session.usuario} (${session.rol || "?"})`;
+}
+
 function clearForm(session) {
   $("#cat_id").value = "";
   $("#cat_nombre").value = "";
@@ -73,8 +64,8 @@ function fillForm(cat) {
   $("#cat_creado_por_view").value = cat.creado_por || "(sin dato)";
 }
 
-async function fetchCategorias() {
-  const { data, error } = await sb()
+async function fetchCategorias(sb) {
+  const { data, error } = await sb
     .from(TABLE)
     .select("id, nombre, mensaje, csv_nombre, creado_por, created_at, updated_at")
     .order("id", { ascending: false });
@@ -96,7 +87,7 @@ function renderSelect(cats) {
   for (const c of cats) {
     const opt = document.createElement("option");
     opt.value = String(c.id);
-    opt.textContent = `${c.nombre}`;
+    opt.textContent = c.nombre;
     sel.appendChild(opt);
   }
 }
@@ -138,118 +129,121 @@ function renderTabla(cats) {
       log(`✏️ Editando "${c.nombre}"`);
     };
 
-    const btnVerCsv = document.createElement("button");
-    btnVerCsv.className = "btn2";
-    btnVerCsv.textContent = "Ver CSV";
-    btnVerCsv.onclick = async () => {
+    const btnVer = document.createElement("button");
+    btnVer.className = "btn2";
+    btnVer.textContent = "Ver CSV";
+    btnVer.onclick = async () => {
       $("#selCategoria").value = String(c.id);
       await listarCsvDeCategoria();
     };
 
     tdAcc.appendChild(btnEdit);
-    tdAcc.appendChild(btnVerCsv);
+    tdAcc.appendChild(btnVer);
     tr.appendChild(tdAcc);
 
     tbody.appendChild(tr);
   }
 }
 
-async function refreshUI() {
-  const cats = await fetchCategorias();
+async function refreshUI(sb) {
+  const cats = await fetchCategorias(sb);
   renderSelect(cats);
   renderTabla(cats);
 }
 
-async function guardarCategoria(session) {
+async function guardarCategoria(sb, session) {
   const id = ($("#cat_id")?.value || "").trim();
   const nombre = ($("#cat_nombre")?.value || "").trim();
   const mensaje = ($("#cat_mensaje")?.value || "").trim();
 
+  if (!session?.usuario) return log("❌ No hay sesión (mp_session_v1). Volvé al login.");
   if (!nombre) return log("❌ Falta nombre.");
   if (!mensaje) return log("❌ Falta mensaje.");
 
   disable("#btnGuardar", true);
   try {
     if (!id) {
-      log(`🧾 Creando categoría: "${nombre}" (creado_por = ${session.usuario})`);
+      log(`🧾 Creando categoría "${nombre}" (creado_por=${session.usuario})`);
 
-      const { data, error } = await sb()
+      const { data, error } = await sb
         .from(TABLE)
-        .insert([{
-          nombre,
-          mensaje,
-          creado_por: session.usuario,
-          // csv_nombre queda null hasta subir CSV
-        }])
+        .insert([{ nombre, mensaje, creado_por: session.usuario }])
         .select("id, nombre, mensaje, csv_nombre, creado_por")
         .single();
 
       if (error) throw error;
 
       fillForm(data);
-      log(`✅ Categoría creada (id interno ${data.id}).`);
+      log(`✅ Creada OK (id interno ${data.id})`);
     } else {
-      log(`🧾 Actualizando categoría (id interno oculto).`);
+      log(`🧾 Actualizando categoría (id interno oculto)`);
 
-      const { error } = await sb()
+      const { error } = await sb
         .from(TABLE)
         .update({ nombre, mensaje })
         .eq("id", Number(id));
 
       if (error) throw error;
 
-      log("✅ Categoría actualizada.");
+      log(`✅ Actualizada OK`);
     }
 
-    await refreshUI();
+    await refreshUI(sb);
   } catch (e) {
     log(`❌ Guardar error: ${e.message || e}`);
+    console.error(e);
   } finally {
     disable("#btnGuardar", false);
   }
 }
 
-async function subirCSV(session) {
+async function subirCSV(sb, session) {
+  if (!session?.usuario) return log("❌ No hay sesión (mp_session_v1). Volvé al login.");
+
   const catId = ($("#selCategoria")?.value || "").trim();
   if (!catId) return log("❌ Seleccioná una categoría.");
 
   const file = $("#fileCsv")?.files?.[0];
-  if (!file) return log("❌ Elegí un archivo CSV.");
+  if (!file) return log("❌ Elegí un CSV.");
 
   const path = `${catId}/${nowTsCompact()}_${safeName(file.name)}`;
 
   disable("#btnSubir", true);
   try {
-    log(`📤 Subiendo: ${BUCKET}/${path}`);
+    log(`📤 Subiendo a bucket ${BUCKET}: ${path}`);
 
-    const { error: upErr } = await sb().storage
+    const { error: upErr } = await sb.storage
       .from(BUCKET)
       .upload(path, file, { upsert: true, contentType: "text/csv" });
 
     if (upErr) throw upErr;
 
-    const { error: updErr } = await sb()
+    const { error: updErr } = await sb
       .from(TABLE)
       .update({ csv_nombre: path })
       .eq("id", Number(catId));
 
     if (updErr) throw updErr;
 
-    log(`✅ CSV asociado: ${path}`);
+    log(`✅ CSV subido y asociado: ${path}`);
 
     if ($("#cat_id")?.value?.trim() === String(catId)) {
       $("#cat_csv_nombre").value = path;
     }
 
-    await refreshUI();
+    await refreshUI(sb);
   } catch (e) {
-    log(`❌ upload error: ${e.message || e}`);
+    log(`❌ upload/db error: ${e.message || e}`);
+    console.error(e);
   } finally {
     disable("#btnSubir", false);
   }
 }
 
 async function listarCsvDeCategoria() {
+  const sb = window.supabaseClient;
+  if (!sb) return log("❌ Supabase client no disponible.");
+
   const catId = ($("#selCategoria")?.value || "").trim();
   if (!catId) return log("❌ Seleccioná una categoría.");
 
@@ -263,16 +257,15 @@ async function listarCsvDeCategoria() {
 
   disable("#btnListarCsv", true);
   try {
-    log(`📚 Listando: ${BUCKET}/${catId}/`);
+    log(`📚 Listando ${BUCKET}/${catId}/`);
 
-    const { data, error } = await sb().storage
+    const { data, error } = await sb.storage
       .from(BUCKET)
       .list(`${catId}`, { limit: 100, sortBy: { column: "updated_at", order: "desc" } });
 
     if (error) throw error;
 
-    const files = (data || []).filter(x => x?.name && x.name.toLowerCase().endsWith(".csv"));
-
+    const files = (data || []).filter(f => f?.name && f.name.toLowerCase().endsWith(".csv"));
     if (!files.length) {
       if (tbody) tbody.innerHTML = `<tr><td colspan="3" class="muted">No hay CSV subidos.</td></tr>`;
       return;
@@ -280,7 +273,6 @@ async function listarCsvDeCategoria() {
 
     for (const f of files) {
       const fullPath = `${catId}/${f.name}`;
-
       const tr = document.createElement("tr");
 
       const tdFile = document.createElement("td");
@@ -302,7 +294,7 @@ async function listarCsvDeCategoria() {
           await navigator.clipboard.writeText(fullPath);
           log(`📋 Copiado: ${fullPath}`);
         } catch {
-          log("❌ No pude copiar al portapapeles.");
+          log("❌ No pude copiar.");
         }
       };
 
@@ -313,6 +305,7 @@ async function listarCsvDeCategoria() {
     }
   } catch (e) {
     log(`❌ listar csv error: ${e.message || e}`);
+    console.error(e);
   } finally {
     disable("#btnListarCsv", false);
   }
@@ -334,36 +327,36 @@ function descargarPlantilla() {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // Si faltan elementos clave, evitamos romper
-  if (!$("#btnGuardar") || !$("#btnSubir") || !$("#tablaCats")) return;
+  // 1) sesión
+  const session = getSession();
+  setSessionPill(session);
 
-  const session = requireSession();
-  if (!session) return;
+  // 2) sidebar (tu sidebar está en templates/sidebar.html, desde templates/categoria/ => basePath "../")
+  await loadSidebar({ activeKey: "categorias", basePath: "../" });
 
-  await loadSidebar({ activeKey: ACTIVE_KEY, basePath: BASE_PATH });
-
-  const pill = $("#sessionPill");
-  if (pill) {
-    pill.style.display = "inline-block";
-    pill.textContent = `Sesión: ${session.usuario} (${session.rol})`;
+  // 3) espera supabase
+  const client = await waitSupabaseClient(2000);
+  if (!client) {
+    log("❌ No encuentro window.supabaseClient. Revisá que ../../assets/js/supabase.js lo seteé ANTES del module.");
+    return;
   }
+  log("✅ Supabase client OK.");
 
+  // 4) init UI
   clearForm(session);
 
-  $("#btnGuardar").addEventListener("click", () => guardarCategoria(session));
-  $("#btnNuevo").addEventListener("click", () => {
-    clearForm(session);
-    log("🆕 Form limpio (modo crear).");
-  });
+  $("#btnGuardar")?.addEventListener("click", () => guardarCategoria(client, session));
+  $("#btnNuevo")?.addEventListener("click", () => { clearForm(session); log("🆕 Form limpio."); });
+  $("#btnSubir")?.addEventListener("click", () => subirCSV(client, session));
+  $("#btnListarCsv")?.addEventListener("click", listarCsvDeCategoria);
+  $("#btnDescargarPlantilla")?.addEventListener("click", descargarPlantilla);
 
-  $("#btnSubir").addEventListener("click", () => subirCSV(session));
-  $("#btnListarCsv").addEventListener("click", listarCsvDeCategoria);
-  $("#btnDescargarPlantilla").addEventListener("click", descargarPlantilla);
-
+  // 5) cargar lista
   try {
-    await refreshUI();
-    log("✅ UI lista.");
+    await refreshUI(client);
+    log("✅ Categorías cargadas.");
   } catch (e) {
-    log(`❌ init error: ${e.message || e}`);
+    log(`❌ No pude cargar categorías: ${e.message || e}`);
+    console.error(e);
   }
 });

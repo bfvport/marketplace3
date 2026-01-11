@@ -11,7 +11,7 @@ export function clearSession(){ localStorage.removeItem(SESSION_KEY); }
 export function requireSession(){
   const s = getSession();
   if (!s || !s.usuario || !s.rol){
-    window.location.href = "/templates/login/login.html";
+    window.location.href = "/login/login.html";
     return null;
   }
   return s;
