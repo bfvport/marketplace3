@@ -1,22 +1,24 @@
-<!-- templates/sidebar.html -->
-<aside class="sidebar">
-  <div class="brand">📌 Marketplace Manager</div>
+<!-- templates/layout.html -->
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title><!-- TITLE --></title>
 
-  <div class="sb-user">
-    <div><strong id="sb-usuario">-</strong></div>
-    <div class="muted">Rol: <span id="sb-rol">-</span></div>
+  <link rel="stylesheet" href="<!-- BASE -->assets/css/app.css" />
+
+  <!-- Supabase CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="<!-- BASE -->assets/js/supabase.js"></script>
+</head>
+
+<body>
+  <div class="layout">
+    <div id="sidebar-host"></div>
+    <main class="content">
+      <!-- CONTENT -->
+    </main>
   </div>
-
-  <nav class="nav">
-    <a href="../dashboard/dashboard.html" data-nav="dashboard">🏠 Dashboard</a>
-    <a href="../diario/diario.html" data-nav="diario">📅 Diario</a>
-
-    <a href="../cuentas_facebook/cuentas_facebook.html" data-only="gerente" data-nav="cuentas">👤 Cuentas Facebook</a>
-    <a href="../asignaciones/asignaciones.html" data-only="gerente" data-nav="asignaciones">🧩 Asignaciones</a>
-    <a href="../actividad/actividad.html" data-only="gerente" data-nav="actividad">📊 Actividad</a>
-  </nav>
-
-  <div class="sb-footer">
-    <button class="btn2" id="btn-logout">Salir</button>
-  </div>
-</aside>
+</body>
+</html>
