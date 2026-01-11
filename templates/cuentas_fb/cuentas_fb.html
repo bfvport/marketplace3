@@ -10,7 +10,8 @@
 <body>
 
   <!-- Sidebar (se carga desde app.js) -->
-  <div id="sidebar-container"></div>
+  <div id="sidebar-host"></div>
+
 
   <main class="content">
     <h1>Gestión de Cuentas Facebook</h1>
@@ -33,7 +34,7 @@
           <th>Acciones</th>
         </tr>
       </thead>
-      <tbody id="tabla-cuentas">
+      <tbody id="cuentas_facebook">
         <!-- JS carga los datos -->
       </tbody>
     </table>
@@ -63,25 +64,23 @@
   </main>
 
   <!-- Supabase -->
-  <script src="../../assets/js/supabase.js"></script>
+ <script type="module">
+  import { requireSession, loadSidebar } from "../../assets/js/app.js";
 
-  <!-- App: sesión + sidebar + rol -->
-  <script type="module">
-    import { requireSession, loadSidebar } from "../../assets/js/app.js";
+  const session = requireSession();
+  if (!session) return;
 
-    const session = requireSession();
-    if (!session) return;
+  if (session.rol !== "gerente") {
+    alert("Acceso restringido");
+    window.location.href = "../dashboard/dashboard.html";
+  }
 
-    if (session.rol !== "gerente") {
-      alert("Acceso restringido");
-      window.location.href = "../dashboard/dashboard.html";
-    }
+  loadSidebar({
+    activeKey: "cuentas",
+    basePath: "../"
+  });
+</script>
 
-    loadSidebar({
-      activeKey: "cuentas",
-      basePath: "../"
-    });
-  </script>
 
   <!-- JS de esta página -->
   <script type="module" src="./cuentas_fb.js"></script>
