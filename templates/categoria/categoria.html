@@ -2,134 +2,83 @@
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Categorías | Marketplace Manager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Categorías</title>
 
-  <link rel="stylesheet" href="../../assets/css/app.css" />
-
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../../assets/js/supabase.js"></script>
-
-  <style>
-    .table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 10px;
-      font-size: 13px;
-    }
-    .table th, .table td {
-      border-bottom: 1px solid rgba(255,255,255,0.12);
-      padding: 10px 8px;
-      vertical-align: top;
-    }
-    .table th { text-align:left; opacity: .85; }
-    .actions { display:flex; gap:8px; flex-wrap:wrap; }
-    .small { font-size: 12px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
-    .danger { border-color: rgba(239,68,68,0.55) !important; background: rgba(239,68,68,0.12) !important; }
-    .danger:hover { background: rgba(239,68,68,0.18) !important; }
-  </style>
+  <link rel="stylesheet" href="/css/app.css" />
+  <script type="module" src="/templates/categoria/categoria.js"></script>
 </head>
-
 <body>
-  <div class="layout">
-    <div id="sidebar-host"></div>
+  <!-- Sidebar (simple; si tenés sidebar.html lo podés inyectar con JS) -->
+  <aside class="sidebar">
+    <a href="/dashboard.html">🏠 Dashboard</a>
+    <a class="active" href="/categorias.html">📦 Categorías</a>
+    <a href="/diario/diario.html">📝 Diario</a>
+  </aside>
 
-    <main class="content">
-      <div class="title">🗂️ Categorías</div>
-      <div class="muted">Crear, editar, y administrar CSV por categoría (Storage bucket: <span class="mono">categoria_csv</span>).</div>
+  <main class="container">
+    <h1>📦 Categorías</h1>
 
-      <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));">
-        <section class="card">
-          <div style="font-weight:800;">➕ Crear / Editar categoría</div>
+    <section class="card">
+      <h2>1) Crear categoría</h2>
 
-          <label>ID (autogenerado)</label>
+      <div class="grid">
+        <div class="field">
+          <label for="cat_nombre">Nombre *</label>
+          <input id="cat_nombre" type="text" placeholder="Ej: Ropa" />
+        </div>
 
-          <label>Nombre</label>
-          <input id="cat_nombre" placeholder="ropa" />
+        <div class="field">
+          <label for="cat_csv_nombre">CSV nombre (opcional)</label>
+          <input id="cat_csv_nombre" type="text" placeholder="Ej: plantilla_ropa.csv" />
+          <small>Esto es un alias. El CSV real se sube en el paso 2.</small>
+        </div>
 
-          <label>Mensaje (template de descripción)</label>
-          <textarea id="cat_mensaje" placeholder="Texto base que sugerís para publicar..."></textarea>
+        <div class="field full">
+          <label for="cat_mensaje">Mensaje *</label>
+          <textarea id="cat_mensaje" rows="4" placeholder="Mensaje base..."></textarea>
+        </div>
 
-          <label>CSV asociado (path o nombre)</label>
-          <input id="cat_csv_nombre" placeholder="(se setea al subir CSV)" />
-
-          <div class="row" style="margin-top:12px;">
-            <button class="btn" id="btnGuardar">Guardar</button>
-            <button class="btn2" id="btnNuevo">Nuevo</button>
-          </div>
-
-          <hr style="border:none;border-top:1px solid rgba(255,255,255,0.12); margin: 14px 0;">
-
-          <div style="font-weight:800;">📄 Plantilla CSV</div>
-          <div class="muted small">
-            Columnas: <span class="mono">titulo, descripcion, categoria, etiquetas, url_img_fijas, url_imagenes_portadas</span>
-          </div>
-
-          <div class="row" style="margin-top:10px;">
-            <button class="btn2" id="btnDescargarPlantilla">Descargar plantilla</button>
-          </div>
-        </section>
-
-        <section class="card">
-          <div style="font-weight:800;">📤 Subir CSV a Supabase (Storage)</div>
-          <div class="muted small">Seleccioná una categoría y subí un CSV. Se guarda como <span class="mono">categoria_csv/&lt;id&gt;/...csv</span>.</div>
-
-          <label>Categoría</label>
-          <select id="selCategoria"></select>
-
-          <label>Archivo CSV</label>
-          <input id="fileCsv" type="file" accept=".csv,text/csv" />
-
-          <div class="row" style="margin-top:12px;">
-            <button class="btn" id="btnSubir">Subir CSV</button>
-            <button class="btn2" id="btnListarCsv">Ver CSV subidos</button>
-          </div>
-
-          <div style="margin-top:12px;">
-            <div style="font-weight:700; margin-bottom:6px;">🖥️ Logs</div>
-            <div class="log" id="log"></div>
-          </div>
-        </section>
+        <div class="field">
+          <label for="cat_creado_por">Creado por *</label>
+          <input id="cat_creado_por" type="text" placeholder="Ej: operador1" />
+          <small>Usá el usuario logueado (podés autocompletar desde localStorage).</small>
+        </div>
       </div>
 
-      <section class="card" style="margin-top:12px;">
-        <div style="font-weight:800;">📚 Lista de categorías</div>
-        <div class="muted small">Acciones: editar, subir/ver/borrar CSV.</div>
+      <div class="actions">
+        <button id="btn_crear" class="btn primary">➕ Crear</button>
+        <span id="status_crear" class="status"></span>
+      </div>
+    </section>
 
-        <table class="table" id="tablaCats">
-          <thead>
-            <tr>
-              <th style="width:70px;">ID</th>
-              <th style="width:180px;">Nombre</th>
-              <th>Mensaje</th>
-              <th style="width:260px;">CSV (csv_nombre)</th>
-              <th style="width:270px;">Acciones</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </section>
+    <section class="card" id="card_csv" style="display:none;">
+      <h2>2) Subir CSV a la categoría</h2>
 
-      <section class="card" style="margin-top:12px; display:none;" id="csvPanel">
-        <div style="font-weight:800;">🗃️ CSV subidos (Storage)</div>
-        <div class="muted small" id="csvPanelHint"></div>
+      <div class="info">
+        <div><b>Categoria:</b> <span id="info_nombre">-</span></div>
+        <div><b>ID interno:</b> <span id="info_id">-</span></div>
+        <div><b>CSV asociado:</b> <span id="info_csv">(sin CSV)</span></div>
+      </div>
 
-        <table class="table" id="tablaCsv">
-          <thead>
-            <tr>
-              <th>Archivo</th>
-              <th style="width:220px;">Última modificación</th>
-              <th style="width:240px;">Acciones</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </section>
+      <div class="grid">
+        <div class="field full">
+          <label for="csv_file">Archivo CSV *</label>
+          <input id="csv_file" type="file" accept=".csv,text/csv" />
+          <small>Se guardará en Supabase Storage (bucket: categoria_csv).</small>
+        </div>
+      </div>
 
-    </main>
-  </div>
+      <div class="actions">
+        <button id="btn_subir_csv" class="btn">📤 Subir CSV</button>
+        <span id="status_csv" class="status"></span>
+      </div>
+    </section>
 
-  <script type="module" src="./logica.js"></script>
+    <section class="card">
+      <h2>Listado</h2>
+      <div id="cats_list" class="muted">Cargando...</div>
+    </section>
+  </main>
 </body>
 </html>
