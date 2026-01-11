@@ -63,23 +63,27 @@
 
   </main>
 
+<!-- Supabase SDK + init (necesario para window.supabaseClient) -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../../assets/js/supabase.js"></script>
+
+
   <!-- Supabase -->
- <script type="module">
-  import { requireSession, loadSidebar } from "../../assets/js/app.js";
+  <script type="module">
+    import { requireSession, loadSidebar } from "../../assets/js/app.js";
 
-  const session = requireSession();
-  if (!session) return;
+    const session = requireSession();
+    if (!session) return;
 
-  if (session.rol !== "gerente") {
-    alert("Acceso restringido");
-    window.location.href = "../dashboard/dashboard.html";
-  }
+    if (session.rol !== "gerente") {
+      alert("Acceso restringido");
+      window.location.href = "../dashboard/dashboard.html";
+    }
 
-  loadSidebar({
-  activeKey: "cuentas",
-  basePath: "../"
-});
-</script>
+    loadSidebar({ activeKey: "cuentas", basePath: "../" });
+  </script>
+
+  <script type="module" src="cuentas_fb.js"></script>
 
 
   <!-- JS de esta página -->
