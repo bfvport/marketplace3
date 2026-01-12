@@ -11,7 +11,8 @@ export function clearSession(){ localStorage.removeItem(SESSION_KEY); }
 export function requireSession(){
   const s = getSession();
   if (!s || !s.usuario || !s.rol){
-    window.location.href = "/login/login.html";
+    // Ajustá la ruta si tu login está en otra carpeta, pero esto suele funcionar
+    window.location.href = "/templates/login/login.html"; 
     return null;
   }
   return s;
@@ -59,13 +60,28 @@ export async function loadSidebar({ activeKey, basePath }){
     host.querySelectorAll("[data-only='gerente']").forEach(el => el.style.display="none");
   }
 
-  // 🚪 CIERRE DE SESIÓN SEGURO
+  // 🚪 CIERRE DE SESIÓN CON REGISTRO (LOGOUT)
   const btn = host.querySelector("#btn-logout");
   if (btn){
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       console.log("Cerrando sesión...");
+
+      // 1. REGISTRAR LA SALIDA EN SUPABASE ANTES DE IRSE
+      if (s && window.supabaseClient) {
+        try {
+          await window.supabaseClient.from("usuarios_actividad").insert([{
+            usuario: s.usuario,
+            fecha_logueo: new Date().toISOString(), // Hora exacta
+            facebook_account_usada: "🔴 SALIÓ DEL SISTEMA" // Mensaje para el gerente
+          }]);
+        } catch (error) {
+          console.error("No se pudo registrar la salida:", error);
+        }
+      }
+
+      // 2. BORRAR SESIÓN Y REDIRIGIR
       clearSession();
-      // ✅ Usamos replace para evitar el bug de redirección
+      // Usamos replace para que no pueda volver atrás con el botón del navegador
       window.location.replace(`${basePath}login/login.html`);
     });
   }
