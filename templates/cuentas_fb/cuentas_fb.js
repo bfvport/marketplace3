@@ -19,19 +19,24 @@ async function cargarCuentas() {
 
   let query = supabase.from("cuentas_facebook").select("*");
   
-  // 🛡️ FILTRO: Si es operador, solo ve lo asignado a su nombre
+  // 🛡️ FILTRO: El operador solo ve lo asignado a él
   if (session.rol !== "gerente") {
     query = query.eq("ocupada_por", session.usuario);
   }
 
   const { data, error } = await query.order("id", { ascending: true });
-  if (error) return;
+  if (error) return console.error(error);
 
   tbody.innerHTML = "";
-  (data || []).forEach(cuenta => {
-    // El botón dice "Editar" para el gerente y "Ver datos" para el operador
+  const cuentas = data || [];
+
+  if (cuentas.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:20px;">No hay cuentas asignadas para mostrar.</td></tr>`;
+    return;
+  }
+
+  cuentas.forEach(cuenta => {
     const textoBoton = session.rol === 'gerente' ? 'Editar' : 'Ver datos';
-    
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${cuenta.id}</td>
@@ -53,19 +58,11 @@ async function cargarCuentas() {
 function openModal(data = null) {
   const m = $("#modal-cuenta");
   m.classList.remove("hidden");
-  
   const esGerente = session.rol === "gerente";
 
-  // Bloqueamos los inputs si es operador para que solo pueda VER
-  $("#email").readOnly = !esGerente;
-  $("#contra").readOnly = !esGerente;
-  $("#nombre").readOnly = !esGerente;
-  $("#two_fa").readOnly = !esGerente;
-  $("#estado").disabled = !esGerente;
-  $("#calidad").disabled = !esGerente;
-  $("#ocupada_por").disabled = !esGerente;
-
-  // Ocultamos el botón guardar si es operador
+  // Bloqueamos inputs si es operador
+  ["#email", "#contra", "#nombre", "#two_fa"].forEach(id => $(id).readOnly = !esGerente);
+  ["#estado", "#calidad", "#ocupada_por"].forEach(id => $(id).disabled = !esGerente);
   $("#guardar").style.display = esGerente ? "block" : "none";
 
   if (data) {
@@ -87,19 +84,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   await cargarCuentas();
 
   if (session.rol === "gerente") {
-    // Cargar lista de operadores para el select (solo para el gerente)
     const { data } = await supabase.from("usuarios").select("usuario").eq("rol", "operador");
     const sel = $("#ocupada_por");
-    sel.innerHTML = `<option value="">Libre</option>`;
-    (data || []).forEach(u => sel.innerHTML += `<option value="${u.usuario}">${u.usuario}</option>`);
-    
-    $("#btn-nueva").onclick = () => {
-      cuentaEditandoId = null;
-      $("#email").value = ""; $("#contra").value = ""; $("#nombre").value = ""; $("#two_fa").value = "";
-      openModal();
-    };
-  } else {
-    if ($("#btn-nueva")) $("#btn-nueva").style.display = "none";
+    if(sel){
+      sel.innerHTML = `<option value="">Libre</option>`;
+      (data || []).forEach(u => sel.innerHTML += `<option value="${u.usuario}">${u.usuario}</option>`);
+    }
+    $("#btn-nueva").onclick = () => { cuentaEditandoId = null; openModal(); };
+  } else if ($("#btn-nueva")) {
+    $("#btn-nueva").style.display = "none";
   }
 
   $("#cancelar").onclick = () => $("#modal-cuenta").classList.add("hidden");
@@ -122,14 +115,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   tbody.onclick = async (e) => {
     const btn = e.target.closest("button");
     if (!btn) return;
-    const id = btn.dataset.id;
-
     if (btn.classList.contains("edit")) {
-      const { data } = await supabase.from("cuentas_facebook").select("*").eq("id", id).single();
+      const { data } = await supabase.from("cuentas_facebook").select("*").eq("id", btn.dataset.id).single();
       openModal(data);
     }
     if (btn.classList.contains("danger") && confirm("¿Eliminar?")) {
-      await supabase.from("cuentas_facebook").delete().eq("id", id);
+      await supabase.from("cuentas_facebook").delete().eq("id", btn.dataset.id);
       await cargarCuentas();
     }
   };

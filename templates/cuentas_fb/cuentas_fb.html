@@ -78,25 +78,18 @@
 
   <!-- Supabase -->
  <script type="module">
-  import { requireSession, loadSidebar } from "../../assets/js/app.js";
+    import { requireSession, loadSidebar } from "../../assets/js/app.js";
 
-  const session = requireSession();
-  
-  // ✅ CORRECCIÓN: Quitamos el "return" ilegal.
-  // requireSession ya redirige si no hay usuario, así que solo envolvemos el resto.
-  if (session) {
-      if (session.rol !== "gerente") {
-        alert("Acceso restringido");
-        window.location.href = "../dashboard/dashboard.html";
-      }
-
-      loadSidebar({
-        activeKey: "cuentas_fb",
-        basePath: "../" 
-      });
-  }
-</script>
-
+    const session = requireSession();
+    
+    if (session) {
+        // Eliminamos el bloqueo de "Solo Gerente" para que el operador pueda entrar a ver
+        loadSidebar({
+          activeKey: "cuentas_fb",
+          basePath: "../" 
+        });
+    }
+  </script>
    <!-- JS de esta página -->
   <script type="module" src="cuentas_fb.js"></script>
 </body>
