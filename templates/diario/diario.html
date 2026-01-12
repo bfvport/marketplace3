@@ -4,9 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Diario | Marketplace Manager</title>
-
   <link rel="stylesheet" href="../../assets/css/app.css" />
-
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../assets/js/supabase.js"></script>
 </head>
@@ -30,15 +28,11 @@
             <button class="btn" id="btnTakeAcc">Tomar cuenta Facebook</button>
             <span class="pill" id="accStatus">Cuenta: -</span>
           </div>
-
-          <div class="muted" style="margin-top:10px;">
-            Marca una cuenta disponible como ocupada para vos.
-          </div>
         </section>
 
         <section class="card">
           <div style="font-weight:800;">🧾 Registrar publicación</div>
-          <div class="muted">Guarda un registro en <code>marketplace_actividad</code>.</div>
+          <div class="muted">Guarda un registro de tu trabajo.</div>
 
           <label>Categoría</label>
           <select id="categoriaSelect"></select>
@@ -49,10 +43,10 @@
           <label>Descripción</label>
           <textarea id="descripcion"></textarea>
 
-          <label>Etiquetas usadas (coma separada)</label>
+          <label>Etiquetas (separadas por coma)</label>
           <input id="etiquetas" placeholder="ropa, oferta, envio" />
 
-          <label>Link publicación (marketplace)</label>
+          <label>Link Marketplace</label>
           <input id="link" placeholder="https://facebook.com/marketplace/item/..." />
 
           <div class="row" style="margin-top:12px;">
@@ -66,20 +60,20 @@
           </div>
         </section>
       </div>
-      <section class="card" id="managerSection" style="display: none; margin-top: 20px; border-color: #fbbf24;">
+
+      <section class="card" id="managerSection" style="display: none; margin-top: 20px; border-left: 5px solid #fbbf24;">
         <div style="font-weight:800; color: #fbbf24;">👮 Control de Ingresos (Gerencia)</div>
         <div class="muted">Registro de actividad de los operadores hoy.</div>
         
-        <table class="table" style="margin-top:10px;">
+        <table class="table" style="margin-top:10px; width: 100%; text-align: left;">
           <thead>
-            <tr>
+            <tr style="color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.1);">
               <th>Hora</th>
               <th>Usuario</th>
-              <th>Acción</th>
+              <th>Acción / Actividad</th>
             </tr>
           </thead>
-          <tbody id="managerLogsBody">
-            </tbody>
+          <tbody id="managerLogsBody"></tbody>
         </table>
       </section>
     </main>

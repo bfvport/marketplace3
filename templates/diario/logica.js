@@ -14,181 +14,144 @@ $("subtitle").textContent = `Hoy: ${today} | Usuario: ${s.usuario} | Rol: ${s.ro
 
 function log(line){
   const el = $("log");
+  if(!el) return;
   const ts = new Date().toLocaleTimeString();
   el.textContent += `[${ts}] ${line}\n`;
   el.scrollTop = el.scrollHeight;
 }
+
 function setAccStatus(text){ $("accStatus").textContent = "Cuenta: " + (text || "-"); }
 
-async function loadCategorias(){
-  const { data, error } = await sb
-    .from("categoria")
-    .select("id,nombre,mensaje,csv_nombre")
-    .order("nombre", { ascending:true });
+// 🟢 REGISTRO AUTOMÁTICO DE ENTRADA
+async function registrarEntradaDiario() {
+  await sb.from("usuarios_actividad").insert([{
+    usuario: s.usuario,
+    fecha_logueo: nowISO(),
+    facebook_account_usada: "🟢 INGRESO AL DIARIO",
+    created_at: nowISO()
+  }]);
+}
 
+// 👮 VISTA EXCLUSIVA PARA EL GERENTE
+async function cargarReporteAsistenciaGerente() {
+  if (s.rol !== "gerente") return;
+  
+  const section = $("managerSection");
+  if (section) section.style.display = "block";
+
+  const { data, error } = await sb
+    .from("usuarios_actividad")
+    .select("*")
+    .filter("fecha_logueo", "gte", today)
+    .order("fecha_logueo", { ascending: false });
+
+  if (error) return log("❌ error logs gerente: " + error.message);
+
+  const tbody = $("managerLogsBody");
+  tbody.innerHTML = "";
+
+  (data || []).forEach(row => {
+    const hora = new Date(row.fecha_logueo).toLocaleTimeString();
+    const tr = document.createElement("tr");
+    tr.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
+    tr.innerHTML = `
+      <td style="padding:8px; font-family:monospace;">${hora}</td>
+      <td style="padding:8px; font-weight:bold; color:#60a5fa;">${escapeHtml(row.usuario)}</td>
+      <td style="padding:8px; font-size:0.9em; color:#94a3b8;">${escapeHtml(row.facebook_account_usada)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+async function loadCategorias(){
+  const { data, error } = await sb.from("categoria").select("id,nombre,mensaje").order("nombre");
   if (error) return log("❌ categorias: " + error.message);
 
   const sel = $("categoriaSelect");
   sel.innerHTML = "";
-
-  for (const c of (data || [])){
+  (data || []).forEach(c => {
     const opt = document.createElement("option");
-    opt.value = c.nombre;          // simple: guardo nombre (tu esquema)
+    opt.value = c.nombre;
     opt.textContent = c.nombre;
     opt.dataset.mensaje = c.mensaje || "";
     sel.appendChild(opt);
-  }
-
-  if (sel.options.length){
-    const msg = sel.options[sel.selectedIndex].dataset.mensaje || "";
-    if (!$("descripcion").value.trim() && msg) $("descripcion").value = msg;
-  }
+  });
 }
 
-$("categoriaSelect").addEventListener("change", () => {
-  const sel = $("categoriaSelect");
-  const msg = sel.options[sel.selectedIndex]?.dataset?.mensaje || "";
-  if (msg && !$("descripcion").value.trim()) $("descripcion").value = msg;
-});
-
+// 🎯 MOSTRAR TAREA AL OPERADOR (Versión Detallada)
 async function loadAsignacionDeHoy(){
-  $("asigHint").textContent = "Buscando asignación...";
-  $("asigBox").innerHTML = "";
+  const box = $("asigBox");
+  if(!box) return;
 
-  const { data, error } = await sb
-    .from("usuarios_asignado")
-    .select("id,usuario,fecha_desde,fecha_hasta,categoria,marketplace_daily,historia_daily,muro_daily,grupos_daily,asignado_por,created_at,updated_at")
-    .eq("usuario", s.usuario);
-
-  if (error){
-    $("asigHint").textContent = "Error cargando asignación.";
-    return log("❌ asignaciones: " + error.message);
-  }
+  const { data, error } = await sb.from("usuarios_asignado").select("*").eq("usuario", s.usuario);
+  if (error) return log("❌ asignaciones: " + error.message);
 
   const inRange = (data || []).filter(a => a.fecha_desde <= today && today <= a.fecha_hasta);
 
   if (!inRange.length){
     $("asigHint").textContent = "No tenés asignación para hoy.";
-    $("asigBox").innerHTML = `<div class="muted">Pedile al gerente que te asigne una categoría.</div>`;
+    box.innerHTML = `<div class="muted">💤 Pedile al gerente que te asigne una categoría.</div>`;
     return;
   }
 
-  $("asigHint").textContent = `Asignaciones activas hoy: ${inRange.length}`;
+  $("asigHint").textContent = `Tareas activas: ${inRange.length}`;
+  box.innerHTML = "";
 
-  const wrap = document.createElement("div");
-  for (const a of inRange){
-    const div = document.createElement("div");
-    div.style.marginTop = "10px";
-    div.innerHTML = `
-      <div class="pill">Categoría: <strong>${escapeHtml(a.categoria)}</strong></div>
-      <div class="muted" style="margin-top:8px;">
-        Rango: ${escapeHtml(a.fecha_desde)} → ${escapeHtml(a.fecha_hasta)}<br>
-        Objetivos: marketplace=${escapeHtml(a.marketplace_daily)} | historia=${escapeHtml(a.historia_daily)} | muro=${escapeHtml(a.muro_daily)} | grupos=${escapeHtml(a.grupos_daily)}
+  inRange.forEach(a => {
+    box.innerHTML += `
+      <div style="background: rgba(255,255,255,0.05); border-left: 4px solid #a78bfa; padding: 10px; margin-bottom: 8px; border-radius: 4px;">
+        <div style="font-weight:bold; color: #a78bfa; font-size: 1.1rem;">${escapeHtml(a.categoria)}</div>
+        <div style="margin-top: 5px; font-size: 0.85rem; color: #e2e8f0; line-height: 1.6;">
+           🛒 Marketplace: <b style="color:#fff;">${a.marketplace_daily}</b> | 👥 Grupos: <b style="color:#fff;">${a.grupos_daily}</b><br>
+           📖 Historias: <b style="color:#fff;">${a.historia_daily}</b> | 🏠 Muro: <b style="color:#fff;">${a.muro_daily}</b>
+        </div>
       </div>
     `;
-    wrap.appendChild(div);
-  }
-  $("asigBox").appendChild(wrap);
+  });
 }
 
 async function ensureCuentaActual(){
-  const { data, error } = await sb
-    .from("cuentas_facebook")
-    .select("id,email,nombre,estado,ocupada_por")
-    .eq("ocupada_por", s.usuario)
-    .eq("estado", "ocupada")
-    .order("id", { ascending:true })
-    .limit(1);
-
-  if (error) return log("❌ cuenta actual: " + error.message);
-
-  if (data && data.length){
-    const acc = data[0];
-    setAccStatus(acc.email || acc.nombre || ("id=" + acc.id));
-  } else {
-    setAccStatus("-");
-  }
+  const { data } = await sb.from("cuentas_facebook").select("email").eq("ocupada_por", s.usuario).eq("estado", "ocupada").limit(1);
+  if (data && data.length) setAccStatus(data[0].email);
 }
 
-async function takeCuenta(){
-  log("Tomando cuenta...");
+$("btnTakeAcc").addEventListener("click", async () => {
+  log("Buscando cuenta...");
   const r = await takeFacebookAccountFor(s.usuario);
   if (!r.ok) return log("⚠️ " + r.reason);
-
-  const acc = r.account;
-  const label = acc.email || acc.nombre || ("id=" + acc.id);
-  setAccStatus(label);
-  log("✅ Cuenta tomada: " + label);
-
-  // Registrar actividad de logueo (si querés)
-  const { error } = await sb.from("usuarios_actividad").insert([{
-    usuario: s.usuario,
-    fecha_logueo: nowISO(),
-    facebook_account_usada: label,
-    created_at: nowISO()
+  setAccStatus(r.account.email);
+  log("✅ Cuenta tomada: " + r.account.email);
+  await sb.from("usuarios_actividad").insert([{
+    usuario: s.usuario, fecha_logueo: nowISO(), facebook_account_usada: "⚠️ TOMÓ CUENTA: " + r.account.email
   }]);
-  if (error) log("⚠️ usuarios_actividad insert: " + error.message);
-}
+  await cargarReporteAsistenciaGerente();
+});
 
-async function saveActividad(){
-  const categoria = $("categoriaSelect").value;
-  const titulo = $("titulo").value.trim();
-  const descripcion = $("descripcion").value.trim();
-  const etiquetas = $("etiquetas").value.trim();
-  const link = $("link").value.trim();
-
-  if (!categoria) return log("⚠️ Falta categoría.");
-  if (!titulo) return log("⚠️ Falta título.");
-
-  // cuenta ocupada actual (si existe)
-  let facebookUsed = "-";
-  const { data: acc, error: eAcc } = await sb
-    .from("cuentas_facebook")
-    .select("email,nombre,id")
-    .eq("ocupada_por", s.usuario)
-    .eq("estado", "ocupada")
-    .limit(1);
-
-  if (!eAcc && acc && acc.length){
-    facebookUsed = acc[0].email || acc[0].nombre || String(acc[0].id);
-  }
-
+$("btnSave").addEventListener("click", async () => {
   const payload = {
     usuario: s.usuario,
-    facebook_account_usada: facebookUsed,
     fecha_publicacion: today,
-    marketplace_link_publicacion: link || null,
-    titulo,
-    descripcion: descripcion || null,
-    categoria,
-    etiquetas_usadas: etiquetas || null,
+    titulo: $("titulo").value.trim(),
+    descripcion: $("descripcion").value.trim(),
+    categoria: $("categoriaSelect").value,
+    marketplace_link_publicacion: $("link").value.trim(),
     created_at: nowISO()
   };
-
-  log("Insert marketplace_actividad...");
+  if(!payload.titulo) return log("⚠️ Falta título.");
   const { error } = await sb.from("marketplace_actividad").insert([payload]);
-
-  if (error) return log("❌ insert: " + error.message);
-
+  if (error) return log("❌ error: " + error.message);
   log("✅ Actividad guardada.");
-}
+  $("titulo").value = ""; $("link").value = "";
+});
 
-function clearForm(){
-  $("titulo").value = "";
-  $("etiquetas").value = "";
-  $("link").value = "";
-  log("🧼 Form limpio (parcial).");
-}
+$("btnClear").addEventListener("click", () => { $("titulo").value = ""; $("link").value = ""; log("🧼 Limpio."); });
 
-$("btnTakeAcc").addEventListener("click", () => takeCuenta().catch(e => log("❌ " + e.message)));
-$("btnSave").addEventListener("click", () => saveActividad().catch(e => log("❌ " + e.message)));
-$("btnClear").addEventListener("click", clearForm);
-
-// init
 (async function init(){
   log("Init diario...");
+  await registrarEntradaDiario();
   await loadCategorias();
   await loadAsignacionDeHoy();
   await ensureCuentaActual();
+  await cargarReporteAsistenciaGerente();
   log("Listo.");
 })();
