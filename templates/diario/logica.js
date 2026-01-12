@@ -32,13 +32,14 @@ async function registrarEntradaDiario() {
   }]);
 }
 
-// 👮 VISTA EXCLUSIVA PARA EL GERENTE
+// 👮 REPORTE PARA GERENTE (Con hora corregida)
 async function cargarReporteAsistenciaGerente() {
   if (s.rol !== "gerente") return;
   
   const section = $("managerSection");
   if (section) section.style.display = "block";
 
+  // Buscamos los logs de hoy
   const { data, error } = await sb
     .from("usuarios_actividad")
     .select("*")
@@ -51,17 +52,28 @@ async function cargarReporteAsistenciaGerente() {
   tbody.innerHTML = "";
 
   (data || []).forEach(row => {
-    const hora = new Date(row.fecha_logueo).toLocaleTimeString();
+    // 🛠️ CORRECCIÓN DE HORA:
+    // Usamos el campo fecha_logueo que guardamos en la DB
+    const fechaReal = new Date(row.fecha_logueo);
+    const horaFormateada = fechaReal.toLocaleTimeString('es-AR', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    });
+
     const tr = document.createElement("tr");
     tr.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
     tr.innerHTML = `
-      <td style="padding:8px; font-family:monospace;">${hora}</td>
+      <td style="padding:8px; font-family:monospace; color:#94a3b8;">${horaFormateada}</td>
       <td style="padding:8px; font-weight:bold; color:#60a5fa;">${escapeHtml(row.usuario)}</td>
-      <td style="padding:8px; font-size:0.9em; color:#94a3b8;">${escapeHtml(row.facebook_account_usada)}</td>
+      <td style="padding:8px; font-size:0.9em;">${escapeHtml(row.facebook_account_usada)}</td>
     `;
     tbody.appendChild(tr);
   });
 }
+
+// --- RESTO DE FUNCIONES (Categorías y Asignaciones) ---
 
 async function loadCategorias(){
   const { data, error } = await sb.from("categoria").select("id,nombre,mensaje").order("nombre");
@@ -78,7 +90,6 @@ async function loadCategorias(){
   });
 }
 
-// 🎯 MOSTRAR TAREA AL OPERADOR (Versión Detallada)
 async function loadAsignacionDeHoy(){
   const box = $("asigBox");
   if(!box) return;
@@ -121,8 +132,11 @@ $("btnTakeAcc").addEventListener("click", async () => {
   if (!r.ok) return log("⚠️ " + r.reason);
   setAccStatus(r.account.email);
   log("✅ Cuenta tomada: " + r.account.email);
+  
   await sb.from("usuarios_actividad").insert([{
-    usuario: s.usuario, fecha_logueo: nowISO(), facebook_account_usada: "⚠️ TOMÓ CUENTA: " + r.account.email
+    usuario: s.usuario, 
+    fecha_logueo: nowISO(), 
+    facebook_account_usada: "⚠️ TOMÓ CUENTA: " + r.account.email
   }]);
   await cargarReporteAsistenciaGerente();
 });
