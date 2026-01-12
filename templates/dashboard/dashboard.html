@@ -1,38 +1,87 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Dashboard | Marketplace Manager</title>
-
   <link rel="stylesheet" href="../../assets/css/app.css" />
-
+  
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../assets/js/supabase.js"></script>
+  
+  <style>
+    .welcome-banner {
+      background: linear-gradient(135deg, #2563eb, #1e40af);
+      color: white;
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 25px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+    }
+    .msg-content { font-size: 1.2rem; font-weight: 500; white-space: pre-wrap; margin-top: 10px; }
+    
+    /* Caja de edición (Oculta por defecto) */
+    #edit-box {
+      margin-top: 15px;
+      background: rgba(0,0,0,0.2);
+      padding: 15px;
+      border-radius: 8px;
+    }
+    textarea { 
+      width: 100%; height: 80px; margin-bottom: 10px; 
+      background: #0f172a; color: white; border: 1px solid #475569; 
+      padding: 10px; border-radius: 6px; font-family: inherit;
+    }
+  </style>
 </head>
 <body>
+
   <div class="layout">
     <div id="sidebar-host"></div>
 
     <main class="content">
-      <div class="title">🏠 Dashboard</div>
-      <div class="muted" id="hello"></div>
+      
+      <div class="welcome-banner">
+        <h2 style="margin:0; font-size:1.5rem;">👋 Hola, <span id="user-name">Usuario</span></h2>
+        
+        <div id="display-msg" class="msg-content">Cargando noticias...</div>
+
+        <div id="manager-controls" style="display: none;">
+          <button id="btn-edit-toggle" class="btn" style="margin-top: 15px; background: white; color: #1e40af; border:none;">✏️ Editar Mensaje</button>
+          
+          <div id="edit-box" class="hidden">
+            <label style="font-size: 0.9rem; margin-bottom: 5px; display:block;">Nuevo mensaje para el equipo:</label>
+            <textarea id="txt-mensaje"></textarea>
+            <div class="row">
+              <button id="btn-save-msg" class="btn" style="background: #22c55e; border:none;">Guardar</button>
+              <button id="btn-cancel-msg" class="btn2">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
-        <div class="card">
-          <div style="font-weight:800;">📅 Diario</div>
-          <div class="muted">Tu página diaria para publicar y registrar actividad.</div>
-          <div style="margin-top:10px;">
-            <a class="btn" href="../diario/diario.html" style="text-decoration:none;display:inline-block;">Abrir Diario</a>
+        
+        <div class="card" onclick="window.location.href='../diario/diario.html'" style="cursor: pointer; border-left: 5px solid #10b981;">
+          <div style="font-weight:800; font-size: 1.2rem;">📅 Mi Diario</div>
+          <div class="muted">Gestionar tareas y registrar actividad.</div>
+        </div>
+
+        <div class="card" onclick="window.location.href='../cuentas_fb/cuentas_fb.html'" style="cursor: pointer; border-left: 5px solid #f59e0b;">
+          <div style="font-weight:800; font-size: 1.2rem;">👥 Cuentas Facebook</div>
+          <div class="muted">Ver credenciales y accesos.</div>
+        </div>
+
+        <div class="card" id="card-gerente" style="display:none; border-left: 5px solid #ef4444;">
+          <div style="font-weight:800; font-size: 1.2rem;">⚙️ Administración</div>
+          <div class="muted">Gestión de usuarios y sistema.</div>
+          <div style="margin-top:10px">
+             <button class="btn2" onclick="window.location.href='../usuarios/usuarios.html'">Gestionar Usuarios</button>
           </div>
         </div>
 
-        <div class="card" id="gerenteBox" style="display:none;">
-          <div style="font-weight:800;">🧠 Gerente</div>
-          <div class="muted">Acceso a paneles avanzados.</div>
-          <div class="muted" style="margin-top:8px;">(los armamos después)</div>
-        </div>
       </div>
+
     </main>
   </div>
 

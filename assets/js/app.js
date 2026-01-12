@@ -54,15 +54,19 @@ export async function loadSidebar({ activeKey, basePath }){
   if (uEl && s?.usuario) uEl.textContent = s.usuario;
   if (rEl && s?.rol) rEl.textContent = s.rol;
 
+  // 🛡️ Oculta opciones de gerente si el rol es operador
   if (s?.rol !== "gerente"){
     host.querySelectorAll("[data-only='gerente']").forEach(el => el.style.display="none");
   }
 
+  // 🚪 CIERRE DE SESIÓN SEGURO
   const btn = host.querySelector("#btn-logout");
   if (btn){
     btn.addEventListener("click", () => {
+      console.log("Cerrando sesión...");
       clearSession();
-      window.location.href = `${basePath}/templates/login/login.html`;
+      // ✅ Usamos replace para evitar el bug de redirección
+      window.location.replace(`${basePath}login/login.html`);
     });
   }
 }

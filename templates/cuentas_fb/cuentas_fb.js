@@ -14,12 +14,23 @@ const tbody = document.getElementById("cuentas_facebook");
 const session = JSON.parse(localStorage.getItem("mp_session_v1") || "{}");
 let cuentaEditandoId = null;
 
+// ✨ NUEVA FUNCIÓN: Limpia todos los campos del tirón
+function limpiarFormulario() {
+  $("#email").value = "";
+  $("#contra").value = "";
+  $("#nombre").value = "";
+  $("#two_fa").value = "";
+  $("#estado").value = "activo";
+  $("#calidad").value = "caliente";
+  $("#ocupada_por").value = "";
+  cuentaEditandoId = null;
+}
+
 async function cargarCuentas() {
   if (!supabase || !session.usuario) return;
 
+  // 🛡️ FILTRO: El gerente ve todo, el operador solo lo que tiene su nombre
   let query = supabase.from("cuentas_facebook").select("*");
-  
-  // 🛡️ FILTRO: El operador solo ve lo asignado a él
   if (session.rol !== "gerente") {
     query = query.eq("ocupada_por", session.usuario);
   }
@@ -28,14 +39,7 @@ async function cargarCuentas() {
   if (error) return console.error(error);
 
   tbody.innerHTML = "";
-  const cuentas = data || [];
-
-  if (cuentas.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:20px;">No hay cuentas asignadas para mostrar.</td></tr>`;
-    return;
-  }
-
-  cuentas.forEach(cuenta => {
+  (data || []).forEach(cuenta => {
     const textoBoton = session.rol === 'gerente' ? 'Editar' : 'Ver datos';
     const tr = document.createElement("tr");
     tr.innerHTML = `
@@ -45,7 +49,9 @@ async function cargarCuentas() {
       <td style="color: #60a5fa; font-weight: bold;">${cuenta.two_fa || '-'}</td>
       <td><span class="badge ${cuenta.estado}">${cuenta.estado}</span></td>
       <td><span class="badge ${cuenta.calidad || 'frio'}">${cuenta.calidad || 'frio'}</span></td>
-      <td>${cuenta.ocupada_por ? `<span class="badge activo">Asignada</span>` : `<span class="badge inactivo">Libre</span>`}</td>
+      <td><span class="badge ${cuenta.ocupada_por ? 'activo' : 'inactivo'}">
+        ${cuenta.ocupada_por ? 'Asignada' : 'Libre'}
+      </span></td>
       <td>
         <button class="btn edit" data-id="${cuenta.id}">${textoBoton}</button>
         ${session.rol === 'gerente' ? `<button class="btn danger" data-id="${cuenta.id}">Eliminar</button>` : ''}
@@ -60,7 +66,7 @@ function openModal(data = null) {
   m.classList.remove("hidden");
   const esGerente = session.rol === "gerente";
 
-  // Bloqueamos inputs si es operador
+  // Bloqueamos los campos si es operador para que solo pueda VER
   ["#email", "#contra", "#nombre", "#two_fa"].forEach(id => $(id).readOnly = !esGerente);
   ["#estado", "#calidad", "#ocupada_por"].forEach(id => $(id).disabled = !esGerente);
   $("#guardar").style.display = esGerente ? "block" : "none";
@@ -74,6 +80,8 @@ function openModal(data = null) {
     $("#calidad").value = data.calidad || "caliente";
     $("#ocupada_por").value = data.ocupada_por || "";
     cuentaEditandoId = data.id;
+  } else {
+    limpiarFormulario(); // ✅ Limpia si es cuenta nueva
   }
 }
 
@@ -84,18 +92,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   await cargarCuentas();
 
   if (session.rol === "gerente") {
+    // Solo el gerente carga la lista de operadores
     const { data } = await supabase.from("usuarios").select("usuario").eq("rol", "operador");
     const sel = $("#ocupada_por");
-    if(sel){
-      sel.innerHTML = `<option value="">Libre</option>`;
+    if(sel) {
+      sel.innerHTML = '<option value="">Libre</option>';
       (data || []).forEach(u => sel.innerHTML += `<option value="${u.usuario}">${u.usuario}</option>`);
     }
-    $("#btn-nueva").onclick = () => { cuentaEditandoId = null; openModal(); };
-  } else if ($("#btn-nueva")) {
-    $("#btn-nueva").style.display = "none";
+    $("#btn-nueva").onclick = () => { limpiarFormulario(); openModal(); };
+  } else {
+    if ($("#btn-nueva")) $("#btn-nueva").style.display = "none";
   }
 
-  $("#cancelar").onclick = () => $("#modal-cuenta").classList.add("hidden");
+  $("#cancelar").onclick = () => { $("#modal-cuenta").classList.add("hidden"); limpiarFormulario(); };
 
   $("#guardar").onclick = async () => {
     if (session.rol !== "gerente") return;
@@ -105,11 +114,16 @@ document.addEventListener("DOMContentLoaded", async () => {
       estado: $("#estado").value, calidad: $("#calidad").value,
       ocupada_por: $("#ocupada_por").value || null
     };
+
     const { error } = cuentaEditandoId 
       ? await supabase.from("cuentas_facebook").update(payload).eq("id", cuentaEditandoId)
       : await supabase.from("cuentas_facebook").insert([payload]);
     
-    if (!error) { $("#modal-cuenta").classList.add("hidden"); await cargarCuentas(); }
+    if (!error) { 
+      $("#modal-cuenta").classList.add("hidden"); 
+      limpiarFormulario(); // ✅ Limpia después de guardar exitosamente
+      await cargarCuentas(); 
+    }
   };
 
   tbody.onclick = async (e) => {
