@@ -1,6 +1,5 @@
 const $ = (sel) => document.querySelector(sel);
 
-// Función de espera robusta para conectar con Supabase
 async function waitSupabaseClient(timeoutMs = 2000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -14,202 +13,110 @@ let supabase = null;
 const tbody = document.getElementById("cuentas_facebook");
 let cuentaEditandoId = null;
 
-/* ===============================
-   CARGAR OPERADORES
-================================ */
-async function cargarOperadores() {
-  if (!supabase) return;
+// Cargamos la sesión desde el almacenamiento local [cite: 5]
+const session = JSON.parse(localStorage.getItem("mp_session_v1") || "{}");
 
-  const { data, error } = await supabase
-    .from("usuarios")
-    .select("usuario")
-    .neq("rol", "gerente");
-
-  if (error) {
-    console.error("Error operadores:", error);
-    return;
-  }
-
-  const select = $("#ocupada_por");
-  if (select) {
-    select.innerHTML = `<option value="">Libre</option>`;
-    // Protección contra nulos (data || [])
-    (data || []).forEach(u => {
-      select.innerHTML += `<option value="${u.usuario}">${u.usuario}</option>`;
-    });
-  }
-}
-
-/* ===============================
-   CARGAR CUENTAS (Mejorado)
-================================ */
 async function cargarCuentas() {
-  if (!supabase) return;
+  if (!supabase || !session.usuario) return;
 
-  const { data, error } = await supabase
-    .from("cuentas_facebook")
-    .select("*")
-    .order("id", { ascending: true });
+  // 🛡️ FILTRO INTELIGENTE: El gerente ve todo, el operador solo lo suyo 
+  let query = supabase.from("cuentas_facebook").select("*");
+
+  if (session.rol !== "gerente") {
+    query = query.eq("ocupada_por", session.usuario);
+  }
+
+  const { data, error } = await query.order("id", { ascending: true });
 
   if (error) {
-    console.error("Error cuentas:", error);
-    alert("Error cargando cuentas: " + error.message);
+    console.error("Error:", error);
     return;
   }
 
   tbody.innerHTML = "";
-  const cuentas = data || []; // 🛡️ Evita que se rompa si es null
+  const cuentas = data || [];
 
   if (cuentas.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:15px; opacity:0.7;">No hay cuentas cargadas todavía.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:20px;">No tenés cuentas asignadas actualmente.</td></tr>`;
     return;
   }
 
   cuentas.forEach(cuenta => {
-    // Badges con clases seguras
-    const estadoClass = cuenta.estado === 'activo' ? 'activo' : 'inactivo';
-    const calidadClass = cuenta.calidad === 'caliente' ? 'caliente' : 'frio';
-
-    const estadoBadge = `<span class="badge ${estadoClass}">${cuenta.estado}</span>`;
-    const calidadBadge = `<span class="badge ${calidadClass}">${cuenta.calidad || '-'}</span>`;
-
-    const ocupada = cuenta.ocupada_por
-      ? `<span class="badge warning">Ocupada</span><br><small>${cuenta.ocupada_por}</small>`
-      : `<span class="badge success">Libre</span>`;
-
     const tr = document.createElement("tr");
+    
+    // Definimos los badges de estado y calidad [cite: 17]
+    const estadoBadge = `<span class="badge ${cuenta.estado}">${cuenta.estado}</span>`;
+    const calidadBadge = `<span class="badge ${cuenta.calidad || 'frio'}">${cuenta.calidad || 'frio'}</span>`;
+    const ocupada = cuenta.ocupada_por 
+      ? `<span class="badge activo">Ocupada</span><br><small>${cuenta.ocupada_por}</small>` 
+      : `<span class="badge inactivo">Libre</span>`;
+
     tr.innerHTML = `
       <td>${cuenta.id}</td>
-      <td title="${cuenta.email}">${cuenta.email}</td>
-      <td>${estadoBadge}</td>
+      <td><strong>${cuenta.nombre || ''}</strong><br><small class="muted">${cuenta.email}</small></td>
+      <td style="font-family: monospace; color: #e2e8f0;">${cuenta.contra || '****'}</td> <td style="color: #60a5fa; font-weight: bold;">${cuenta.two_fa || '-'}</td>         <td>${estadoBadge}</td>
       <td>${calidadBadge}</td>
       <td>${ocupada}</td>
       <td>
         <button class="btn edit" data-id="${cuenta.id}">Editar</button>
-        <button class="btn danger" data-id="${cuenta.id}">Eliminar</button>
+        ${session.rol === 'gerente' ? `<button class="btn danger" data-id="${cuenta.id}">Eliminar</button>` : ''}
       </td>
     `;
     tbody.appendChild(tr);
   });
 }
 
-/* ===============================
-   MODAL
-================================ */
-function openModal() {
-  $("#modal-cuenta").classList.remove("hidden");
+// Carga de operadores para el gerente [cite: 12]
+async function cargarOperadores() {
+  if (session.rol !== "gerente") return;
+  const { data, error } = await supabase.from("usuarios").select("usuario").neq("rol", "gerente");
+  const select = $("#ocupada_por");
+  if (!select) return;
+  select.innerHTML = `<option value="">Libre</option>`;
+  (data || []).forEach(u => {
+    select.innerHTML += `<option value="${u.usuario}">${u.usuario}</option>`;
+  });
 }
 
-function closeModal() {
-  $("#modal-cuenta").classList.add("hidden");
-  cuentaEditandoId = null;
-
-  // Limpiamos form
-  $("#email").value = "";
-  $("#contra").value = "";
-  $("#nombre").value = "";
-  $("#estado").value = "activo";
-  $("#calidad").value = "caliente";
-  $("#ocupada_por").value = "";
-}
-
-/* ===============================
-   INIT (Arranque)
-================================ */
 document.addEventListener("DOMContentLoaded", async () => {
-  // 1. Conectar
   supabase = await waitSupabaseClient();
-  
-  if (!supabase) {
-    console.error("Supabase no inicializado en window.");
-    return;
-  }
+  if (!supabase) return;
 
-  // 2. Cargar datos iniciales
-  await cargarOperadores();
   await cargarCuentas();
-
-  // 3. Configurar botones
-  const btnNueva = $("#btn-nueva");
-  if (btnNueva) btnNueva.onclick = openModal;
   
-  const btnCancelar = $("#cancelar");
-  if (btnCancelar) btnCancelar.onclick = closeModal;
-
-  // 4. Guardar (Crear / Editar)
-  const btnGuardar = $("#guardar");
-  if (btnGuardar) {
-    btnGuardar.onclick = async () => {
-      const payload = {
-        email: $("#email").value.trim(),
-        contra: $("#contra").value.trim(),
-        nombre: $("#nombre").value.trim(),
-        estado: $("#estado").value,
-        calidad: $("#calidad").value,
-        ocupada_por: $("#ocupada_por").value || null
-      };
-
-      if (!payload.email || !payload.contra || !payload.nombre) {
-        alert("Completá todos los campos obligatorios");
-        return;
-      }
-
-      let errorOp;
-      if (cuentaEditandoId) {
-        const res = await supabase.from("cuentas_facebook").update(payload).eq("id", cuentaEditandoId);
-        errorOp = res.error;
-      } else {
-        const res = await supabase.from("cuentas_facebook").insert(payload);
-        errorOp = res.error;
-      }
-
-      if (errorOp) {
-        alert("Error al guardar: " + errorOp.message);
-        return;
-      }
-
-      closeModal();
-      await cargarCuentas();
-    };
+  if (session.rol === "gerente") {
+    await cargarOperadores();
+    $("#btn-nueva").onclick = () => $("#modal-cuenta").classList.remove("hidden");
+  } else {
+    // Si es operador, ocultamos el botón de crear cuentas
+    if ($("#btn-nueva")) $("#btn-nueva").style.display = "none";
   }
 
-  // 5. Acciones en la tabla (Delegación de eventos)
+  // Lógica de cerrar modal [cite: 19]
+  $("#cancelar").onclick = () => $("#modal-cuenta").classList.add("hidden");
+
+  // Lógica de la tabla (Editar/Eliminar) [cite: 26, 27, 28]
   tbody.onclick = async (e) => {
     const btn = e.target.closest("button");
     if (!btn) return;
-
     const id = btn.dataset.id;
 
-    // -- Eliminar --
     if (btn.classList.contains("danger")) {
-      if (!confirm("¿Seguro que querés eliminar esta cuenta?")) return;
-      const { error } = await supabase.from("cuentas_facebook").delete().eq("id", id);
-      if (error) alert("No se pudo eliminar: " + error.message);
-      else await cargarCuentas();
+      if (!confirm("¿Eliminar esta cuenta?")) return;
+      await supabase.from("cuentas_facebook").delete().eq("id", id);
+      await cargarCuentas();
     }
 
-    // -- Editar --
     if (btn.classList.contains("edit")) {
-      const { data, error } = await supabase
-        .from("cuentas_facebook")
-        .select("*")
-        .eq("id", id)
-        .single();
-
-      if (error) {
-        alert("No se pudo cargar la cuenta.");
-        return;
-      }
-
+      const { data } = await supabase.from("cuentas_facebook").select("*").eq("id", id).single();
       $("#email").value = data.email || "";
       $("#contra").value = data.contra || "";
       $("#nombre").value = data.nombre || "";
       $("#estado").value = data.estado || "activo";
       $("#calidad").value = data.calidad || "caliente";
       $("#ocupada_por").value = data.ocupada_por || "";
-
       cuentaEditandoId = id;
-      openModal();
+      $("#modal-cuenta").classList.remove("hidden");
     }
   };
 });
