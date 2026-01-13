@@ -26,7 +26,7 @@ async function cargarUsuarios() {
         
         // --- BUSCADOR DE CONTRASEÑA ---
         // Intentamos adivinar el nombre. Si falla, mostramos JSON para debuggear.
-        let passwordReal = u.pass || u.contra || u.contrasenia || u.clave;
+        let passwordReal = u.contra || u.contra || u.contrasenia || u.clave;
         
         // Si no encontramos la pass, mostramos TODO el objeto para que veas el nombre real
         if (!passwordReal) {
@@ -68,7 +68,7 @@ function abrirModalEditar(id, listaDatos) {
     if (!user) return;
     
     // Recuperar la contraseña para el input
-    const passValue = user.pass || user.password || user.contrasenia || user.clave || "";
+    const passValue = user.contra || user.password || user.contrasenia || user.clave || "";
 
     usuarioEditandoID = id;
     $("modal-titulo").textContent = "Editar Usuario";
@@ -84,13 +84,13 @@ function cerrarModal() {
 
 async function guardarUsuario() {
     const usuario = $("inp-usuario").value.trim();
-    const pass = $("inp-pass").value.trim(); // ASUMIMOS 'pass' por defecto al guardar
+    const contra = $("inp-pass").value.trim(); // ASUMIMOS 'pass' por defecto al guardar
     const rol = $("sel-rol").value;
 
-    if (!usuario || !pass) return alert("Completa todos los datos");
+    if (!usuario || !contra) return alert("Completa todos los datos");
 
     // IMPORTANTE: Si tu columna se llama 'password', cambia 'pass' por 'password' abajo
-    const payload = { usuario, pass, rol }; 
+    const payload = { usuario, contra, rol }; 
 
     let error = null;
     if (usuarioEditandoID) {
