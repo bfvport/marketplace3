@@ -5,62 +5,66 @@ const sb = window.supabaseClient;
 const $ = (id) => document.getElementById(id);
 const today = fmtDateISO(new Date());
 
-let itemsCSV = []; // Guardará las filas del CSV cargado
+let itemsCSV = []; 
 let itemActual = null;
 
 await loadSidebar({ activeKey: "diario", basePath: "../" });
 
-// --- FUNCIONES DE APOYO ---
+// --- UTILIDADES ---
 function log(msg) {
     const l = $("log");
-    l.innerHTML = `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>` + l.innerHTML;
+    if (l) l.innerHTML = `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>` + l.innerHTML;
 }
 
 window.copy = (id) => {
     const el = $(id);
+    if (!el || !el.value) return log("⚠️ Nada que copiar");
     el.select();
     navigator.clipboard.writeText(el.value);
-    log(`Copiado: ${id.replace('csv-', '')}`);
+    log(`Copiado: ${id.split('-')[1]}`);
 };
 
-// --- DESCARGAR IMÁGENES (Nahu) ---
+// --- MANEJO DE IMÁGENES ---
 async function descargarFotos() {
-    if (!itemActual) return alert("Primero carga una categoría");
+    if (!itemActual) return alert("Seleccioná una categoría primero.");
     
-    // Combinamos fijas y portadas
     const urls = [];
     if (itemActual.url_img_fijas) urls.push(...itemActual.url_img_fijas.split(","));
     if (itemActual.url_imagenes_portadas) urls.push(itemActual.url_imagenes_portadas);
 
-    log(`Iniciando descarga de ${urls.length} fotos...`);
-    
-    for (let i = 0; i < urls.length; i++) {
-        const url = urls[i].trim();
-        if(!url) continue;
-        try {
-            const res = await fetch(url);
-            const blob = await res.blob();
-            const a = document.createElement("a");
-            a.href = URL.createObjectURL(blob);
-            a.download = `foto_${i+1}.jpg`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-        } catch (e) { log("Error descargando foto " + (i+1)); }
-    }
+    const filtradas = urls.map(u => u.trim()).filter(u => u.startsWith("http"));
+    if (filtradas.length === 0) return alert("No hay links de fotos válidos.");
+
+    log(`Descargando ${filtradas.length} fotos...`);
+    filtradas.forEach((url, i) => {
+        const a = document.createElement("a");
+        a.href = url;
+        a.target = "_blank";
+        a.download = `foto_${i+1}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    });
 }
 
-// --- CARGAR Y PROCESAR CSV ---
+// --- 🚀 CARGAR CSV DEL BUCKET (Corregido: categoria_csv) ---
 async function cargarRecursosCSV(csvNombre) {
-    if (!csvNombre) return;
-    $("loader-csv").style.display = "block";
+    if (!csvNombre) return log("⚠️ Esta categoría no tiene un archivo CSV asignado.");
+    
+    const loader = $("loader-csv");
+    if (loader) loader.style.display = "block";
     
     try {
-        const { data: urlData } = sb.storage.from('categorias').getPublicUrl(csvNombre);
-        const res = await fetch(urlData.publicUrl);
-        const text = await res.text();
+        // CORRECCIÓN: Nombre exacto del bucket según tu foto
+        const { data: urlData } = sb.storage.from('categoria_csv').getPublicUrl(csvNombre);
         
-        const lines = text.split("\n").filter(l => l.trim() !== "");
+        log(`Buscando archivo: ${csvNombre}...`);
+        
+        const res = await fetch(urlData.publicUrl);
+        if (!res.ok) throw new Error("El archivo no existe en el bucket 'categoria_csv'.");
+        
+        const text = await res.text();
+        const lines = text.split("\n").filter(l => l.trim().length > 0);
         const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
         
         itemsCSV = lines.slice(1).map(line => {
@@ -71,12 +75,13 @@ async function cargarRecursosCSV(csvNombre) {
             }, {});
         });
 
-        // Seleccionamos uno al azar para empezar
+        log(`✅ CSV cargado con ${itemsCSV.length} registros.`);
         rotarRecurso();
     } catch (e) {
-        log("❌ Error cargando CSV: " + e.message);
+        log("❌ Error CSV: " + e.message);
+        console.error(e);
     } finally {
-        $("loader-csv").style.display = "none";
+        if (loader) loader.style.display = "none";
     }
 }
 
@@ -84,71 +89,74 @@ function rotarRecurso() {
     if (itemsCSV.length === 0) return;
     itemActual = itemsCSV[Math.floor(Math.random() * itemsCSV.length)];
     
-    $("csv-titulo").value = itemActual.titulo || "";
-    $("csv-desc").value = itemActual.descripcion || "";
-    $("csv-cat").value = itemActual.categoria || "";
-    $("csv-tags").value = itemActual.etiquetas || "";
+    if ($("csv-titulo")) $("csv-titulo").value = itemActual.titulo || "";
+    if ($("csv-desc")) $("csv-desc").value = itemActual.descripcion || "";
+    if ($("csv-cat")) $("csv-cat").value = itemActual.categoria || "";
+    if ($("csv-tags")) $("csv-tags").value = itemActual.etiquetas || "";
     
-    log("🔄 Recurso rotado (Nuevo título asignado)");
+    log("🔄 Recurso asignado.");
 }
 
-// --- INICIO Y EVENTOS ---
+// --- INICIO ---
 async function init() {
-    $("subtitle").textContent = `Operador: ${s.usuario} | ${today}`;
+    const subt = $("subtitle");
+    if (subt) subt.textContent = `Usuario: ${s.usuario} | Hoy: ${today}`;
     
-    // Fichaje automático
     await sb.from("usuarios_actividad").insert([{ 
-        usuario: s.usuario, fecha_logueo: nowISO(), facebook_account_usada: "🟢 ENTRÓ AL DIARIO" 
+        usuario: s.usuario, 
+        fecha_logueo: nowISO(), 
+        facebook_account_usada: "🟢 INGRESO AL DIARIO" 
     }]);
 
-    // Cargar selector de categorías
-    const { data: cats } = await sb.from("categoria").select("*");
+    const { data: cats } = await sb.from("categoria").select("*").order("nombre");
     const sel = $("categoriaSelect");
-    cats.forEach(c => {
-        const opt = document.createElement("option");
-        opt.value = c.nombre;
-        opt.textContent = c.nombre;
-        opt.dataset.csv = c.csv_nombre;
-        sel.appendChild(opt);
-    });
+    
+    if (sel && cats) {
+        sel.innerHTML = '<option value="">Seleccionar categoría...</option>';
+        cats.forEach(c => {
+            const opt = document.createElement("option");
+            opt.value = c.nombre;
+            opt.textContent = c.nombre;
+            opt.dataset.csv = c.csv_nombre;
+            sel.appendChild(opt);
+        });
 
-    // Evento al cambiar categoría
-    sel.onchange = (e) => {
-        const selected = e.target.options[e.target.selectedIndex];
-        cargarRecursosCSV(selected.dataset.csv);
-    };
-
-    // Cargar primer CSV por defecto
-    if(cats.length > 0) cargarRecursosCSV(cats[0].csv_nombre);
+        sel.onchange = (e) => {
+            const opt = e.target.options[e.target.selectedIndex];
+            if (opt && opt.dataset.csv) {
+                cargarRecursosCSV(opt.dataset.csv);
+            }
+        };
+    }
 }
 
-$("btnSave").onclick = async () => {
-    const link = $("link").value.trim();
-    if (!link) return alert("¡El link de Marketplace es obligatorio!");
+if ($("btnSave")) {
+    $("btnSave").onclick = async () => {
+        const link = $("link").value.trim();
+        if (!link) return alert("El link de Marketplace es obligatorio.");
 
-    const payload = {
-        usuario: s.usuario,
-        fecha_publicacion: today,
-        titulo: $("csv-titulo").value,
-        descripcion: $("csv-desc").value,
-        categoria: $("categoriaSelect").value,
-        marketplace_link_publicacion: link,
-        url_imagenes_portada: itemActual?.url_imagenes_portadas || "",
-        created_at: nowISO()
+        const payload = {
+            usuario: s.usuario,
+            fecha_publicacion: today,
+            titulo: $("csv-titulo").value,
+            descripcion: $("csv-desc").value,
+            categoria: $("categoriaSelect").value,
+            marketplace_link_publicacion: link,
+            url_imagenes_portada: itemActual?.url_imagenes_portadas || "",
+            created_at: nowISO()
+        };
+
+        const { error } = await sb.from("marketplace_actividad").insert([payload]);
+        if (error) log("❌ Error: " + error.message);
+        else {
+            log("✅ Guardado correctamente.");
+            $("link").value = "";
+            rotarRecurso();
+        }
     };
+}
 
-    const { error } = await sb.from("marketplace_actividad").insert([payload]);
-    
-    if (error) {
-        log("❌ Error al guardar: " + error.message);
-    } else {
-        log("✅ ¡Guardado con éxito!");
-        $("link").value = "";
-        rotarRecurso(); // Pasamos al siguiente automáticamente
-    }
-};
-
-$("btnNew").onclick = rotarRecurso;
-$("btnDownloadImgs").onclick = descargarFotos;
+if ($("btnNew")) $("btnNew").onclick = rotarRecurso;
+if ($("btnDownloadImgs")) $("btnDownloadImgs").onclick = descargarFotos;
 
 init();
