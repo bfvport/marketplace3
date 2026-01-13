@@ -26,7 +26,7 @@ async function cargarUsuarios() {
         
         // --- BUSCADOR DE CONTRASEÑA ---
         // Intentamos adivinar el nombre. Si falla, mostramos JSON para debuggear.
-        let passwordReal = u.pass || u.password || u.contrasenia || u.clave;
+        let passwordReal = u.pass || u.contra || u.contrasenia || u.clave;
         
         // Si no encontramos la pass, mostramos TODO el objeto para que veas el nombre real
         if (!passwordReal) {
