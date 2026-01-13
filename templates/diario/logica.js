@@ -64,6 +64,26 @@ async function cargarRecursosCSV(csvNombre) {
         if (!res.ok) throw new Error("El archivo no existe en el bucket 'categoria_csv'.");
         
         const text = await res.text();
+        const parsed = Papa.parse(text, {
+  header: true,
+  skipEmptyLines: true,
+  transformHeader: (h) => (h || "").trim().toLowerCase(),
+});
+
+if (parsed.errors?.length) {
+  console.warn("CSV parse errors:", parsed.errors);
+}
+
+itemsCSV = (parsed.data || []).map((row) => {
+  // limpieza básica: trim a strings
+  const out = {};
+  for (const k in row) out[k] = (typeof row[k] === "string") ? row[k].trim() : row[k];
+  return out;
+});
+
+log(`✅ CSV cargado con ${itemsCSV.length} registros.`);
+rotarRecurso();
+
         const lines = text.split("\n").filter(l => l.trim().length > 0);
         const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
         
@@ -142,7 +162,7 @@ if ($("btnSave")) {
             descripcion: $("csv-desc").value,
             categoria: $("categoriaSelect").value,
             marketplace_link_publicacion: link,
-            url_imagenes_portada: itemActual?.url_imagenes_portadas || "",
+            url_imagenes_portadas: itemActual?.url_imagenes_portadas || "",
             created_at: nowISO()
         };
 
