@@ -21,6 +21,7 @@
     .danger:hover { background: rgba(239,68,68,0.18) !important; }
     .readonly { opacity:.85; background: rgba(255,255,255,0.06); }
     .pill { display:inline-block; padding: 2px 8px; border: 1px solid rgba(255,255,255,0.18); border-radius: 999px; font-size: 12px; }
+    .etiqueta-chip { display: inline-block; background: rgba(59, 130, 246, 0.15); color: #93c5fd; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin: 1px 2px; }
   </style>
 </head>
 
@@ -48,6 +49,12 @@
           <label>Mensaje (template de descripción) *</label>
           <textarea id="cat_mensaje" placeholder="Texto base que sugerís para publicar..."></textarea>
 
+          <label>Etiquetas (separadas por comas) *</label>
+          <textarea id="cat_etiquetas" placeholder="etiqueta1, etiqueta2, etiqueta3"></textarea>
+          <div class="muted small" style="margin-top: 4px;">
+            Ejemplo: "ropa deportiva, hombre, verano, algodón"
+          </div>
+
           <label>Creado por (sesión)</label>
           <input id="cat_creado_por_view" class="readonly" readonly placeholder="(sesión no encontrada)" />
 
@@ -63,7 +70,7 @@
 
           <div style="font-weight:800;">📄 Plantilla CSV</div>
           <div class="muted small">
-            Columnas: <span class="mono">titulo, descripcion, categoria, etiquetas, url_img_fijas, url_imagenes_portadas</span>
+            Columnas: <span class="mono">titulo, descripcion, categoria, etiquetas, url_img_fijas_1, url_img_fijas_2, url_img_fijas_3, url_img_fijas_4, url_imagenes_portadas</span>
           </div>
 
           <div class="row" style="margin-top:10px;">
@@ -98,16 +105,17 @@
 
       <section class="card" style="margin-top:12px;">
         <div style="font-weight:800;">📚 Lista de categorías</div>
-        <div class="muted small">Acciones: editar, ver CSV, borrar CSV.</div>
+        <div class="muted small">Acciones: editar, ver CSV.</div>
 
         <table class="table" id="tablaCats">
           <thead>
             <tr>
-              <th style="width:220px;">Nombre</th>
-              <th style="width:160px;">Creado por</th>
-              <th>Mensaje</th>
-              <th style="width:260px;">CSV</th>
-              <th style="width:270px;">Acciones</th>
+              <th style="width:180px;">Nombre</th>
+              <th style="width:140px;">Creado por</th>
+              <th style="width:200px;">Mensaje</th>
+              <th style="width:180px;">Etiquetas</th>
+              <th style="width:220px;">CSV</th>
+              <th style="width:200px;">Acciones</th>
             </tr>
           </thead>
           <tbody></tbody>

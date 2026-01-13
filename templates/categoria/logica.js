@@ -52,6 +52,7 @@ function clearForm(session) {
   $("#cat_id").value = "";
   $("#cat_nombre").value = "";
   $("#cat_mensaje").value = "";
+  $("#cat_etiquetas").value = "";
   $("#cat_csv_nombre").value = "(sin CSV)";
   $("#cat_creado_por_view").value = session?.usuario ? session.usuario : "(sesión no encontrada)";
 }
@@ -60,6 +61,7 @@ function fillForm(cat) {
   $("#cat_id").value = String(cat.id);
   $("#cat_nombre").value = cat.nombre || "";
   $("#cat_mensaje").value = cat.mensaje || "";
+  $("#cat_etiquetas").value = cat.etiquetas || "";
   $("#cat_csv_nombre").value = cat.csv_nombre || "(sin CSV)";
   $("#cat_creado_por_view").value = cat.creado_por || "(sin dato)";
 }
@@ -67,7 +69,7 @@ function fillForm(cat) {
 async function fetchCategorias(sb) {
   const { data, error } = await sb
     .from(TABLE)
-    .select("id, nombre, mensaje, csv_nombre, creado_por, created_at, updated_at")
+    .select("id, nombre, mensaje, etiquetas, csv_nombre, creado_por, created_at, updated_at")
     .order("id", { ascending: false });
 
   if (error) throw error;
@@ -111,8 +113,13 @@ function renderTabla(cats) {
 
     const tdMsg = document.createElement("td");
     const m = c.mensaje || "";
-    tdMsg.textContent = m.slice(0, 220) + (m.length > 220 ? "…" : "");
+    tdMsg.textContent = m.slice(0, 120) + (m.length > 120 ? "…" : "");
     tr.appendChild(tdMsg);
+
+    const tdEtiquetas = document.createElement("td");
+    const et = c.etiquetas || "";
+    tdEtiquetas.textContent = et.slice(0, 80) + (et.length > 80 ? "…" : "");
+    tr.appendChild(tdEtiquetas);
 
     const tdCsv = document.createElement("td");
     tdCsv.innerHTML = `<span class="mono">${escapeHtml(c.csv_nombre || "(sin CSV)")}</span>`;
@@ -155,6 +162,7 @@ async function guardarCategoria(sb, session) {
   const id = ($("#cat_id")?.value || "").trim();
   const nombre = ($("#cat_nombre")?.value || "").trim();
   const mensaje = ($("#cat_mensaje")?.value || "").trim();
+  const etiquetas = ($("#cat_etiquetas")?.value || "").trim();
 
   if (!session?.usuario) return log("❌ No hay sesión (mp_session_v1). Volvé al login.");
   if (!nombre) return log("❌ Falta nombre.");
@@ -167,8 +175,13 @@ async function guardarCategoria(sb, session) {
 
       const { data, error } = await sb
         .from(TABLE)
-        .insert([{ nombre, mensaje, creado_por: session.usuario }])
-        .select("id, nombre, mensaje, csv_nombre, creado_por")
+        .insert([{ 
+          nombre, 
+          mensaje, 
+          etiquetas,
+          creado_por: session.usuario 
+        }])
+        .select("id, nombre, mensaje, etiquetas, csv_nombre, creado_por")
         .single();
 
       if (error) throw error;
@@ -180,7 +193,7 @@ async function guardarCategoria(sb, session) {
 
       const { error } = await sb
         .from(TABLE)
-        .update({ nombre, mensaje })
+        .update({ nombre, mensaje, etiquetas })
         .eq("id", Number(id));
 
       if (error) throw error;
@@ -312,7 +325,17 @@ async function listarCsvDeCategoria() {
 }
 
 function descargarPlantilla() {
-  const headers = ["titulo","descripcion","categoria","etiquetas","url_img_fijas","url_imagenes_portadas"];
+  const headers = [
+    "titulo",
+    "descripcion", 
+    "categoria",
+    "etiquetas",
+    "url_img_fijas_1",
+    "url_img_fijas_2", 
+    "url_img_fijas_3",
+    "url_img_fijas_4",
+    "url_imagenes_portadas"
+  ];
   const csv = headers.join(",") + "\n";
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -323,7 +346,7 @@ function descargarPlantilla() {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  log("⬇️ Plantilla descargada.");
+  log("⬇️ Plantilla descargada (con 4 columnas de imágenes fijas).");
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
