@@ -23,6 +23,47 @@ function obtenerSemaforo(fechaISO) {
     return { color: "#ef4444", texto: "Desconectado" };
 }
 
+(async function init() {
+    await loadSidebar({ activeKey: "diario", basePath: "../" });
+
+    if (s.rol === "gerente") {
+        $("view-gerente").classList.remove("hidden");
+        await cargarVistaGerente();
+        setInterval(cargarVistaGerente, 20000); // Refresco automático
+    } else {
+        await cargarVistaOperador();
+    }
+})();
+
+// --- VISTA GERENTE: CONTROL DE EQUIPO ---
+async function cargarVistaGerente() {
+    const { data: asigs } = await sb.from("usuarios_asignado").select("*").lte("fecha_desde", today).gte("fecha_hasta", today);
+    const { data: hechos } = await sb.from("marketplace_actividad").select("usuario").eq("fecha_publicacion", today);
+
+    const grid = $("grid-supervision");
+    grid.innerHTML = "";
+    $("last-sync").textContent = `Sincronizado: ${new Date().toLocaleTimeString()}`;
+
+    asigs.forEach(a => {
+        const totalHechos = hechos.filter(x => x.usuario === a.usuario).length;
+        const meta = a.marketplace_daily || 0;
+        const porc = meta > 0 ? Math.min((totalHechos / meta) * 100, 100) : 0;
+
+        grid.innerHTML += `
+            <div class="card-operador">
+                <div style="display:flex; justify-content:space-between; align-items:start;">
+                    <strong>${a.usuario}</strong>
+                    <span class="pill" style="background:#3b82f6;">${totalHechos} / ${meta}</span>
+                </div>
+                <div class="muted" style="font-size:0.8rem; margin:8px 0;">📦 Categoría: ${a.categoria}</div>
+                <div class="progress-container"><div class="progress-bar" style="width:${porc}%"></div></div>
+                <div style="font-size:0.7rem; text-align:right; color:#94a3b8;">${porc === 100 ? '✅ META CUMPLIDA' : 'En progreso...'}</div>
+            </div>`;
+    });
+}
+
+
+
 async function cargarTodo() {
     if (s.rol !== "gerente") {
         document.body.innerHTML = "<h2 style='color:white; text-align:center; margin-top:50px;'>⛔ Acceso Restringido</h2>";
@@ -81,6 +122,32 @@ async function cargarTodo() {
         });
     }
 
+    async function cargarVistaGerente() {
+    const { data: asigs } = await sb.from("usuarios_asignado").select("*").lte("fecha_desde", today).gte("fecha_hasta", today);
+    const { data: hechos } = await sb.from("marketplace_actividad").select("usuario").eq("fecha_publicacion", today);
+
+    const grid = $("grid-supervision");
+    grid.innerHTML = "";
+    $("last-sync").textContent = `Sincronizado: ${new Date().toLocaleTimeString()}`;
+
+    asigs.forEach(a => {
+        const totalHechos = hechos.filter(x => x.usuario === a.usuario).length;
+        const meta = a.marketplace_daily || 0;
+        const porc = meta > 0 ? Math.min((totalHechos / meta) * 100, 100) : 0;
+
+        grid.innerHTML += `
+            <div class="card-operador">
+                <div style="display:flex; justify-content:space-between; align-items:start;">
+                    <strong>${a.usuario}</strong>
+                    <span class="pill" style="background:#3b82f6;">${totalHechos} / ${meta}</span>
+                </div>
+                <div class="muted" style="font-size:0.8rem; margin:8px 0;">📦 Categoría: ${a.categoria}</div>
+                <div class="progress-container"><div class="progress-bar" style="width:${porc}%"></div></div>
+                <div style="font-size:0.7rem; text-align:right; color:#94a3b8;">${porc === 100 ? '✅ META CUMPLIDA' : 'En progreso...'}</div>
+            </div>`;
+    });
+}
+
     // 3. RENDERIZAR TABLA DE LOGS (Abajo)
     const tablaLogs = $("asistencia-logs");
     if (tablaLogs) {
@@ -120,6 +187,8 @@ async function cargarTodo() {
         });
     }
 }
+
+
 
 // Auto-refresco cada 30 segundos
 setInterval(cargarTodo, 30000);
