@@ -1,84 +1,85 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Diario | Marketplace Manager</title>
-  <link rel="stylesheet" href="../../assets/css/app.css" />
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../../assets/js/supabase.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diario Pro | Marketplace Manager</title>
+    <link rel="stylesheet" href="../../assets/css/app.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../assets/js/supabase.js"></script>
 </head>
 <body>
-  <div class="layout">
-    <div id="sidebar-host"></div>
+    <div class="layout">
+        <div id="sidebar-host"></div>
+        <main class="content">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h1>📅 Diario de Trabajo</h1>
+                <div id="status-fichaje" class="pill" style="background:#10b981;">🟢 En línea</div>
+            </div>
+            <div class="muted" id="subtitle" style="margin-bottom:20px;"></div>
 
-    <main class="content">
-      <h1>📅 Diario</h1>
-      <div class="muted" id="subtitle"></div>
+            <div class="grid" style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px;">
+                <section class="card">
+                    <h3 style="margin-top:0;">📦 Recursos del CSV</h3>
+                    <p class="muted" style="font-size:0.85rem;">Hacé clic para copiar los datos asignados.</p>
+                    
+                    <div id="loader-csv" style="display:none; color:#60a5fa;">⏳ Cargando recursos...</div>
 
-      <div class="grid">
-        <section class="card">
-          <div style="font-weight:800;">🎯 Asignación de hoy</div>
-          <div class="muted" id="asigHint">Cargando...</div>
-          <div style="margin-top:10px;" id="asigBox"></div>
+                    <div id="recursos-container" style="display:flex; flex-direction:column; gap:10px;">
+                        <div>
+                            <label style="font-size:0.75rem;">TÍTULO (CSV)</label>
+                            <div style="display:flex; gap:5px;">
+                                <input id="csv-titulo" readonly style="background:rgba(0,0,0,0.2); cursor:default;">
+                                <button class="btn2" onclick="copy('csv-titulo')">📋</button>
+                            </div>
+                        </div>
 
-          <hr style="border:none;border-top:1px solid rgba(255,255,255,0.12); margin: 12px 0;">
+                        <div>
+                            <label style="font-size:0.75rem;">DESCRIPCIÓN (CSV)</label>
+                            <textarea id="csv-desc" readonly style="height:80px; background:rgba(0,0,0,0.2); cursor:default;"></textarea>
+                            <button class="btn2" style="width:100%; margin-top:5px;" onclick="copy('csv-desc')">📋 Copiar Descripción</button>
+                        </div>
 
-          <div class="row">
-            <button class="btn" id="btnTakeAcc">Tomar cuenta Facebook</button>
-            <span class="pill" id="accStatus">Cuenta: -</span>
-          </div>
-        </section>
+                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                            <div>
+                                <label style="font-size:0.75rem;">CATEGORÍA FB</label>
+                                <input id="csv-cat" readonly style="background:rgba(0,0,0,0.2);">
+                            </div>
+                            <div>
+                                <label style="font-size:0.75rem;">ETIQUETAS</label>
+                                <input id="csv-tags" readonly style="background:rgba(0,0,0,0.2);">
+                            </div>
+                        </div>
+                        <button class="btn2" style="width:100%;" onclick="copy('csv-tags')">📋 Copiar Etiquetas</button>
 
-        <section class="card">
-          <div style="font-weight:800;">🧾 Registrar publicación</div>
-          <div class="muted">Guarda un registro de tu trabajo.</div>
+                        <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:10px 0;">
+                        
+                        <label style="font-size:0.75rem;">📸 IMÁGENES</label>
+                        <button id="btnDownloadImgs" class="btn" style="background:#4f46e5; width:100%;">📥 Descargar Todo (ZIP/Fotos)</button>
+                    </div>
+                </section>
 
-          <label>Categoría</label>
-          <select id="categoriaSelect"></select>
+                <section class="card">
+                    <h3 style="margin-top:0;">🚀 Reportar Publicación</h3>
+                    <label>Categoría del Sistema</label>
+                    <select id="categoriaSelect" style="margin-bottom:15px;"></select>
 
-          <label>Título</label>
-          <input id="titulo" />
+                    <label>Link Marketplace (Obligatorio)</label>
+                    <input id="link" placeholder="https://www.facebook.com/marketplace/item/..." style="border: 1px solid #4b5563;">
 
-          <label>Descripción</label>
-          <textarea id="descripcion"></textarea>
+                    <div style="margin-top:20px; display:flex; gap:10px;">
+                        <button class="btn" id="btnSave" style="flex:2;">✅ Guardar y Siguiente</button>
+                        <button class="btn2" id="btnNew" style="flex:1;">🔄 Rotar Título</button>
+                    </div>
 
-          <label>Etiquetas (separadas por coma)</label>
-          <input id="etiquetas" placeholder="ropa, oferta, envio" />
-
-          <label>Link Marketplace</label>
-          <input id="link" placeholder="https://facebook.com/marketplace/item/..." />
-
-          <div class="row" style="margin-top:12px;">
-            <button class="btn" id="btnSave">Guardar actividad</button>
-            <button class="btn2" id="btnClear">Limpiar</button>
-          </div>
-
-          <div style="margin-top:12px;">
-            <div style="font-weight:700; margin-bottom:6px;">🖥️ Logs</div>
-            <div class="log" id="log"></div>
-          </div>
-        </section>
-      </div>
-
-      <section class="card" id="managerSection" style="display: none; margin-top: 20px; border-left: 5px solid #fbbf24;">
-        <div style="font-weight:800; color: #fbbf24;">👮 Control de Ingresos (Gerencia)</div>
-        <div class="muted">Registro de actividad de los operadores hoy.</div>
-        
-        <table class="table" style="margin-top:10px; width: 100%; text-align: left;">
-          <thead>
-            <tr style="color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.1);">
-              <th>Hora</th>
-              <th>Usuario</th>
-              <th>Acción / Actividad</th>
-            </tr>
-          </thead>
-          <tbody id="managerLogsBody"></tbody>
-        </table>
-      </section>
-    </main>
-  </div>
-
-  <script type="module" src="./logica.js"></script>
+                    <div style="margin-top:20px; border-top:1px solid rgba(255,255,255,0.1); padding-top:15px;">
+                        <div style="font-weight:bold; font-size:0.8rem; margin-bottom:10px;">HISTORIAL RECIENTE</div>
+                        <div id="log" class="log" style="height:120px; font-size:0.75rem; overflow-y:auto;"></div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+    <script type="module" src="./logica.js"></script>
 </body>
 </html>

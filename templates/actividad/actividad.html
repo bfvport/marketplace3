@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Actividad | Marketplace Manager</title>
+  <link rel="stylesheet" href="../../assets/css/app.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+</head>
+<body>
+  <div class="layout">
+    <div id="sidebar-host"></div>
+
+    <main class="content">
+      <h1>📈 Panel de Actividad Gerencial</h1>
+      <div class="muted">Seguimiento en tiempo real del flujo diario.</div>
+
+      <section class="card" style="margin-top: 20px; border-left: 5px solid #60a5fa;">
+        <h3 style="margin-top:0;">📊 Rendimiento de Cuentas</h3>
+        <div id="flujo-actividad">
+          <p class="muted">Cargando flujo de trabajo...</p>
+        </div>
+      </section>
+
+      <section class="card" style="margin-top: 20px; border-left: 5px solid #fbbf24;">
+        <h3 style="margin-top:0;">🕒 Registro de Asistencia (Hoy)</h3>
+        <table class="table" style="width: 100%; text-align: left;">
+          <thead>
+            <tr style="color: #94a3b8;">
+              <th>Hora</th>
+              <th>Usuario</th>
+              <th>Acción</th>
+            </tr>
+          </thead>
+          <tbody id="asistencia-logs">
+            </tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./actividad.js"></script>
+</body>
+</html>

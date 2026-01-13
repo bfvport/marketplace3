@@ -1,171 +1,154 @@
-import {
-  requireSession, loadSidebar, fmtDateISO, nowISO,
-  escapeHtml, takeFacebookAccountFor
-} from "../../assets/js/app.js";
+import { requireSession, loadSidebar, fmtDateISO, nowISO, escapeHtml } from "../../assets/js/app.js";
 
 const s = requireSession();
-await loadSidebar({ activeKey: "diario", basePath: "../" });
-
 const sb = window.supabaseClient;
 const $ = (id) => document.getElementById(id);
-
 const today = fmtDateISO(new Date());
-$("subtitle").textContent = `Hoy: ${today} | Usuario: ${s.usuario} | Rol: ${s.rol}`;
 
-function log(line){
-  const el = $("log");
-  if(!el) return;
-  const ts = new Date().toLocaleTimeString();
-  el.textContent += `[${ts}] ${line}\n`;
-  el.scrollTop = el.scrollHeight;
+let itemsCSV = []; // Guardará las filas del CSV cargado
+let itemActual = null;
+
+await loadSidebar({ activeKey: "diario", basePath: "../" });
+
+// --- FUNCIONES DE APOYO ---
+function log(msg) {
+    const l = $("log");
+    l.innerHTML = `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>` + l.innerHTML;
 }
 
-function setAccStatus(text){ $("accStatus").textContent = "Cuenta: " + (text || "-"); }
+window.copy = (id) => {
+    const el = $(id);
+    el.select();
+    navigator.clipboard.writeText(el.value);
+    log(`Copiado: ${id.replace('csv-', '')}`);
+};
 
-// 🟢 REGISTRO AUTOMÁTICO DE ENTRADA
-async function registrarEntradaDiario() {
-  await sb.from("usuarios_actividad").insert([{
-    usuario: s.usuario,
-    fecha_logueo: nowISO(),
-    facebook_account_usada: "🟢 INGRESO AL DIARIO",
-    created_at: nowISO()
-  }]);
+// --- DESCARGAR IMÁGENES (Nahu) ---
+async function descargarFotos() {
+    if (!itemActual) return alert("Primero carga una categoría");
+    
+    // Combinamos fijas y portadas
+    const urls = [];
+    if (itemActual.url_img_fijas) urls.push(...itemActual.url_img_fijas.split(","));
+    if (itemActual.url_imagenes_portadas) urls.push(itemActual.url_imagenes_portadas);
+
+    log(`Iniciando descarga de ${urls.length} fotos...`);
+    
+    for (let i = 0; i < urls.length; i++) {
+        const url = urls[i].trim();
+        if(!url) continue;
+        try {
+            const res = await fetch(url);
+            const blob = await res.blob();
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = `foto_${i+1}.jpg`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        } catch (e) { log("Error descargando foto " + (i+1)); }
+    }
 }
 
-// 👮 REPORTE PARA GERENTE (Con hora corregida)
-async function cargarReporteAsistenciaGerente() {
-  if (s.rol !== "gerente") return;
-  
-  const section = $("managerSection");
-  if (section) section.style.display = "block";
+// --- CARGAR Y PROCESAR CSV ---
+async function cargarRecursosCSV(csvNombre) {
+    if (!csvNombre) return;
+    $("loader-csv").style.display = "block";
+    
+    try {
+        const { data: urlData } = sb.storage.from('categorias').getPublicUrl(csvNombre);
+        const res = await fetch(urlData.publicUrl);
+        const text = await res.text();
+        
+        const lines = text.split("\n").filter(l => l.trim() !== "");
+        const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+        
+        itemsCSV = lines.slice(1).map(line => {
+            const values = line.split(",");
+            return headers.reduce((obj, h, i) => {
+                obj[h] = values[i]?.trim();
+                return obj;
+            }, {});
+        });
 
-  // Buscamos los logs de hoy
-  const { data, error } = await sb
-    .from("usuarios_actividad")
-    .select("*")
-    .filter("fecha_logueo", "gte", today)
-    .order("fecha_logueo", { ascending: false });
+        // Seleccionamos uno al azar para empezar
+        rotarRecurso();
+    } catch (e) {
+        log("❌ Error cargando CSV: " + e.message);
+    } finally {
+        $("loader-csv").style.display = "none";
+    }
+}
 
-  if (error) return log("❌ error logs gerente: " + error.message);
+function rotarRecurso() {
+    if (itemsCSV.length === 0) return;
+    itemActual = itemsCSV[Math.floor(Math.random() * itemsCSV.length)];
+    
+    $("csv-titulo").value = itemActual.titulo || "";
+    $("csv-desc").value = itemActual.descripcion || "";
+    $("csv-cat").value = itemActual.categoria || "";
+    $("csv-tags").value = itemActual.etiquetas || "";
+    
+    log("🔄 Recurso rotado (Nuevo título asignado)");
+}
 
-  const tbody = $("managerLogsBody");
-  tbody.innerHTML = "";
+// --- INICIO Y EVENTOS ---
+async function init() {
+    $("subtitle").textContent = `Operador: ${s.usuario} | ${today}`;
+    
+    // Fichaje automático
+    await sb.from("usuarios_actividad").insert([{ 
+        usuario: s.usuario, fecha_logueo: nowISO(), facebook_account_usada: "🟢 ENTRÓ AL DIARIO" 
+    }]);
 
-  (data || []).forEach(row => {
-    // 🛠️ CORRECCIÓN DE HORA:
-    // Usamos el campo fecha_logueo que guardamos en la DB
-    const fechaReal = new Date(row.fecha_logueo);
-    const horaFormateada = fechaReal.toLocaleTimeString('es-AR', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
+    // Cargar selector de categorías
+    const { data: cats } = await sb.from("categoria").select("*");
+    const sel = $("categoriaSelect");
+    cats.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c.nombre;
+        opt.textContent = c.nombre;
+        opt.dataset.csv = c.csv_nombre;
+        sel.appendChild(opt);
     });
 
-    const tr = document.createElement("tr");
-    tr.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
-    tr.innerHTML = `
-      <td style="padding:8px; font-family:monospace; color:#94a3b8;">${horaFormateada}</td>
-      <td style="padding:8px; font-weight:bold; color:#60a5fa;">${escapeHtml(row.usuario)}</td>
-      <td style="padding:8px; font-size:0.9em;">${escapeHtml(row.facebook_account_usada)}</td>
-    `;
-    tbody.appendChild(tr);
-  });
+    // Evento al cambiar categoría
+    sel.onchange = (e) => {
+        const selected = e.target.options[e.target.selectedIndex];
+        cargarRecursosCSV(selected.dataset.csv);
+    };
+
+    // Cargar primer CSV por defecto
+    if(cats.length > 0) cargarRecursosCSV(cats[0].csv_nombre);
 }
 
-// --- RESTO DE FUNCIONES (Categorías y Asignaciones) ---
+$("btnSave").onclick = async () => {
+    const link = $("link").value.trim();
+    if (!link) return alert("¡El link de Marketplace es obligatorio!");
 
-async function loadCategorias(){
-  const { data, error } = await sb.from("categoria").select("id,nombre,mensaje").order("nombre");
-  if (error) return log("❌ categorias: " + error.message);
+    const payload = {
+        usuario: s.usuario,
+        fecha_publicacion: today,
+        titulo: $("csv-titulo").value,
+        descripcion: $("csv-desc").value,
+        categoria: $("categoriaSelect").value,
+        marketplace_link_publicacion: link,
+        url_imagenes_portada: itemActual?.url_imagenes_portadas || "",
+        created_at: nowISO()
+    };
 
-  const sel = $("categoriaSelect");
-  sel.innerHTML = "";
-  (data || []).forEach(c => {
-    const opt = document.createElement("option");
-    opt.value = c.nombre;
-    opt.textContent = c.nombre;
-    opt.dataset.mensaje = c.mensaje || "";
-    sel.appendChild(opt);
-  });
-}
+    const { error } = await sb.from("marketplace_actividad").insert([payload]);
+    
+    if (error) {
+        log("❌ Error al guardar: " + error.message);
+    } else {
+        log("✅ ¡Guardado con éxito!");
+        $("link").value = "";
+        rotarRecurso(); // Pasamos al siguiente automáticamente
+    }
+};
 
-async function loadAsignacionDeHoy(){
-  const box = $("asigBox");
-  if(!box) return;
+$("btnNew").onclick = rotarRecurso;
+$("btnDownloadImgs").onclick = descargarFotos;
 
-  const { data, error } = await sb.from("usuarios_asignado").select("*").eq("usuario", s.usuario);
-  if (error) return log("❌ asignaciones: " + error.message);
-
-  const inRange = (data || []).filter(a => a.fecha_desde <= today && today <= a.fecha_hasta);
-
-  if (!inRange.length){
-    $("asigHint").textContent = "No tenés asignación para hoy.";
-    box.innerHTML = `<div class="muted">💤 Pedile al gerente que te asigne una categoría.</div>`;
-    return;
-  }
-
-  $("asigHint").textContent = `Tareas activas: ${inRange.length}`;
-  box.innerHTML = "";
-
-  inRange.forEach(a => {
-    box.innerHTML += `
-      <div style="background: rgba(255,255,255,0.05); border-left: 4px solid #a78bfa; padding: 10px; margin-bottom: 8px; border-radius: 4px;">
-        <div style="font-weight:bold; color: #a78bfa; font-size: 1.1rem;">${escapeHtml(a.categoria)}</div>
-        <div style="margin-top: 5px; font-size: 0.85rem; color: #e2e8f0; line-height: 1.6;">
-           🛒 Marketplace: <b style="color:#fff;">${a.marketplace_daily}</b> | 👥 Grupos: <b style="color:#fff;">${a.grupos_daily}</b><br>
-           📖 Historias: <b style="color:#fff;">${a.historia_daily}</b> | 🏠 Muro: <b style="color:#fff;">${a.muro_daily}</b>
-        </div>
-      </div>
-    `;
-  });
-}
-
-async function ensureCuentaActual(){
-  const { data } = await sb.from("cuentas_facebook").select("email").eq("ocupada_por", s.usuario).eq("estado", "ocupada").limit(1);
-  if (data && data.length) setAccStatus(data[0].email);
-}
-
-$("btnTakeAcc").addEventListener("click", async () => {
-  log("Buscando cuenta...");
-  const r = await takeFacebookAccountFor(s.usuario);
-  if (!r.ok) return log("⚠️ " + r.reason);
-  setAccStatus(r.account.email);
-  log("✅ Cuenta tomada: " + r.account.email);
-  
-  await sb.from("usuarios_actividad").insert([{
-    usuario: s.usuario, 
-    fecha_logueo: nowISO(), 
-    facebook_account_usada: "⚠️ TOMÓ CUENTA: " + r.account.email
-  }]);
-  await cargarReporteAsistenciaGerente();
-});
-
-$("btnSave").addEventListener("click", async () => {
-  const payload = {
-    usuario: s.usuario,
-    fecha_publicacion: today,
-    titulo: $("titulo").value.trim(),
-    descripcion: $("descripcion").value.trim(),
-    categoria: $("categoriaSelect").value,
-    marketplace_link_publicacion: $("link").value.trim(),
-    created_at: nowISO()
-  };
-  if(!payload.titulo) return log("⚠️ Falta título.");
-  const { error } = await sb.from("marketplace_actividad").insert([payload]);
-  if (error) return log("❌ error: " + error.message);
-  log("✅ Actividad guardada.");
-  $("titulo").value = ""; $("link").value = "";
-});
-
-$("btnClear").addEventListener("click", () => { $("titulo").value = ""; $("link").value = ""; log("🧼 Limpio."); });
-
-(async function init(){
-  log("Init diario...");
-  await registrarEntradaDiario();
-  await loadCategorias();
-  await loadAsignacionDeHoy();
-  await ensureCuentaActual();
-  await cargarReporteAsistenciaGerente();
-  log("Listo.");
-})();
+init();
