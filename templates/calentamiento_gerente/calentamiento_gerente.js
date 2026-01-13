@@ -1,76 +1,78 @@
-import { requireSession, loadSidebar } from "../../assets/js/app.js";
+import { requireSession, loadSidebar, fmtDateISO } from "../../assets/js/app.js";
 
 const s = requireSession();
 const sb = window.supabaseClient;
 const $ = (id) => document.getElementById(id);
+const today = fmtDateISO(new Date());
 
 (async function init() {
-    await loadSidebar({ activeKey: "calentamiento_gerente", basePath: "../" });
-    
-    await cargarEstadisticas();
-    await cargarConfiguracion();
-    await cargarListaCuentas();
+    await loadSidebar({ activeKey: "calentamiento", basePath: "../" });
 
-    $("btn-save-config").onclick = guardarConfiguracion;
+    if (s.rol === "gerente") {
+        $("view-gerente").classList.remove("hidden");
+        await initGerente();
+    } else {
+        $("view-operador").classList.remove("hidden");
+        await initOperador();
+    }
 })();
 
-async function cargarEstadisticas() {
-    const { data: cuentas } = await sb.from("cuentas_facebook").select("calidad");
-    
-    const baneadas = cuentas.filter(c => c.calidad === "inactiva" || c.calidad === "baneada").length;
-    const frias = cuentas.filter(c => c.calidad === "fria" || c.calidad === "nueva").length;
-    const calientes = cuentas.filter(c => c.calidad === "caliente").length;
-
-    $("count-baneadas").textContent = baneadas;
-    $("count-frias").textContent = frias;
-    $("count-calientes").textContent = calientes;
-}
-
-async function cargarConfiguracion() {
-    const { data } = await sb.from("configuracion_calentamiento").select("*").single();
-    if (data) {
-        $("cfg-min").value = data.rango_min;
-        $("cfg-max").value = data.rango_max;
-        $("cfg-drive").value = data.link_drive;
+// --- LÓGICA DEL GERENTE ---
+async function initGerente() {
+    const { data: config } = await sb.from("configuracion_calentamiento").select("*").single();
+    if (config) {
+        $("cfg-min").value = config.rango_min;
+        $("cfg-max").value = config.rango_max;
+        $("cfg-drive").value = config.link_drive;
     }
-}
 
-async function guardarConfiguracion() {
-    const payload = {
-        id: 1, // Siempre usamos el ID 1 para la config global
-        rango_min: parseInt($("cfg-min").value),
-        rango_max: parseInt($("cfg-max").value),
-        link_drive: $("cfg-drive").value,
-        updated_at: new Date().toISOString()
+    const { data: cuentas } = await sb.from("cuentas_facebook").select("*");
+    
+    $("count-baneadas").textContent = cuentas.filter(c => c.calidad === "inactiva").length;
+    $("count-frias").textContent = cuentas.filter(c => c.calidad === "fria" || c.calidad === "nueva").length;
+    $("count-calientes").textContent = cuentas.filter(c => c.calidad === "caliente").length;
+
+    const tabla = $("tabla-gerente");
+    cuentas.forEach(c => {
+        let dia = c.fecha_inicio_calentamiento ? Math.ceil(Math.abs(new Date() - new Date(c.fecha_inicio_calentamiento)) / 86400000) : "---";
+        tabla.innerHTML += `<tr><td>${c.email}</td><td>${dia}</td><td style="color:#f59e0b">${c.calidad}</td><td>${c.ocupada_por || '---'}</td></tr>`;
+    });
+
+    $("btn-save-cfg").onclick = async () => {
+        await sb.from("configuracion_calentamiento").upsert({
+            id: 1, rango_min: parseInt($("cfg-min").value), rango_max: parseInt($("cfg-max").value), link_drive: $("cfg-drive").value
+        });
+        alert("Estrategia Guardada");
     };
-
-    const { error } = await sb.from("configuracion_calentamiento").upsert(payload);
-
-    if (error) alert("Error: " + error.message);
-    else alert("✅ Configuración de calentamiento actualizada.");
 }
 
-async function cargarListaCuentas() {
-    const { data: cuentas } = await sb.from("cuentas_facebook").select("*").order("calidad");
-    const tabla = $("tabla-cuentas-calentamiento");
-    tabla.innerHTML = "";
+// --- LÓGICA DEL OPERADOR ---
+async function initOperador() {
+    const { data: cfg } = await sb.from("configuracion_calentamiento").select("*").single();
+    const { data: cuentas } = await sb.from("cuentas_facebook").select("*").eq("ocupada_por", s.usuario).neq("calidad", "caliente");
+
+    $("link-recursos").href = cfg?.link_drive || "#";
+    const lista = $("lista-misiones");
 
     cuentas.forEach(c => {
-        let dia = "---";
-        if (c.fecha_inicio_calentamiento) {
-            const diff = Math.abs(new Date() - new Date(c.fecha_inicio_calentamiento));
-            dia = Math.ceil(diff / (1000 * 60 * 60 * 24));
+        if (!c.fecha_inicio_calentamiento) {
+            sb.from("cuentas_facebook").update({ fecha_inicio_calentamiento: today }).eq("id", c.id).then();
         }
-
-        const colorEstado = c.calidad === "caliente" ? "#10b981" : (c.calidad === "inactiva" ? "#ef4444" : "#f59e0b");
-
-        tabla.innerHTML += `
-            <tr style="border-bottom: 1px solid #334155;">
-                <td style="padding:10px;">${c.email}</td>
-                <td><span style="color:${colorEstado}; font-weight:bold;">${c.calidad.toUpperCase()}</span></td>
-                <td>${dia > 30 ? "30+" : dia}</td>
-                <td>${c.ocupada_por || 'Sin asignar'}</td>
-            </tr>
-        `;
+        
+        const dia = Math.ceil(Math.abs(new Date() - new Date(c.fecha_inicio_calentamiento || today)) / 86400000) || 1;
+        const cant = Math.floor(Math.random() * (cfg.rango_max - cfg.rango_min + 1)) + cfg.rango_min;
+        
+        let mision = dia <= 15 ? `${cant} Historias/Reels/Muro (Aleatorio)` : `1 Publicación Marketplace (Cargar Link)`;
+        
+        lista.innerHTML += `
+            <div class="mision-card">
+                <div style="display:flex; justify-content:space-between;">
+                    <strong>Día ${dia} de 30</strong>
+                    <small>${c.email}</small>
+                </div>
+                <h3 style="margin:10px 0;">${mision}</h3>
+                ${dia > 15 ? `<input type="text" id="link-${c.id}" placeholder="Pega el link de marketplace aquí" style="margin-bottom:10px;">` : ''}
+                <button class="btn" style="width:100%;" onclick="alert('Misión Guardada')">✅ Marcar como Hecho</button>
+            </div>`;
     });
 }

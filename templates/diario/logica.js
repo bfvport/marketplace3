@@ -5,113 +5,104 @@ const sb = window.supabaseClient;
 const $ = (id) => document.getElementById(id);
 const today = fmtDateISO(new Date());
 
-// Variables globales para el Operador
 let itemsCSV = [];
 let itemActual = null;
-let miAsignacion = null;
+let asignacionActiva = null;
 
 (async function init() {
     await loadSidebar({ activeKey: "diario", basePath: "../" });
 
     if (s.rol === "gerente") {
-        $("view-gerente").style.display = "block";
-        await cargarSupervisionGerente();
-        setInterval(cargarSupervisionGerente, 20000);
+        $("view-gerente").classList.remove("hidden");
+        await cargarVistaGerente();
+        setInterval(cargarVistaGerente, 20000); // Refresco automático
     } else {
-        $("view-operador").style.display = "block";
-        await cargarPanelOperador();
+        await cargarVistaOperador();
     }
 })();
 
-// ==========================================
-// SECCIÓN GERENTE: SUPERVISIÓN EN TIEMPO REAL
-// ==========================================
-async function cargarSupervisionGerente() {
-    const [resAsig, resAct] = await Promise.all([
-        sb.from("usuarios_asignado").select("*").lte("fecha_desde", today).gte("fecha_hasta", today),
-        sb.from("marketplace_actividad").select("usuario").eq("fecha_publicacion", today)
-    ]);
+// --- VISTA GERENTE: CONTROL DE EQUIPO ---
+async function cargarVistaGerente() {
+    const { data: asigs } = await sb.from("usuarios_asignado").select("*").lte("fecha_desde", today).gte("fecha_hasta", today);
+    const { data: hechos } = await sb.from("marketplace_actividad").select("usuario").eq("fecha_publicacion", today);
 
     const grid = $("grid-supervision");
     grid.innerHTML = "";
-    
-    (resAsig.data || []).forEach(asig => {
-        const hechos = (resAct.data || []).filter(a => a.usuario === asig.usuario).length;
-        const meta = asig.marketplace_daily || 0;
-        const porc = meta > 0 ? Math.min((hechos / meta) * 100, 100) : 0;
+    $("last-sync").textContent = `Sincronizado: ${new Date().toLocaleTimeString()}`;
+
+    asigs.forEach(a => {
+        const totalHechos = hechos.filter(x => x.usuario === a.usuario).length;
+        const meta = a.marketplace_daily || 0;
+        const porc = meta > 0 ? Math.min((totalHechos / meta) * 100, 100) : 0;
 
         grid.innerHTML += `
             <div class="card-operador">
-                <div style="display:flex; justify-content:space-between;">
-                    <strong>${asig.usuario}</strong>
-                    <span class="pill" style="background:#3b82f6;">${hechos} / ${meta}</span>
+                <div style="display:flex; justify-content:space-between; align-items:start;">
+                    <strong>${a.usuario}</strong>
+                    <span class="pill" style="background:#3b82f6;">${totalHechos} / ${meta}</span>
                 </div>
-                <div class="muted" style="font-size:0.8rem; margin:5px 0;">📦 Categoria: ${asig.categoria}</div>
+                <div class="muted" style="font-size:0.8rem; margin:8px 0;">📦 Categoría: ${a.categoria}</div>
                 <div class="progress-container"><div class="progress-bar" style="width:${porc}%"></div></div>
-                <div style="font-size:0.75rem; text-align:right; color:${porc === 100 ? '#10b981' : '#94a3b8'}">
-                    ${porc === 100 ? '✅ COMPLETADO' : `Faltan ${meta - hechos} publicaciones`}
-                </div>
+                <div style="font-size:0.7rem; text-align:right; color:#94a3b8;">${porc === 100 ? '✅ META CUMPLIDA' : 'En progreso...'}</div>
             </div>`;
     });
 }
 
-// ==========================================
-// SECCIÓN OPERADOR: LÓGICA DE TRABAJO PESADO
-// ==========================================
-async function cargarPanelOperador() {
-    const { data: asig } = await sb.from("usuarios_asignado").select("*").eq("usuario", s.usuario).lte("fecha_desde", today).gte("fecha_hasta", today).maybeSingle();
+// --- VISTA OPERADOR: CARGA Y CSV ---
+async function cargarVistaOperador() {
+    // 1. Buscar asignación del día (Categoría asignada)
+    const { data: asig, error } = await sb.from("usuarios_asignado")
+        .select("*")
+        .eq("usuario", s.usuario)
+        .lte("fecha_desde", today)
+        .gte("fecha_hasta", today)
+        .maybeSingle();
 
-    if (!asig) {
-        $("panel-operador").style.display = "none";
-        $("error-bloqueo").style.display = "block";
-        return;
+    if (!asig || error) {
+        return $("panel-error").classList.remove("hidden");
     }
 
-    miAsignacion = asig;
-    await cargarEstadoCuentas();
-    await cargarCSV();
-    
-    // Botones de acción
+    asignacionActiva = asig;
+    $("view-operador").classList.remove("hidden");
+
+    await actualizarStatusCuentas();
+    await procesarCSV();
+
     $("btn-rotar").onclick = rotarRecurso;
-    $("btn-save").onclick = guardarPublicacion;
-    $("btn-download-img").onclick = () => itemActual?.url_imagenes_portadas && window.open(itemActual.url_imagenes_portadas, '_blank');
+    $("btn-save").onclick = guardarLink;
 }
 
-async function cargarEstadoCuentas() {
-    // --- SOLUCIÓN AL RESET: GUARDAR LO QUE EL USUARIO TENÍA SELECCIONADO ---
-    const select = $("sel-cuenta-usada");
+async function actualizarStatusCuentas() {
+    // Guardar cuenta seleccionada para no perder el foco
+    const select = $("sel-cuenta");
     const cuentaPrevia = select.value;
 
-    const [resCuentas, resAct] = await Promise.all([
-        sb.from("cuentas_facebook").select("email").eq("ocupada_por", s.usuario),
-        sb.from("marketplace_actividad").select("facebook_account_usada").eq("usuario", s.usuario).eq("fecha_publicacion", today)
-    ]);
+    const { data: cuentas } = await sb.from("cuentas_facebook").select("email").eq("ocupada_por", s.usuario);
+    const { data: hechos } = await sb.from("marketplace_actividad").select("*").eq("usuario", s.usuario).eq("fecha_publicacion", today);
 
-    const lista = $("cuentas-list");
+    const lista = $("lista-cuentas-status");
     lista.innerHTML = "";
     select.innerHTML = "";
 
-    const metaIndividual = miAsignacion.marketplace_daily;
-    let totalHechosHoy = resAct.data?.length || 0;
-
-    // Actualizar Header de Progreso
-    const porcTotal = Math.min((totalHechosHoy / metaIndividual) * 100, 100);
+    // Header de progreso general
+    const total = hechos.length;
+    const metaGral = asignacionActiva.marketplace_daily;
     $("header-progreso").innerHTML = `
         <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span>Categoría: <strong>${miAsignacion.categoria}</strong></span>
-            <span style="font-size:1.2rem;">🚀 <strong>${totalHechosHoy}</strong> / ${metaIndividual}</span>
+            <span>Trabajando hoy en: <strong>${asignacionActiva.categoria}</strong></span>
+            <span style="font-size:1.1rem; font-weight:bold;">${total} / ${metaGral} Publicaciones</span>
         </div>
-        <div class="progress-container"><div class="progress-bar" style="width:${porcTotal}%"></div></div>
-    `;
+        <div class="progress-container"><div class="progress-bar" style="width:${(total/metaGral)*100}%"></div></div>`;
 
-    (resCuentas.data || []).forEach(c => {
-        const hechosConEsta = (resAct.data || []).filter(a => a.facebook_account_usada === c.email).length;
-        const faltan = Math.max(0, metaIndividual - hechosConEsta);
+    // Detalle por cada cuenta (Faltantes)
+    cuentas.forEach(c => {
+        const hechosCuenta = hechos.filter(h => h.facebook_account_usada === c.email).length;
+        const faltan = Math.max(0, 10 - hechosCuenta); // Meta de 10 por cuenta según captura
 
         lista.innerHTML += `
-            <div style="display:flex; justify-content:space-between; font-size:0.85rem; padding:5px; border-bottom:1px solid #334155;">
+            <div style="display:flex; justify-content:space-between; font-size:0.85rem; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.03);">
                 <span class="muted">${c.email}</span>
-                <span class="${faltan === 0 ? 'status-ok' : 'status-pending'}">${faltan === 0 ? 'LISTO' : 'Faltan ' + faltan}</span>
+                <span style="color:${faltan === 0 ? '#10b981' : '#f59e0b'}; font-weight:bold;">${faltan === 0 ? 'LISTO' : 'Faltan ' + faltan}</span>
             </div>`;
 
         const opt = document.createElement("option");
@@ -119,74 +110,66 @@ async function cargarEstadoCuentas() {
         select.appendChild(opt);
     });
 
-    // --- RESTAURAR LA CUENTA QUE EL OPERADOR ESTABA USANDO ---
-    if (cuentaPrevia && Array.from(select.options).some(o => o.value === cuentaPrevia)) {
-        select.value = cuentaPrevia;
-    }
+    if (cuentaPrevia) select.value = cuentaPrevia;
 }
 
-async function cargarCSV() {
-    const { data: cat } = await sb.from("categoria").select("csv_nombre").eq("nombre", miAsignacion.categoria).single();
-    if (!cat?.csv_nombre) return;
+async function procesarCSV() {
+    // Buscar la ruta del CSV en la tabla categoria
+    const { data: cat } = await sb.from("categoria").select("csv_nombre").eq("nombre", asignacionActiva.categoria).single();
+    
+    if (!cat?.csv_nombre) {
+        return alert("Error: No hay CSV cargado para esta categoría.");
+    }
 
-    const { data: url } = sb.storage.from('categoria_csv').getPublicUrl(cat.csv_nombre);
-    const res = await fetch(url.publicUrl);
-    const text = await res.text();
-    const lines = text.split("\n").filter(l => l.trim().length > 0);
-    const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+    // Descargar desde el storage
+    const { data: blob } = await sb.storage.from('categoria_csv').download(cat.csv_nombre);
+    const text = await blob.text();
+    const rows = text.split("\n").filter(r => r.trim());
+    const headers = rows[0].split(",").map(h => h.trim().toLowerCase());
 
-    itemsCSV = lines.slice(1).map(line => {
-        const values = line.split(",");
-        return headers.reduce((obj, h, i) => { obj[h] = values[i]?.trim(); return obj; }, {});
+    itemsCSV = rows.slice(1).map(row => {
+        const cells = row.split(",");
+        return headers.reduce((obj, h, i) => { obj[h] = cells[i]?.trim(); return obj; }, {});
     });
+
     rotarRecurso();
 }
 
 function rotarRecurso() {
     if (itemsCSV.length === 0) return;
     itemActual = itemsCSV[Math.floor(Math.random() * itemsCSV.length)];
+    
     $("csv-titulo").value = itemActual.titulo || "";
     $("csv-desc").value = itemActual.descripcion || "";
-    verificarDuplicado(itemActual.titulo);
+    $("csv-cat-fb").value = itemActual.categoria || "N/A"; // Categoría real de FB
+    $("csv-tags").value = itemActual.etiquetas || ""; // Etiquetas del CSV
 }
 
-async function verificarDuplicado(titulo) {
-    const { data } = await sb.from("marketplace_actividad").select("id").eq("titulo", titulo).eq("fecha_publicacion", today).limit(1);
-    const aviso = $("titulo-aviso");
-    if (data?.length > 0) {
-        aviso.textContent = "⚠️ Ya usaste este título hoy."; aviso.style.color = "#f59e0b";
-    } else {
-        aviso.textContent = "✅ Título disponible."; aviso.style.color = "#10b981";
-    }
-}
-
-async function guardarPublicacion() {
+async function guardarLink() {
     const link = $("inp-link").value.trim();
-    const cuenta = $("sel-cuenta-usada").value;
-
-    if (!link.startsWith("http")) return alert("Pega un link válido.");
+    if (!link.startsWith("http")) return alert("Por favor, pega un link válido de Marketplace.");
 
     const { error } = await sb.from("marketplace_actividad").insert([{
         usuario: s.usuario,
         fecha_publicacion: today,
         titulo: $("csv-titulo").value,
         descripcion: $("csv-desc").value,
-        categoria: miAsignacion.categoria,
+        categoria: asignacionActiva.categoria,
         marketplace_link_publicacion: link,
-        facebook_account_usada: cuenta,
+        facebook_account_usada: $("sel-cuenta").value,
         created_at: nowISO()
     }]);
 
-    if (error) alert("Error: " + error.message);
-    else {
-        alert("✅ Guardado con éxito.");
+    if (!error) {
         $("inp-link").value = "";
-        await cargarEstadoCuentas(); // Esto refresca el progreso sin perder la cuenta seleccionada
+        await actualizarStatusCuentas();
         rotarRecurso();
+    } else {
+        alert("Error al guardar: " + error.message);
     }
 }
 
-// Función global de copiado
+// Función global para botones copiar
 window.copiar = (id) => {
     const el = $(id);
     el.select();
