@@ -58,7 +58,7 @@ function abrirModalCrear() {
     usuarioEditandoID = null;
     $("modal-titulo").textContent = "Nuevo Usuario";
     $("inp-usuario").value = "";
-    $("inp-pass").value = "";
+    $("inp-contra").value = "";
     $("sel-rol").value = "operador";
     $("modal-usuario").style.display = "flex";
 }
@@ -73,7 +73,7 @@ function abrirModalEditar(id, listaDatos) {
     usuarioEditandoID = id;
     $("modal-titulo").textContent = "Editar Usuario";
     $("inp-usuario").value = user.usuario;
-    $("inp-pass").value = passValue; 
+    $("inp-contra").value = passValue; 
     $("sel-rol").value = user.rol;
     $("modal-usuario").style.display = "flex";
 }
@@ -84,7 +84,7 @@ function cerrarModal() {
 
 async function guardarUsuario() {
     const usuario = $("inp-usuario").value.trim();
-    const contra = $("inp-pass").value.trim(); // ASUMIMOS 'pass' por defecto al guardar
+    const contra = $("inp-contra").value.trim(); // ASUMIMOS 'pass' por defecto al guardar
     const rol = $("sel-rol").value;
 
     if (!usuario || !contra) return alert("Completa todos los datos");
