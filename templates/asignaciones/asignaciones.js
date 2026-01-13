@@ -6,47 +6,61 @@ const $ = (id) => document.getElementById(id);
 
 let asignacionEditandoID = null;
 
-await loadSidebar({ activeKey: "asignacion", basePath: "../" });
+// Ejecución inicial protegida
+(async function init() {
+    try {
+        // CORRECCIÓN: 'activeKey' coincide con 'data-nav' en sidebar.html (plural)
+        await loadSidebar({ activeKey: "asignaciones", basePath: "../" });
 
-// --- CARGAR DATOS INICIALES ---
-async function init() {
-    if (s.rol !== "gerente") {
-        document.body.innerHTML = "<h2 style='color:white; text-align:center;'>⛔ Acceso Restringido</h2>";
-        return;
+        if (s.rol !== "gerente") {
+            document.querySelector(".content").innerHTML = "<h2 style='text-align:center;'>⛔ Acceso Restringido</h2>";
+            return;
+        }
+
+        await cargarSelects();
+        await cargarTabla();
+
+        // Activamos botones si existen en el DOM
+        if($("btn-nuevo")) $("btn-nuevo").onclick = abrirModalCrear;
+        if($("btn-cancelar")) $("btn-cancelar").onclick = cerrarModal;
+        if($("btn-guardar")) $("btn-guardar").onclick = guardarAsignacion;
+
+    } catch (e) {
+        console.error("Error iniciando Asignaciones:", e);
+        alert("Error cargando la página. Verifica la consola.");
     }
+})();
 
-    // Cargar listas desplegables
-    await cargarSelects();
-    // Cargar tabla
-    await cargarTabla();
-}
-
+// --- CARGAR SELECTS ---
 async function cargarSelects() {
-    // Usuarios (Solo operadores)
-    const { data: users } = await sb.from("usuarios").select("usuario").neq("rol", "gerente");
     const selUser = $("sel-usuario");
+    const selCat = $("sel-categoria");
+    if (!selUser || !selCat) return;
+
+    // Usuarios
+    const { data: users } = await sb.from("usuarios").select("usuario").neq("rol", "gerente");
     selUser.innerHTML = "";
-    users.forEach(u => {
-        selUser.innerHTML += `<option value="${u.usuario}">${u.usuario}</option>`;
-    });
+    (users || []).forEach(u => selUser.innerHTML += `<option value="${u.usuario}">${u.usuario}</option>`);
 
     // Categorías
     const { data: cats } = await sb.from("categoria").select("nombre");
-    const selCat = $("sel-categoria");
     selCat.innerHTML = "";
-    cats.forEach(c => {
-        selCat.innerHTML += `<option value="${c.nombre}">${c.nombre}</option>`;
-    });
+    (cats || []).forEach(c => selCat.innerHTML += `<option value="${c.nombre}">${c.nombre}</option>`);
 }
 
-// --- TABLA ---
+// --- CARGAR TABLA ---
 async function cargarTabla() {
-    const { data, error } = await sb.from("usuarios_asignado").select("*").order("fecha_desde", { ascending: false });
-    if (error) return console.error(error);
-
     const tbody = $("lista-asignaciones");
-    tbody.innerHTML = "";
+    if (!tbody) return;
 
+    const { data, error } = await sb.from("usuarios_asignado").select("*").order("fecha_desde", { ascending: false });
+    if (error) {
+        console.error(error);
+        tbody.innerHTML = "<tr><td colspan='5'>Error cargando datos</td></tr>";
+        return;
+    }
+
+    tbody.innerHTML = "";
     data.forEach(item => {
         const tr = document.createElement("tr");
         tr.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
@@ -68,25 +82,19 @@ async function cargarTabla() {
         tbody.appendChild(tr);
     });
 
-    // Eventos
-    document.querySelectorAll(".btn-edit").forEach(btn => {
-        btn.onclick = () => abrirModalEditar(btn.dataset.id, data);
-    });
-    document.querySelectorAll(".btn-del").forEach(btn => {
-        btn.onclick = () => eliminarAsignacion(btn.dataset.id);
-    });
+    document.querySelectorAll(".btn-edit").forEach(btn => btn.onclick = () => abrirModalEditar(btn.dataset.id, data));
+    document.querySelectorAll(".btn-del").forEach(btn => btn.onclick = () => eliminarAsignacion(btn.dataset.id));
 }
 
-// --- MODAL ---
+// --- FUNCIONES MODAL ---
 function abrirModalCrear() {
     asignacionEditandoID = null;
-    $("modal-titulo").textContent = "Nueva Asignación";
-    // Reset inputs
+    if($("modal-titulo")) $("modal-titulo").textContent = "Nueva Asignación";
     $("inp-daily-mp").value = 1;
     $("inp-daily-grupos").value = 0;
     $("inp-daily-historia").value = 0;
     $("inp-daily-muro").value = 0;
-    // Fechas por defecto (Hoy y mañana)
+    
     const today = new Date().toISOString().split('T')[0];
     $("inp-desde").value = today;
     $("inp-hasta").value = today;
@@ -99,7 +107,7 @@ function abrirModalEditar(id, listaDatos) {
     if (!item) return;
 
     asignacionEditandoID = id;
-    $("modal-titulo").textContent = "Editar Asignación";
+    if($("modal-titulo")) $("modal-titulo").textContent = "Editar Asignación";
     
     $("sel-usuario").value = item.usuario;
     $("sel-categoria").value = item.categoria;
@@ -131,7 +139,7 @@ async function guardarAsignacion() {
     };
 
     if (!payload.usuario || !payload.categoria || !payload.fecha_desde || !payload.fecha_hasta) {
-        return alert("Por favor completa todos los campos obligatorios.");
+        return alert("Completa los campos obligatorios.");
     }
 
     let error = null;
@@ -150,16 +158,8 @@ async function guardarAsignacion() {
     }
 }
 
-// --- ELIMINAR ---
 async function eliminarAsignacion(id) {
     if(!confirm("¿Borrar asignación?")) return;
     await sb.from("usuarios_asignado").delete().eq("id", id);
     cargarTabla();
 }
-
-// Eventos botones
-$("btn-nuevo").onclick = abrirModalCrear;
-$("btn-cancelar").onclick = cerrarModal;
-$("btn-guardar").onclick = guardarAsignacion;
-
-init();

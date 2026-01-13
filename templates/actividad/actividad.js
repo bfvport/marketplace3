@@ -8,33 +8,29 @@ const today = fmtDateISO(new Date());
 await loadSidebar({ activeKey: "actividad", basePath: "../" });
 
 // --- SEMÁFORO DE ACTIVIDAD ---
-// Calcula si el operador está activo basándose en la hora exacta
 function obtenerSemaforo(fechaISO) {
-    if (!fechaISO) return { color: "#4b5563", texto: "Sin datos" }; // Gris
+    if (!fechaISO) return { color: "#4b5563", texto: "Sin datos" }; 
     
     const ahora = new Date();
     const ultimoMov = new Date(fechaISO);
     const difMin = Math.floor((ahora - ultimoMov) / 1000 / 60);
 
-    if (difMin <= 10) return { color: "#10b981", texto: "Activo ahora" }; // Verde
-    if (difMin <= 45) return { color: "#fbbf24", texto: "Inactivo reciente" }; // Amarillo
-    return { color: "#ef4444", texto: "Desconectado" }; // Rojo
+    if (difMin <= 10) return { color: "#10b981", texto: "Activo ahora" }; 
+    if (difMin <= 45) return { color: "#fbbf24", texto: "Inactivo reciente" }; 
+    return { color: "#ef4444", texto: "Desconectado" }; 
 }
 
 async function cargarTodo() {
-    // Seguridad: Solo gerente ve esto
     if (s.rol !== "gerente") {
         document.body.innerHTML = "<h2 style='color:white; text-align:center; margin-top:50px;'>⛔ Acceso Restringido</h2>";
         return;
     }
 
-    // 1. CARGA DE DATOS (Optimizada)
-    // Usamos Promise.all para hacer todas las consultas juntas y que cargue rápido
+    // 1. CARGA DE DATOS
     const [resAsignado, resHechos, resCuentas, resLogs] = await Promise.all([
         sb.from("usuarios_asignado").select("*").lte("fecha_desde", today).gte("fecha_hasta", today),
         sb.from("marketplace_actividad").select("usuario, facebook_account_usada").eq("fecha_publicacion", today),
         sb.from("cuentas_facebook").select("ocupada_por").eq("estado", "ocupada"),
-        // IMPORTANTE: Traemos 'created_at' para la hora exacta
         sb.from("usuarios_actividad")
           .select("usuario, facebook_account_usada, created_at")
           .filter("created_at", "gte", `${today}T00:00:00`) 
@@ -46,7 +42,7 @@ async function cargarTodo() {
     const cuentas = resCuentas.data || [];
     const logs = resLogs.data || [];
 
-    // 2. RENDERIZAR SEMÁFORO Y RENDIMIENTO (Arriba)
+    // 2. RENDERIZAR SEMÁFORO
     const flujoContainer = $("flujo-actividad");
     if (flujoContainer) {
         flujoContainer.innerHTML = "";
@@ -56,12 +52,10 @@ async function cargarTodo() {
         }
 
         asignaciones.forEach(asig => {
-            // Cálculos
             const pubUser = hechos.filter(h => h.usuario === asig.usuario);
             const cuentasUsadas = [...new Set(pubUser.map(p => p.facebook_account_usada))].length;
             const totalCuentas = cuentas.filter(c => c.ocupada_por === asig.usuario).length;
             
-            // Buscamos su último movimiento real
             const ultimoLog = logs.find(l => l.usuario === asig.usuario);
             const sem = obtenerSemaforo(ultimoLog?.created_at);
 
@@ -84,7 +78,7 @@ async function cargarTodo() {
         });
     }
 
-    // 3. RENDERIZAR TABLA DE LOGS (Abajo - HORA CORREGIDA)
+    // 3. RENDERIZAR TABLA DE LOGS
     const tablaLogs = $("asistencia-logs");
     if (tablaLogs) {
         tablaLogs.innerHTML = "";
@@ -95,19 +89,16 @@ async function cargarTodo() {
         }
 
         logs.forEach(l => {
-            // CORRECCIÓN DE HORA: Usamos created_at y forzamos zona horaria local
             const fechaObj = new Date(l.created_at);
+            
+            // CORRECCIÓN: Forzamos Zona Horaria de Buenos Aires
             const horaLocal = fechaObj.toLocaleTimeString('es-AR', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                hour12: false
+                timeZone: 'America/Argentina/Buenos_Aires', 
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
             });
 
-            // Íconos visuales
             let icon = "⚠️";
             let color = "#e2e8f0";
-            
             const accion = (l.facebook_account_usada || "").toUpperCase();
             if (accion.includes("INGRESO") || accion.includes("ENTRÓ")) { icon = "🟢"; color = "#4ade80"; }
             else if (accion.includes("TOMÓ")) { icon = "🤚"; color = "#fbbf24"; }
@@ -125,6 +116,5 @@ async function cargarTodo() {
     }
 }
 
-// Auto-refresco cada 30 segundos
 setInterval(cargarTodo, 30000);
 cargarTodo();
