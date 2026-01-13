@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Gestionar Publicaciones | Marketplace Manager</title>
+    <link rel="stylesheet" href="../../assets/css/app.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../assets/js/supabase.js"></script>
+</head>
+<body>
+    <div class="layout">
+        <div id="sidebar-host"></div>
+        <main class="content">
+            <h1>📸 Gestionar Recursos Extra</h1>
+            <p class="muted">Sube los CSV para Historias, Grupos y Muro.</p>
+
+            <section class="card">
+                <h3>1. Descargar Plantilla</h3>
+                <p class="muted" style="font-size:0.9rem;">El CSV debe tener estas columnas: <code>url_img_historia, url_img_grupo, url_img_muro, texto_muro, texto_grupo</code></p>
+                <button id="btn-plantilla" class="btn2">📥 Descargar Plantilla Ejemplo</button>
+            </section>
+
+            <section class="card" style="margin-top:20px;">
+                <h3>2. Subir Archivo a Categoría</h3>
+                
+                <label>Seleccionar Categoría</label>
+                <select id="sel-categoria" style="width:100%; padding:10px; margin-bottom:15px; background:#0f172a; color:white; border:1px solid #334155; border-radius:6px;"></select>
+
+                <label>Archivo CSV</label>
+                <input type="file" id="inp-file" accept=".csv" style="width:100%; margin-bottom:15px;">
+
+                <button id="btn-upload" class="btn" style="width:100%;">☁️ Subir y Asignar</button>
+                <div id="upload-status" style="margin-top:10px; font-weight:bold;"></div>
+            </section>
+        </main>
+    </div>
+    <script type="module" src="./gestionar.js"></script>
+</body>
+</html>

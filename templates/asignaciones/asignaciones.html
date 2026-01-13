@@ -1,94 +1,114 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Asignaciones | Marketplace Manager</title>
-  <link rel="stylesheet" href="../../assets/css/app.css" />
-  
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../../assets/js/supabase.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asignaciones | Marketplace Manager</title>
+    <link rel="stylesheet" href="../../assets/css/app.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../assets/js/supabase.js"></script>
+    <style>
+        /* Estilos del Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(2px);
+            display: none; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .modal-content {
+            background: #1e293b; padding: 25px; border-radius: 12px;
+            width: 90%; max-width: 500px; border: 1px solid #334155;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            max-height: 90vh; overflow-y: auto; /* Scroll si es muy alto */
+        }
+        .hidden { display: none !important; }
+        label { display: block; margin-bottom: 4px; color: #94a3b8; font-size: 0.85rem; }
+        input, select { 
+            width: 100%; padding: 8px; margin-bottom: 12px; 
+            background: #0f172a; border: 1px solid #334155; color: white; border-radius: 6px; 
+        }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .action-btn { cursor: pointer; padding: 4px 8px; border-radius: 4px; border: none; font-weight: bold; font-size: 0.8rem; }
+        .btn-edit { background: #f59e0b; color: black; margin-right: 5px; }
+        .btn-del { background: #ef4444; color: white; }
+    </style>
 </head>
 <body>
+    <div class="layout">
+        <div id="sidebar-host"></div>
+        <main class="content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h1>📅 Asignación de Tareas</h1>
+                <button id="btn-nuevo" class="btn" style="background:#3b82f6;">+ Nueva Asignación</button>
+            </div>
 
-  <div class="layout">
-    <div id="sidebar-host"></div>
+            <section class="card">
+                <table class="table" style="width:100%; text-align:left; border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:1px solid rgba(255,255,255,0.1); color:#94a3b8;">
+                            <th style="padding:10px;">Usuario</th>
+                            <th style="padding:10px;">Categoría</th>
+                            <th style="padding:10px;">Fechas</th>
+                            <th style="padding:10px;">Objetivos (M/G/H/W)</th>
+                            <th style="padding:10px; text-align:right;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lista-asignaciones">
+                        </tbody>
+                </table>
+            </section>
+        </main>
+    </div>
 
-    <main class="content">
-      <div class="title">📅 Asignación de Tareas</div>
-      <div class="muted">Define objetivos diarios por operador y categoría.</div>
-
-      <div class="card" style="margin-top: 20px; border-left: 5px solid #10b981;">
-        <h3 style="margin-top:0;">Nueva Asignación</h3>
-        
-        <div class="row" style="gap: 15px;">
-          <div style="flex:1;">
+    <div id="modal-asignacion" class="modal-overlay">
+        <div class="modal-content">
+            <h2 id="modal-titulo" style="margin-top:0;">Nueva Asignación</h2>
+            
             <label>Operador</label>
-            <select id="sel-operador">
-              <option value="">Cargando...</option>
-            </select>
-          </div>
-          <div style="flex:1;">
+            <select id="sel-usuario"></select>
+
             <label>Categoría</label>
-            <select id="sel-categoria">
-              <option value="">Cargando...</option>
-            </select>
-          </div>
+            <select id="sel-categoria"></select>
+
+            <div class="grid-2">
+                <div>
+                    <label>Desde</label>
+                    <input type="date" id="inp-desde">
+                </div>
+                <div>
+                    <label>Hasta</label>
+                    <input type="date" id="inp-hasta">
+                </div>
+            </div>
+
+            <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:10px 0;">
+            <label style="color:#60a5fa; font-weight:bold;">Objetivos Diarios (Cantidad)</label>
+
+            <div class="grid-2">
+                <div>
+                    <label>🛒 Marketplace</label>
+                    <input type="number" id="inp-daily-mp" value="1" min="0">
+                </div>
+                <div>
+                    <label>👥 Grupos</label>
+                    <input type="number" id="inp-daily-grupos" value="0" min="0">
+                </div>
+                <div>
+                    <label>📖 Historias</label>
+                    <input type="number" id="inp-daily-historia" value="0" min="0">
+                </div>
+                <div>
+                    <label>🏠 Muro</label>
+                    <input type="number" id="inp-daily-muro" value="0" min="0">
+                </div>
+            </div>
+
+            <div style="display:flex; gap:10px; margin-top:15px;">
+                <button id="btn-guardar" class="btn" style="width:100%;">💾 Guardar</button>
+                <button id="btn-cancelar" class="btn2" style="width:100%;">Cancelar</button>
+            </div>
         </div>
+    </div>
 
-        <div class="row" style="gap: 15px; margin-top: 10px;">
-          <div style="flex:1;">
-            <label>Desde</label>
-            <input type="date" id="date-desde" />
-          </div>
-          <div style="flex:1;">
-            <label>Hasta</label>
-            <input type="date" id="date-hasta" />
-          </div>
-        </div>
-
-        <label style="margin-top:15px; display:block; font-weight:bold;">Objetivos Diarios (Cantidad)</label>
-        <div class="row" style="gap: 10px;">
-          <div>
-            <span class="muted" style="font-size:0.8rem">Marketplace</span>
-            <input type="number" id="num-marketplace" value="10" style="width: 80px;" />
-          </div>
-          <div>
-            <span class="muted" style="font-size:0.8rem">Grupos</span>
-            <input type="number" id="num-grupos" value="5" style="width: 80px;" />
-          </div>
-          <div>
-            <span class="muted" style="font-size:0.8rem">Historias</span>
-            <input type="number" id="num-historia" value="0" style="width: 80px;" />
-          </div>
-          <div>
-            <span class="muted" style="font-size:0.8rem">Muro</span>
-            <input type="number" id="num-muro" value="0" style="width: 80px;" />
-          </div>
-        </div>
-
-        <button id="btn-asignar" class="btn" style="margin-top: 15px; background: #10b981; border:none; width:100%;"> Confirmar Asignación</button>
-      </div>
-
-      <div class="card" style="margin-top: 20px;">
-        <h3 style="margin-top:0;">Asignaciones Vigentes</h3>
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Operador</th>
-              <th>Categoría</th>
-              <th>Fechas</th>
-              <th>Objetivos (M/G/H/M)</th>
-              <th>Acción</th>
-            </tr>
-          </thead>
-          <tbody id="tabla-asignaciones"></tbody>
-        </table>
-      </div>
-
-    </main>
-  </div>
-
-  <script type="module" src="asignaciones.js"></script>
+    <script type="module" src="./asignacion.js"></script>
 </body>
 </html>

@@ -1,69 +1,84 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Usuarios | Marketplace Manager</title>
-  <link rel="stylesheet" href="../../assets/css/app.css" />
-  
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../../assets/js/supabase.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Usuarios | Marketplace Manager</title>
+    <link rel="stylesheet" href="../../assets/css/app.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../assets/js/supabase.js"></script>
+    <style>
+        /* Estilos del Modal */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(2px);
+            display: none; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .modal-content {
+            background: #1e293b; padding: 25px; border-radius: 12px;
+            width: 90%; max-width: 400px; border: 1px solid #334155;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+        .hidden { display: none !important; }
+        label { display: block; margin-bottom: 5px; color: #94a3b8; font-size: 0.9rem; }
+        input, select { 
+            width: 100%; padding: 10px; margin-bottom: 15px; 
+            background: #0f172a; border: 1px solid #334155; color: white; border-radius: 6px; 
+        }
+        .action-btn { cursor: pointer; padding: 5px 10px; border-radius: 4px; border: none; font-weight: bold; }
+        .btn-edit { background: #f59e0b; color: black; margin-right: 5px; }
+        .btn-del { background: #ef4444; color: white; }
+    </style>
 </head>
 <body>
+    <div class="layout">
+        <div id="sidebar-host"></div>
+        <main class="content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h1>👥 Gestión de Equipo</h1>
+                <button id="btn-nuevo" class="btn" style="background:#3b82f6;">+ Nuevo Usuario</button>
+            </div>
 
-  <div class="layout">
-    <div id="sidebar-host"></div>
+            <section class="card">
+                <table class="table" style="width:100%; text-align:left; border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:1px solid rgba(255,255,255,0.1); color:#94a3b8;">
+                            <th style="padding:10px;">Usuario</th>
+                            <th style="padding:10px;">Contraseña</th>
+                            <th style="padding:10px;">Rol</th>
+                            <th style="padding:10px; text-align:right;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lista-usuarios">
+                        </tbody>
+                </table>
+            </section>
+        </main>
+    </div>
 
-    <main class="content">
-      <div class="title">👥 Gestión de Usuarios</div>
-      <div class="muted">Crea cuentas para operadores o nuevos gerentes.</div>
+    <div id="modal-usuario" class="modal-overlay">
+        <div class="modal-content">
+            <h2 id="modal-titulo" style="margin-top:0;">Nuevo Usuario</h2>
+            
+            <label>Nombre de Usuario</label>
+            <input type="text" id="inp-usuario" placeholder="Ej: juan.perez">
 
-      <div class="card" style="margin-top: 20px; border-left: 5px solid #3b82f6;">
-        <h3 style="margin-top:0;">✨ Nuevo Usuario</h3>
-        <div class="row" style="gap: 10px; align-items: flex-end;">
-          
-          <div style="flex: 1;">
-            <label>Usuario</label>
-            <input id="new-user" type="text" placeholder="Ej: operador5" />
-          </div>
-
-          <div style="flex: 1;">
             <label>Contraseña</label>
-            <input id="new-pass" type="text" placeholder="Contraseña123" />
-          </div>
+            <input type="text" id="inp-pass" placeholder="Contraseña">
 
-          <div style="width: 150px;">
             <label>Rol</label>
-            <select id="new-rol">
-              <option value="operador">Operador</option>
-              <option value="gerente">Gerente</option>
+            <select id="sel-rol">
+                <option value="operador">Operador</option>
+                <option value="gerente">Gerente</option>
             </select>
-          </div>
 
-          <button id="btn-crear" class="btn" style="margin:0; height: 42px;">Crear Usuario</button>
+            <div style="display:flex; gap:10px; margin-top:10px;">
+                <button id="btn-guardar" class="btn" style="width:100%;">💾 Guardar</button>
+                <button id="btn-cancelar" class="btn2" style="width:100%;">Cancelar</button>
+            </div>
         </div>
-      </div>
+    </div>
 
-      <div class="card" style="margin-top: 20px;">
-        <h3 style="margin-top:0;">📋 Lista de Personal</h3>
-        <table class="table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Usuario</th>
-              <th>Contraseña</th>
-              <th>Rol</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="tabla-usuarios">
-            </tbody>
-        </table>
-      </div>
-
-    </main>
-  </div>
-
-  <script type="module" src="usuarios.js"></script>
+    <script type="module" src="./usuarios.js"></script>
 </body>
 </html>

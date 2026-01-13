@@ -3,81 +3,131 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Diario Pro | Marketplace Manager</title>
+    <title>Diario Inteligente | Marketplace Manager</title>
     <link rel="stylesheet" href="../../assets/css/app.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../../assets/js/supabase.js"></script>
+    <style>
+        .progress-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; margin-bottom: 10px; }
+        .stat-number { font-size: 1.2rem; font-weight: bold; color: #fff; }
+        .stat-label { font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; }
+        
+        /* Estilos de Inputs para Copiar */
+        .copy-group { position: relative; margin-bottom: 15px; }
+        .copy-group label { display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .copy-group textarea, .copy-group input { 
+            width: 100%; background: #0f172a; border: 1px solid #334155; 
+            color: #e2e8f0; padding: 10px; padding-right: 60px; /* Espacio para el botón */
+            border-radius: 6px; font-family: inherit; font-size: 0.9rem;
+        }
+        .copy-btn {
+            position: absolute; right: 5px; top: 28px;
+            background: rgba(255,255,255,0.1); border: none; color: white;
+            padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: bold;
+        }
+        .copy-btn:hover { background: #3b82f6; }
+
+        /* Pills de estado */
+        .status-pill { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; }
+        .status-pending { background: #f59e0b; color: #000; }
+        .status-ok { background: #10b981; color: #fff; }
+    </style>
 </head>
 <body>
     <div class="layout">
         <div id="sidebar-host"></div>
         <main class="content">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <h1>📅 Diario de Trabajo</h1>
-                <div id="status-fichaje" class="pill" style="background:#10b981;">🟢 En línea</div>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <div>
+                    <h1 style="margin:0;">📅 Diario de Operaciones</h1>
+                    <div id="subtitle" class="muted">Cargando...</div>
+                </div>
+                <div id="status-fichaje" class="pill" style="background:#10b981;">🟢 En Turno</div>
             </div>
-            <div class="muted" id="subtitle" style="margin-bottom:20px;"></div>
 
-            <div class="grid" style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 20px;">
-                <section class="card">
-                    <h3 style="margin-top:0;">📦 Recursos del CSV</h3>
-                    <p class="muted" style="font-size:0.85rem;">Hacé clic para copiar los datos asignados.</p>
+            <div id="error-bloqueo" style="display:none; text-align:center; padding:40px; background:rgba(239,68,68,0.1); border:1px solid #ef4444; border-radius:12px;">
+                <h2 style="color:#ef4444;">⛔ No tienes asignación hoy</h2>
+                <p>El sistema no detecta tareas programadas para tu usuario en esta fecha.</p>
+            </div>
+
+            <div id="main-dashboard" class="grid" style="display:none; grid-template-columns: 1fr 1.6fr; gap: 20px;">
+                
+                <section class="card" style="height: fit-content;">
+                    <h3 style="margin-top:0;">📊 Tu Progreso Hoy</h3>
                     
-                    <div id="loader-csv" style="display:none; color:#60a5fa;">⏳ Cargando recursos...</div>
+                    <div class="progress-card">
+                        <div class="stat-label">Categoría Asignada</div>
+                        <div id="lbl-categoria-asignada" class="stat-number" style="color:#60a5fa;">...</div>
+                    </div>
 
-                    <div id="recursos-container" style="display:flex; flex-direction:column; gap:10px;">
-                        <div>
-                            <label style="font-size:0.75rem;">TÍTULO (CSV)</label>
-                            <div style="display:flex; gap:5px;">
-                                <input id="csv-titulo" readonly style="background:rgba(0,0,0,0.2); cursor:default;">
-                                <button class="btn2" onclick="copy('csv-titulo')">📋</button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <label style="font-size:0.75rem;">DESCRIPCIÓN (CSV)</label>
-                            <textarea id="csv-desc" readonly style="height:80px; background:rgba(0,0,0,0.2); cursor:default;"></textarea>
-                            <button class="btn2" style="width:100%; margin-top:5px;" onclick="copy('csv-desc')">📋 Copiar Descripción</button>
-                        </div>
-
-                        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-                            <div>
-                                <label style="font-size:0.75rem;">CATEGORÍA FB</label>
-                                <input id="csv-cat" readonly style="background:rgba(0,0,0,0.2);">
-                            </div>
-                            <div>
-                                <label style="font-size:0.75rem;">ETIQUETAS</label>
-                                <input id="csv-tags" readonly style="background:rgba(0,0,0,0.2);">
-                            </div>
-                        </div>
-                        <button class="btn2" style="width:100%;" onclick="copy('csv-tags')">📋 Copiar Etiquetas</button>
-
-                        <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:10px 0;">
-                        
-                        <label style="font-size:0.75rem;">📸 IMÁGENES</label>
-                        <button id="btnDownloadImgs" class="btn" style="background:#4f46e5; width:100%;">📥 Descargar Todo (ZIP/Fotos)</button>
+                    <h4 style="margin-bottom:10px; font-size:0.8rem; text-transform:uppercase; color:#94a3b8; border-bottom:1px solid #334155; padding-bottom:5px;">
+                        Estado por Cuenta
+                    </h4>
+                    <div id="cuentas-container" style="display:flex; flex-direction:column; gap:8px;">
+                        <div class="muted">Calculando...</div>
                     </div>
                 </section>
 
                 <section class="card">
-                    <h3 style="margin-top:0;">🚀 Reportar Publicación</h3>
-                    <label>Categoría del Sistema</label>
-                    <select id="categoriaSelect" style="margin-bottom:15px;"></select>
-
-                    <label>Link Marketplace (Obligatorio)</label>
-                    <input id="link" placeholder="https://www.facebook.com/marketplace/item/..." style="border: 1px solid #4b5563;">
-
-                    <div style="margin-top:20px; display:flex; gap:10px;">
-                        <button class="btn" id="btnSave" style="flex:2;">✅ Guardar y Siguiente</button>
-                        <button class="btn2" id="btnNew" style="flex:1;">🔄 Rotar Título</button>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+                        <h3 style="margin:0;">📦 Recursos para Publicar</h3>
+                        <div style="display:flex; gap:10px;">
+                             <button id="btn-download-img" class="btn2" style="background:#6366f1;">📸 Bajar Fotos</button>
+                             <button id="btn-rotar" class="btn2">🔄 Cambiar Opción</button>
+                        </div>
                     </div>
 
-                    <div style="margin-top:20px; border-top:1px solid rgba(255,255,255,0.1); padding-top:15px;">
-                        <div style="font-weight:bold; font-size:0.8rem; margin-bottom:10px;">HISTORIAL RECIENTE</div>
-                        <div id="log" class="log" style="height:120px; font-size:0.75rem; overflow-y:auto;"></div>
+                    <div id="loader-csv" style="display:none; color:#60a5fa; margin-bottom:10px; font-size:0.9rem;">
+                        ⏳ Descargando CSV asignado del servidor...
                     </div>
+
+                    <div class="copy-group">
+                        <label>Título</label>
+                        <input id="csv-titulo" readonly>
+                        <button class="copy-btn" onclick="copiar('csv-titulo')">COPIAR</button>
+                        <div id="titulo-aviso" style="font-size:0.75rem; margin-top:4px; text-align:right;"></div>
+                    </div>
+
+                    <div class="copy-group">
+                        <label>Descripción</label>
+                        <textarea id="csv-desc" readonly style="height:80px;"></textarea>
+                        <button class="copy-btn" onclick="copiar('csv-desc')">COPIAR</button>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+                        <div class="copy-group">
+                            <label>Categoría (FB)</label>
+                            <input id="csv-cat-fb" readonly>
+                            <button class="copy-btn" onclick="copiar('csv-cat-fb')">COPIAR</button>
+                        </div>
+                        <div class="copy-group">
+                            <label>Etiquetas</label>
+                            <input id="csv-tags" readonly>
+                            <button class="copy-btn" onclick="copiar('csv-tags')">COPIAR</button>
+                        </div>
+                    </div>
+
+                    <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:20px 0;">
+
+                    <h3 style="font-size:1rem; margin-bottom:10px;">🚀 Confirmar Tarea</h3>
+                    <div style="background:rgba(0,0,0,0.3); padding:15px; border-radius:8px;">
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:5px;">¿Qué cuenta usaste?</label>
+                            <select id="sel-cuenta-usada" style="width:100%; padding:8px; background:#1e293b; border:1px solid #475569; color:white; border-radius:4px;">
+                                <option>Cargando cuentas...</option>
+                            </select>
+                        </div>
+                        <div style="margin-bottom:15px;">
+                            <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:5px;">Pegar Link de Marketplace</label>
+                            <input id="inp-link" placeholder="https://www.facebook.com/marketplace/item/..." style="width:100%; padding:8px; background:#1e293b; border:1px solid #475569; color:white; border-radius:4px;">
+                        </div>
+                        <button id="btn-save" class="btn" style="width:100%; background:#10b981;">✅ Guardar y Descontar</button>
+                    </div>
+
                 </section>
             </div>
+
         </main>
     </div>
     <script type="module" src="./logica.js"></script>

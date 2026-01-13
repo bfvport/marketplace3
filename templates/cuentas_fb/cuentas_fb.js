@@ -14,7 +14,7 @@ const tbody = document.getElementById("cuentas_facebook");
 const session = JSON.parse(localStorage.getItem("mp_session_v1") || "{}");
 let cuentaEditandoId = null;
 
-// ✨ NUEVA FUNCIÓN: Limpia todos los campos del tirón
+// NUEVA FUNCIÓN: Limpia todos los campos del tirón
 function limpiarFormulario() {
   $("#email").value = "";
   $("#contra").value = "";
@@ -29,7 +29,7 @@ function limpiarFormulario() {
 async function cargarCuentas() {
   if (!supabase || !session.usuario) return;
 
-  // 🛡️ FILTRO: El gerente ve todo, el operador solo lo que tiene su nombre
+  // FILTRO: El gerente ve todo, el operador solo lo que tiene su nombre
   let query = supabase.from("cuentas_facebook").select("*");
   if (session.rol !== "gerente") {
     query = query.eq("ocupada_por", session.usuario);
@@ -41,6 +41,13 @@ async function cargarCuentas() {
   tbody.innerHTML = "";
   (data || []).forEach(cuenta => {
     const textoBoton = session.rol === 'gerente' ? 'Editar' : 'Ver datos';
+    
+    // --- CAMBIO SOLICITADO ---
+    // En lugar de "Asignada", mostramos el NOMBRE del operador.
+    const etiquetaOcupada = cuenta.ocupada_por 
+        ? `<span class="badge" style="background-color: #f59e0b; color: black;">👤 ${cuenta.ocupada_por}</span>`
+        : `<span class="badge" style="background-color: #10b981; color: white;">🟢 Libre</span>`;
+
     const tr = document.createElement("tr");
     tr.innerHTML = `
       <td>${cuenta.id}</td>
@@ -49,9 +56,7 @@ async function cargarCuentas() {
       <td style="color: #60a5fa; font-weight: bold;">${cuenta.two_fa || '-'}</td>
       <td><span class="badge ${cuenta.estado}">${cuenta.estado}</span></td>
       <td><span class="badge ${cuenta.calidad || 'frio'}">${cuenta.calidad || 'frio'}</span></td>
-      <td><span class="badge ${cuenta.ocupada_por ? 'activo' : 'inactivo'}">
-        ${cuenta.ocupada_por ? 'Asignada' : 'Libre'}
-      </span></td>
+      <td>${etiquetaOcupada}</td>
       <td>
         <button class="btn edit" data-id="${cuenta.id}">${textoBoton}</button>
         ${session.rol === 'gerente' ? `<button class="btn danger" data-id="${cuenta.id}">Eliminar</button>` : ''}
@@ -67,9 +72,10 @@ function openModal(data = null) {
   const esGerente = session.rol === "gerente";
 
   // Bloqueamos los campos si es operador para que solo pueda VER
-  ["#email", "#contra", "#nombre", "#two_fa"].forEach(id => $(id).readOnly = !esGerente);
-  ["#estado", "#calidad", "#ocupada_por"].forEach(id => $(id).disabled = !esGerente);
-  $("#guardar").style.display = esGerente ? "block" : "none";
+  ["#email", "#contra", "#nombre", "#two_fa"].forEach(id => { if($(id)) $(id).readOnly = !esGerente; });
+  ["#estado", "#calidad", "#ocupada_por"].forEach(id => { if($(id)) $(id).disabled = !esGerente; });
+  
+  if ($("#guardar")) $("#guardar").style.display = esGerente ? "block" : "none";
 
   if (data) {
     $("#email").value = data.email || "";
@@ -81,7 +87,7 @@ function openModal(data = null) {
     $("#ocupada_por").value = data.ocupada_por || "";
     cuentaEditandoId = data.id;
   } else {
-    limpiarFormulario(); // ✅ Limpia si es cuenta nueva
+    limpiarFormulario(); //Limpia si es cuenta nueva
   }
 }
 
@@ -99,14 +105,14 @@ document.addEventListener("DOMContentLoaded", async () => {
       sel.innerHTML = '<option value="">Libre</option>';
       (data || []).forEach(u => sel.innerHTML += `<option value="${u.usuario}">${u.usuario}</option>`);
     }
-    $("#btn-nueva").onclick = () => { limpiarFormulario(); openModal(); };
+    if($("#btn-nueva")) $("#btn-nueva").onclick = () => { limpiarFormulario(); openModal(); };
   } else {
     if ($("#btn-nueva")) $("#btn-nueva").style.display = "none";
   }
 
-  $("#cancelar").onclick = () => { $("#modal-cuenta").classList.add("hidden"); limpiarFormulario(); };
+  if($("#cancelar")) $("#cancelar").onclick = () => { $("#modal-cuenta").classList.add("hidden"); limpiarFormulario(); };
 
-  $("#guardar").onclick = async () => {
+  if($("#guardar")) $("#guardar").onclick = async () => {
     if (session.rol !== "gerente") return;
     const payload = {
       email: $("#email").value.trim(), contra: $("#contra").value.trim(),
@@ -121,7 +127,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     
     if (!error) { 
       $("#modal-cuenta").classList.add("hidden"); 
-      limpiarFormulario(); // ✅ Limpia después de guardar exitosamente
+      limpiarFormulario(); // Limpia después de guardar exitosamente
       await cargarCuentas(); 
     }
   };
