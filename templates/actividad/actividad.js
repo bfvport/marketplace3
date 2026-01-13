@@ -23,6 +23,24 @@ function obtenerSemaforo(fechaISO) {
     return { color: "#ef4444", texto: "Desconectado" };
 }
 
+// Cargar Sidebar
+await loadSidebar({ activeKey: "actividad", basePath: "../" });
+
+// Función para calcular estado (Verde/Amarillo/Rojo)
+function obtenerSemaforo(fechaISO) {
+    if (!fechaISO) return { color: "#4b5563", texto: "Sin datos" };
+    const ahora = new Date();
+    const ultimoMov = new Date(fechaISO);
+    // Ajuste manual de zona horaria para comparar bien
+    ultimoMov.setHours(ultimoMov.getHours() - 3); 
+    
+    const difMin = Math.floor((ahora - ultimoMov) / 1000 / 60);
+
+    if (difMin <= 10) return { color: "#10b981", texto: "Activo ahora" };
+    if (difMin <= 45) return { color: "#fbbf24", texto: "Inactivo reciente" };
+    return { color: "#ef4444", texto: "Desconectado" };
+}
+
 (async function init() {
     await loadSidebar({ activeKey: "diario", basePath: "../" });
 
