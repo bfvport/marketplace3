@@ -5,19 +5,22 @@ const sb = window.supabaseClient;
 const $ = (id) => document.getElementById(id);
 const today = fmtDateISO(new Date());
 
+// Cargar Sidebar
 await loadSidebar({ activeKey: "actividad", basePath: "../" });
 
-// --- SEMÁFORO DE ACTIVIDAD ---
+// Función para calcular estado (Verde/Amarillo/Rojo)
 function obtenerSemaforo(fechaISO) {
-    if (!fechaISO) return { color: "#4b5563", texto: "Sin datos" }; 
-    
+    if (!fechaISO) return { color: "#4b5563", texto: "Sin datos" };
     const ahora = new Date();
     const ultimoMov = new Date(fechaISO);
+    // Ajuste manual de zona horaria para comparar bien
+    ultimoMov.setHours(ultimoMov.getHours() - 3); 
+    
     const difMin = Math.floor((ahora - ultimoMov) / 1000 / 60);
 
-    if (difMin <= 10) return { color: "#10b981", texto: "Activo ahora" }; 
-    if (difMin <= 45) return { color: "#fbbf24", texto: "Inactivo reciente" }; 
-    return { color: "#ef4444", texto: "Desconectado" }; 
+    if (difMin <= 10) return { color: "#10b981", texto: "Activo ahora" };
+    if (difMin <= 45) return { color: "#fbbf24", texto: "Inactivo reciente" };
+    return { color: "#ef4444", texto: "Desconectado" };
 }
 
 async function cargarTodo() {
@@ -42,7 +45,7 @@ async function cargarTodo() {
     const cuentas = resCuentas.data || [];
     const logs = resLogs.data || [];
 
-    // 2. RENDERIZAR SEMÁFORO
+    // 2. RENDERIZAR SEMÁFORO (Arriba)
     const flujoContainer = $("flujo-actividad");
     if (flujoContainer) {
         flujoContainer.innerHTML = "";
@@ -78,7 +81,7 @@ async function cargarTodo() {
         });
     }
 
-    // 3. RENDERIZAR TABLA DE LOGS
+    // 3. RENDERIZAR TABLA DE LOGS (Abajo)
     const tablaLogs = $("asistencia-logs");
     if (tablaLogs) {
         tablaLogs.innerHTML = "";
@@ -89,13 +92,15 @@ async function cargarTodo() {
         }
 
         logs.forEach(l => {
-            const fechaObj = new Date(l.created_at);
-            
-            // CORRECCIÓN: Forzamos Zona Horaria de Buenos Aires
-            const horaLocal = fechaObj.toLocaleTimeString('es-AR', {
-                timeZone: 'America/Argentina/Buenos_Aires', 
+            // --- CORRECCIÓN DE HORA MANUAL ---
+            const fecha = new Date(l.created_at);
+            // Restamos 3 horas a la fuerza para Argentina
+            fecha.setHours(fecha.getHours() - 3);
+
+            const horaLocal = fecha.toLocaleTimeString('es-AR', {
                 hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
             });
+            // ---------------------------------
 
             let icon = "⚠️";
             let color = "#e2e8f0";
@@ -116,5 +121,6 @@ async function cargarTodo() {
     }
 }
 
+// Auto-refresco cada 30 segundos
 setInterval(cargarTodo, 30000);
 cargarTodo();

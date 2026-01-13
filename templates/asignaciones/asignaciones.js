@@ -6,32 +6,33 @@ const $ = (id) => document.getElementById(id);
 
 let asignacionEditandoID = null;
 
-// Ejecución inicial protegida
+// FUNCIÓN DE INICIO BLINDADA
 (async function init() {
     try {
-        // CORRECCIÓN: 'activeKey' coincide con 'data-nav' en sidebar.html (plural)
+        // 1. Cargar Sidebar (Clave correcta: 'asignaciones')
         await loadSidebar({ activeKey: "asignaciones", basePath: "../" });
 
+        // 2. Verificar Rol
         if (s.rol !== "gerente") {
             document.querySelector(".content").innerHTML = "<h2 style='text-align:center;'>⛔ Acceso Restringido</h2>";
             return;
         }
 
+        // 3. Cargar Datos
         await cargarSelects();
         await cargarTabla();
 
-        // Activamos botones si existen en el DOM
+        // 4. Activar Botones
         if($("btn-nuevo")) $("btn-nuevo").onclick = abrirModalCrear;
         if($("btn-cancelar")) $("btn-cancelar").onclick = cerrarModal;
         if($("btn-guardar")) $("btn-guardar").onclick = guardarAsignacion;
 
     } catch (e) {
-        console.error("Error iniciando Asignaciones:", e);
+        console.error("Error iniciando:", e);
         alert("Error cargando la página. Verifica la consola.");
     }
 })();
 
-// --- CARGAR SELECTS ---
 async function cargarSelects() {
     const selUser = $("sel-usuario");
     const selCat = $("sel-categoria");
@@ -48,15 +49,22 @@ async function cargarSelects() {
     (cats || []).forEach(c => selCat.innerHTML += `<option value="${c.nombre}">${c.nombre}</option>`);
 }
 
-// --- CARGAR TABLA ---
 async function cargarTabla() {
     const tbody = $("lista-asignaciones");
     if (!tbody) return;
 
+    // Mensaje de carga para que no parezca que no funciona
+    tbody.innerHTML = "<tr><td colspan='5' style='text-align:center'>⏳ Cargando datos...</td></tr>";
+
     const { data, error } = await sb.from("usuarios_asignado").select("*").order("fecha_desde", { ascending: false });
+
     if (error) {
-        console.error(error);
-        tbody.innerHTML = "<tr><td colspan='5'>Error cargando datos</td></tr>";
+        tbody.innerHTML = `<tr><td colspan='5' style='color:red'>Error: ${error.message}</td></tr>`;
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan='5' style='text-align:center; color:#fbbf24'>⚠️ No hay asignaciones creadas. Pulsa el botón azul.</td></tr>`;
         return;
     }
 
@@ -86,10 +94,10 @@ async function cargarTabla() {
     document.querySelectorAll(".btn-del").forEach(btn => btn.onclick = () => eliminarAsignacion(btn.dataset.id));
 }
 
-// --- FUNCIONES MODAL ---
+// FUNCIONES DEL MODAL
 function abrirModalCrear() {
     asignacionEditandoID = null;
-    if($("modal-titulo")) $("modal-titulo").textContent = "Nueva Asignación";
+    $("modal-titulo").textContent = "Nueva Asignación";
     $("inp-daily-mp").value = 1;
     $("inp-daily-grupos").value = 0;
     $("inp-daily-historia").value = 0;
@@ -107,8 +115,7 @@ function abrirModalEditar(id, listaDatos) {
     if (!item) return;
 
     asignacionEditandoID = id;
-    if($("modal-titulo")) $("modal-titulo").textContent = "Editar Asignación";
-    
+    $("modal-titulo").textContent = "Editar Asignación";
     $("sel-usuario").value = item.usuario;
     $("sel-categoria").value = item.categoria;
     $("inp-desde").value = item.fecha_desde;
@@ -125,7 +132,6 @@ function cerrarModal() {
     $("modal-asignacion").style.display = "none";
 }
 
-// --- GUARDAR ---
 async function guardarAsignacion() {
     const payload = {
         usuario: $("sel-usuario").value,
