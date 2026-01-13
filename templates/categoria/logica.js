@@ -196,7 +196,14 @@ async function guardarCategoria(sb, session) {
         .update({ nombre, mensaje, etiquetas })
         .eq("id", Number(id));
 
-      if (error) throw error;
+      if (error) {
+        // Manejo específico del error de foreign key
+        if (error.message.includes("violates foreign key constraint") && 
+            error.message.includes("usuarios_asignado_categoria_fkey")) {
+          throw new Error("❌ No se puede actualizar: esta categoría está asignada a usuarios. Primero desasignala.");
+        }
+        throw error;
+      }
 
       log(`✅ Actualizada OK`);
     }
@@ -336,17 +343,32 @@ function descargarPlantilla() {
     "url_img_fijas_4",
     "url_imagenes_portadas"
   ];
-  const csv = headers.join(",") + "\n";
+  
+  // Crear fila de ejemplo con datos de muestra
+  const ejemplo = [
+    "Producto Ejemplo",
+    "Descripción del producto",
+    "nombre-de-la-categoria",
+    '"etiqueta1, etiqueta2, etiqueta3"',
+    "https://ejemplo.com/img1.jpg",
+    "https://ejemplo.com/img2.jpg",
+    "https://ejemplo.com/img3.jpg",
+    "https://ejemplo.com/img4.jpg",
+    "https://ejemplo.com/portada.jpg"
+  ];
+  
+  const csv = headers.join(",") + "\n" + ejemplo.join(",") + "\n";
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "plantilla_categoria.csv";
+  a.download = "plantilla_categoria_con_4_imagenes.csv";
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
   log("⬇️ Plantilla descargada (con 4 columnas de imágenes fijas).");
+  log("📝 Las etiquetas con comas deben ir entre comillas dobles: \"etiqueta1, etiqueta2\"");
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
