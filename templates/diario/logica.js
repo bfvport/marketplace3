@@ -5,128 +5,141 @@ const sb = window.supabaseClient;
 const $ = (id) => document.getElementById(id);
 const today = fmtDateISO(new Date());
 
-// Variables globales
-let itemsCSV = []; 
+// Variables globales para el Operador
+let itemsCSV = [];
 let itemActual = null;
-let asignacionActual = null;
-let objetivoDiario = 1; 
+let miAsignacion = null;
 
-await loadSidebar({ activeKey: "diario", basePath: "../" });
+(async function init() {
+    await loadSidebar({ activeKey: "diario", basePath: "../" });
 
-window.copiar = (id) => {
-    const el = $(id);
-    if(el && el.value) {
-        el.select();
-        navigator.clipboard.writeText(el.value);
-        const btn = el.parentElement.querySelector('.copy-btn');
-        if(btn) {
-            const txt = btn.textContent;
-            btn.textContent = "LISTO";
-            setTimeout(() => btn.textContent = txt, 1000);
-        }
+    if (s.rol === "gerente") {
+        $("view-gerente").style.display = "block";
+        await cargarSupervisionGerente();
+        setInterval(cargarSupervisionGerente, 20000);
+    } else {
+        $("view-operador").style.display = "block";
+        await cargarPanelOperador();
     }
-};
+})();
 
-async function verificarAsignacion() {
-    const { data, error } = await sb.from("usuarios_asignado")
-        .select("*")
-        .eq("usuario", s.usuario)
-        .lte("fecha_desde", today)
-        .gte("fecha_hasta", today)
-        .limit(1);
+// ==========================================
+// SECCIÓN GERENTE: SUPERVISIÓN EN TIEMPO REAL
+// ==========================================
+async function cargarSupervisionGerente() {
+    const [resAsig, resAct] = await Promise.all([
+        sb.from("usuarios_asignado").select("*").lte("fecha_desde", today).gte("fecha_hasta", today),
+        sb.from("marketplace_actividad").select("usuario").eq("fecha_publicacion", today)
+    ]);
 
-    if (!data || data.length === 0) {
+    const grid = $("grid-supervision");
+    grid.innerHTML = "";
+    
+    (resAsig.data || []).forEach(asig => {
+        const hechos = (resAct.data || []).filter(a => a.usuario === asig.usuario).length;
+        const meta = asig.marketplace_daily || 0;
+        const porc = meta > 0 ? Math.min((hechos / meta) * 100, 100) : 0;
+
+        grid.innerHTML += `
+            <div class="card-operador">
+                <div style="display:flex; justify-content:space-between;">
+                    <strong>${asig.usuario}</strong>
+                    <span class="pill" style="background:#3b82f6;">${hechos} / ${meta}</span>
+                </div>
+                <div class="muted" style="font-size:0.8rem; margin:5px 0;">📦 Categoria: ${asig.categoria}</div>
+                <div class="progress-container"><div class="progress-bar" style="width:${porc}%"></div></div>
+                <div style="font-size:0.75rem; text-align:right; color:${porc === 100 ? '#10b981' : '#94a3b8'}">
+                    ${porc === 100 ? '✅ COMPLETADO' : `Faltan ${meta - hechos} publicaciones`}
+                </div>
+            </div>`;
+    });
+}
+
+// ==========================================
+// SECCIÓN OPERADOR: LÓGICA DE TRABAJO PESADO
+// ==========================================
+async function cargarPanelOperador() {
+    const { data: asig } = await sb.from("usuarios_asignado").select("*").eq("usuario", s.usuario).lte("fecha_desde", today).gte("fecha_hasta", today).maybeSingle();
+
+    if (!asig) {
+        $("panel-operador").style.display = "none";
         $("error-bloqueo").style.display = "block";
-        $("subtitle").textContent = "Sin actividad.";
-        return false;
+        return;
     }
 
-    asignacionActual = data[0];
-    $("main-dashboard").style.display = "grid"; 
-    $("lbl-categoria-asignada").textContent = asignacionActual.categoria;
-    $("subtitle").textContent = `Asignado: ${asignacionActual.categoria}`;
-    objetivoDiario = asignacionActual.marketplace_daily || 1;
-    return true;
+    miAsignacion = asig;
+    await cargarEstadoCuentas();
+    await cargarCSV();
+    
+    // Botones de acción
+    $("btn-rotar").onclick = rotarRecurso;
+    $("btn-save").onclick = guardarPublicacion;
+    $("btn-download-img").onclick = () => itemActual?.url_imagenes_portadas && window.open(itemActual.url_imagenes_portadas, '_blank');
 }
 
 async function cargarEstadoCuentas() {
-    const container = $("cuentas-container");
+    // --- SOLUCIÓN AL RESET: GUARDAR LO QUE EL USUARIO TENÍA SELECCIONADO ---
     const select = $("sel-cuenta-usada");
-    
-    // --- SOLUCIÓN: GUARDAR SELECCIÓN PREVIA ---
-    const seleccionPrevia = select.value;
-    // ------------------------------------------
+    const cuentaPrevia = select.value;
 
-    const { data: cuentas } = await sb.from("cuentas_facebook").select("email, id").eq("ocupada_por", s.usuario);
-    const { data: actividad } = await sb.from("marketplace_actividad").select("facebook_account_usada").eq("usuario", s.usuario).eq("fecha_publicacion", today);
+    const [resCuentas, resAct] = await Promise.all([
+        sb.from("cuentas_facebook").select("email").eq("ocupada_por", s.usuario),
+        sb.from("marketplace_actividad").select("facebook_account_usada").eq("usuario", s.usuario).eq("fecha_publicacion", today)
+    ]);
 
-    container.innerHTML = "";
+    const lista = $("cuentas-list");
+    lista.innerHTML = "";
     select.innerHTML = "";
 
-    if (!cuentas || cuentas.length === 0) {
-        container.innerHTML = "<div class='muted'>No tienes cuentas FB asignadas.</div>";
-        return;
-    }
+    const metaIndividual = miAsignacion.marketplace_daily;
+    let totalHechosHoy = resAct.data?.length || 0;
 
-    cuentas.forEach(c => {
-        const hechas = actividad.filter(a => a.facebook_account_usada === c.email).length;
-        const faltan = Math.max(0, objetivoDiario - hechas);
-        
-        let estadoHtml = faltan > 0 
-            ? `<span class="status-pill status-pending">Faltan ${faltan}</span>` 
-            : `<span class="status-pill status-ok">✅ Listo</span>`;
+    // Actualizar Header de Progreso
+    const porcTotal = Math.min((totalHechosHoy / metaIndividual) * 100, 100);
+    $("header-progreso").innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span>Categoría: <strong>${miAsignacion.categoria}</strong></span>
+            <span style="font-size:1.2rem;">🚀 <strong>${totalHechosHoy}</strong> / ${metaIndividual}</span>
+        </div>
+        <div class="progress-container"><div class="progress-bar" style="width:${porcTotal}%"></div></div>
+    `;
 
-        container.innerHTML += `
-            <div style="background:rgba(255,255,255,0.05); padding:10px; border-radius:6px; display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:0.9rem; color:#e2e8f0; font-family:monospace;">${c.email}</span>
-                ${estadoHtml}
-            </div>
-        `;
+    (resCuentas.data || []).forEach(c => {
+        const hechosConEsta = (resAct.data || []).filter(a => a.facebook_account_usada === c.email).length;
+        const faltan = Math.max(0, metaIndividual - hechosConEsta);
+
+        lista.innerHTML += `
+            <div style="display:flex; justify-content:space-between; font-size:0.85rem; padding:5px; border-bottom:1px solid #334155;">
+                <span class="muted">${c.email}</span>
+                <span class="${faltan === 0 ? 'status-ok' : 'status-pending'}">${faltan === 0 ? 'LISTO' : 'Faltan ' + faltan}</span>
+            </div>`;
 
         const opt = document.createElement("option");
-        opt.value = c.email;
-        opt.textContent = c.email;
+        opt.value = c.email; opt.textContent = c.email;
         select.appendChild(opt);
     });
 
-    // --- SOLUCIÓN: RESTAURAR SELECCIÓN ---
-    // Si la cuenta que estaba seleccionada sigue en la lista, la volvemos a marcar.
-    if (seleccionPrevia && Array.from(select.options).some(o => o.value === seleccionPrevia)) {
-        select.value = seleccionPrevia;
+    // --- RESTAURAR LA CUENTA QUE EL OPERADOR ESTABA USANDO ---
+    if (cuentaPrevia && Array.from(select.options).some(o => o.value === cuentaPrevia)) {
+        select.value = cuentaPrevia;
     }
 }
 
-async function cargarCSVAsignado() {
-    if (!asignacionActual) return;
-    const { data: catData } = await sb.from("categoria").select("csv_nombre").eq("nombre", asignacionActual.categoria).single();
+async function cargarCSV() {
+    const { data: cat } = await sb.from("categoria").select("csv_nombre").eq("nombre", miAsignacion.categoria).single();
+    if (!cat?.csv_nombre) return;
 
-    if (!catData || !catData.csv_nombre) {
-        alert("Error crítico: La categoría asignada no tiene archivo CSV.");
-        return;
-    }
-    $("loader-csv").style.display = "block";
-    try {
-        const { data: urlData } = sb.storage.from('categoria_csv').getPublicUrl(catData.csv_nombre);
-        const res = await fetch(urlData.publicUrl);
-        if (!res.ok) throw new Error("Archivo no encontrado.");
-        const text = await res.text();
-        const lines = text.split("\n").filter(l => l.trim().length > 0);
-        const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
+    const { data: url } = sb.storage.from('categoria_csv').getPublicUrl(cat.csv_nombre);
+    const res = await fetch(url.publicUrl);
+    const text = await res.text();
+    const lines = text.split("\n").filter(l => l.trim().length > 0);
+    const headers = lines[0].split(",").map(h => h.trim().toLowerCase());
 
-        itemsCSV = lines.slice(1).map(line => {
-            const values = line.split(","); 
-            return headers.reduce((obj, h, i) => {
-                obj[h] = values[i]?.trim();
-                return obj;
-            }, {});
-        });
-        rotarRecurso();
-    } catch (e) {
-        console.error(e);
-        $("loader-csv").textContent = "❌ Error cargando CSV";
-    } finally {
-        $("loader-csv").style.display = "none";
-    }
+    itemsCSV = lines.slice(1).map(line => {
+        const values = line.split(",");
+        return headers.reduce((obj, h, i) => { obj[h] = values[i]?.trim(); return obj; }, {});
+    });
+    rotarRecurso();
 }
 
 function rotarRecurso() {
@@ -134,63 +147,48 @@ function rotarRecurso() {
     itemActual = itemsCSV[Math.floor(Math.random() * itemsCSV.length)];
     $("csv-titulo").value = itemActual.titulo || "";
     $("csv-desc").value = itemActual.descripcion || "";
-    $("csv-cat-fb").value = itemActual.categoria || ""; 
-    $("csv-tags").value = itemActual.etiquetas || "";
-    verificarTitulo(itemActual.titulo);
+    verificarDuplicado(itemActual.titulo);
 }
 
-async function verificarTitulo(titulo) {
-    if (!titulo) return;
+async function verificarDuplicado(titulo) {
     const { data } = await sb.from("marketplace_actividad").select("id").eq("titulo", titulo).eq("fecha_publicacion", today).limit(1);
     const aviso = $("titulo-aviso");
-    if (data && data.length > 0) {
-        aviso.textContent = "⚠️ Ya usaste este título hoy";
-        aviso.style.color = "#f59e0b";
+    if (data?.length > 0) {
+        aviso.textContent = "⚠️ Ya usaste este título hoy."; aviso.style.color = "#f59e0b";
     } else {
-        aviso.textContent = "✅ Título libre hoy";
-        aviso.style.color = "#10b981";
+        aviso.textContent = "✅ Título disponible."; aviso.style.color = "#10b981";
     }
 }
 
-$("btn-download-img").onclick = () => {
-    if(!itemActual || !itemActual.url_imagenes_portadas) return alert("Sin foto.");
-    window.open(itemActual.url_imagenes_portadas, '_blank');
-};
-
-$("btn-rotar").onclick = rotarRecurso;
-
-$("btn-save").onclick = async () => {
+async function guardarPublicacion() {
     const link = $("inp-link").value.trim();
     const cuenta = $("sel-cuenta-usada").value;
-    if (!link) return alert("❌ Debes pegar el link de Marketplace.");
-    if (!cuenta) return alert("❌ Selecciona una cuenta.");
 
-    const payload = {
+    if (!link.startsWith("http")) return alert("Pega un link válido.");
+
+    const { error } = await sb.from("marketplace_actividad").insert([{
         usuario: s.usuario,
         fecha_publicacion: today,
         titulo: $("csv-titulo").value,
         descripcion: $("csv-desc").value,
-        categoria: asignacionActual.categoria,
+        categoria: miAsignacion.categoria,
         marketplace_link_publicacion: link,
         facebook_account_usada: cuenta,
         created_at: nowISO()
-    };
-    const { error } = await sb.from("marketplace_actividad").insert([payload]);
+    }]);
 
-    if (error) {
-        alert("Error: " + error.message);
-    } else {
-        alert("✅ Publicación registrada.");
+    if (error) alert("Error: " + error.message);
+    else {
+        alert("✅ Guardado con éxito.");
         $("inp-link").value = "";
-        await cargarEstadoCuentas(); 
+        await cargarEstadoCuentas(); // Esto refresca el progreso sin perder la cuenta seleccionada
         rotarRecurso();
     }
-};
+}
 
-(async function init() {
-    await sb.from("usuarios_actividad").insert([{ usuario: s.usuario, fecha_logueo: nowISO(), facebook_account_usada: "🟢 INGRESO AL DIARIO" }]);
-    if (await verificarAsignacion()) {
-        await cargarEstadoCuentas();
-        await cargarCSVAsignado();
-    }
-})();
+// Función global de copiado
+window.copiar = (id) => {
+    const el = $(id);
+    el.select();
+    navigator.clipboard.writeText(el.value);
+};

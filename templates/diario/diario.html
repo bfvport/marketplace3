@@ -3,34 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Diario Inteligente | Marketplace Manager</title>
+    <title>Diario Operativo | Marketplace Manager</title>
     <link rel="stylesheet" href="../../assets/css/app.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../../assets/js/supabase.js"></script>
     <style>
-        .progress-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); padding: 10px; border-radius: 8px; margin-bottom: 10px; }
-        .stat-number { font-size: 1.2rem; font-weight: bold; color: #fff; }
-        .stat-label { font-size: 0.8rem; color: #94a3b8; text-transform: uppercase; }
-        
-        /* Estilos de Inputs para Copiar */
-        .copy-group { position: relative; margin-bottom: 15px; }
-        .copy-group label { display: block; font-size: 0.75rem; color: #94a3b8; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .copy-group textarea, .copy-group input { 
-            width: 100%; background: #0f172a; border: 1px solid #334155; 
-            color: #e2e8f0; padding: 10px; padding-right: 60px; /* Espacio para el botón */
-            border-radius: 6px; font-family: inherit; font-size: 0.9rem;
-        }
-        .copy-btn {
-            position: absolute; right: 5px; top: 28px;
-            background: rgba(255,255,255,0.1); border: none; color: white;
-            padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.7rem; font-weight: bold;
-        }
-        .copy-btn:hover { background: #3b82f6; }
-
-        /* Pills de estado */
-        .status-pill { display: inline-block; padding: 4px 8px; border-radius: 12px; font-size: 0.75rem; font-weight: bold; }
-        .status-pending { background: #f59e0b; color: #000; }
-        .status-ok { background: #10b981; color: #fff; }
+        /* Estilos para el progreso y visualización */
+        .progress-container { width: 100%; background: #0f172a; border-radius: 8px; height: 10px; margin: 10px 0; overflow: hidden; border: 1px solid #334155; }
+        .progress-bar { height: 100%; background: #3b82f6; transition: width 0.4s ease; }
+        .card-operador { background: #1e293b; padding: 15px; border-radius: 12px; border: 1px solid #334155; transition: 0.3s; }
+        .grid-supervision { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+        .copy-btn { background: #334155; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 0.7rem; }
+        .copy-btn:hover { background: #475569; }
+        .status-ok { color: #10b981; font-weight: bold; }
+        .status-pending { color: #f59e0b; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -38,96 +24,68 @@
         <div id="sidebar-host"></div>
         <main class="content">
             
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                <div>
-                    <h1 style="margin:0;">📅 Diario de Operaciones</h1>
-                    <div id="subtitle" class="muted">Cargando...</div>
+            <div id="view-gerente" style="display: none;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                    <h1>📊 Monitoreo de Equipo</h1>
+                    <span id="update-timer" class="muted">Actualizando en tiempo real...</span>
                 </div>
-                <div id="status-fichaje" class="pill" style="background:#10b981;">🟢 En Turno</div>
+                <div id="grid-supervision" class="grid-supervision"></div>
             </div>
 
-            <div id="error-bloqueo" style="display:none; text-align:center; padding:40px; background:rgba(239,68,68,0.1); border:1px solid #ef4444; border-radius:12px;">
-                <h2 style="color:#ef4444;">⛔ No tienes asignación hoy</h2>
-                <p>El sistema no detecta tareas programadas para tu usuario en esta fecha.</p>
+            <div id="view-operador" style="display: none;">
+                <div id="panel-operador">
+                    <div id="header-progreso" class="card" style="margin-bottom:20px; border-left: 5px solid #3b82f6;">
+                        </div>
+
+                    <div class="grid" style="grid-template-columns: 1fr 2fr; gap: 20px;">
+                        <aside>
+                            <section class="card">
+                                <h3>👤 Mis Cuentas Hoy</h3>
+                                <div id="cuentas-list" style="display:grid; gap:10px; margin-bottom:15px;"></div>
+                                
+                                <label>Seleccionar Cuenta para Publicar</label>
+                                <select id="sel-cuenta-usada" style="width:100%; padding:10px; background:#0f172a; color:white; border:1px solid #334155; border-radius:6px;"></select>
+                            </section>
+                        </aside>
+
+                        <section class="card">
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <h3>📦 Recurso Asignado</h3>
+                                <button id="btn-rotar" class="btn2">🔄 Rotar Título/Desc</button>
+                            </div>
+
+                            <div style="margin-top:15px;">
+                                <label>Título</label>
+                                <div style="display:flex; gap:5px;">
+                                    <input type="text" id="csv-titulo" readonly style="flex:1;">
+                                    <button class="copy-btn" onclick="copiar('csv-titulo')">COPIAR</button>
+                                </div>
+                                <div id="titulo-aviso" style="font-size:0.75rem; margin-top:2px;"></div>
+
+                                <label style="margin-top:10px;">Descripción</label>
+                                <textarea id="csv-desc" readonly style="width:100%; height:80px; background:#0f172a; color:#ccc; border:1px solid #334155; padding:10px; border-radius:6px; resize:none;"></textarea>
+                                <button class="copy-btn" style="width:100%; margin-top:5px;" onclick="copiar('csv-desc')">COPIAR DESCRIPCIÓN</button>
+
+                                <div class="grid-2" style="margin-top:15px;">
+                                    <button id="btn-download-img" class="btn2" style="width:100%;">🖼️ Ver/Bajar Foto Portada</button>
+                                </div>
+
+                                <hr style="border:0; border-top:1px solid #334155; margin:20px 0;">
+
+                                <label style="color:#60a5fa; font-weight:bold;">🔗 Pegar Link de Marketplace Finalizado</label>
+                                <input type="text" id="inp-link" placeholder="https://www.facebook.com/marketplace/item/..." style="border: 2px solid #3b82f6;">
+                                
+                                <button id="btn-save" class="btn" style="width:100%; padding:15px; font-size:1.1rem;">💾 GUARDAR PUBLICACIÓN</button>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+
+                <div id="error-bloqueo" class="card" style="display:none; text-align:center;">
+                    <h2 style="color:#ef4444;">⚠️ No tienes tareas para hoy</h2>
+                    <p>Pide al gerente que te asigne una categoría en el panel de Asignaciones.</p>
+                </div>
             </div>
-
-            <div id="main-dashboard" class="grid" style="display:none; grid-template-columns: 1fr 1.6fr; gap: 20px;">
-                
-                <section class="card" style="height: fit-content;">
-                    <h3 style="margin-top:0;">📊 Tu Progreso Hoy</h3>
-                    
-                    <div class="progress-card">
-                        <div class="stat-label">Categoría Asignada</div>
-                        <div id="lbl-categoria-asignada" class="stat-number" style="color:#60a5fa;">...</div>
-                    </div>
-
-                    <h4 style="margin-bottom:10px; font-size:0.8rem; text-transform:uppercase; color:#94a3b8; border-bottom:1px solid #334155; padding-bottom:5px;">
-                        Estado por Cuenta
-                    </h4>
-                    <div id="cuentas-container" style="display:flex; flex-direction:column; gap:8px;">
-                        <div class="muted">Calculando...</div>
-                    </div>
-                </section>
-
-                <section class="card">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                        <h3 style="margin:0;">📦 Recursos para Publicar</h3>
-                        <div style="display:flex; gap:10px;">
-                             <button id="btn-download-img" class="btn2" style="background:#6366f1;">📸 Bajar Fotos</button>
-                             <button id="btn-rotar" class="btn2">🔄 Cambiar Opción</button>
-                        </div>
-                    </div>
-
-                    <div id="loader-csv" style="display:none; color:#60a5fa; margin-bottom:10px; font-size:0.9rem;">
-                        ⏳ Descargando CSV asignado del servidor...
-                    </div>
-
-                    <div class="copy-group">
-                        <label>Título</label>
-                        <input id="csv-titulo" readonly>
-                        <button class="copy-btn" onclick="copiar('csv-titulo')">COPIAR</button>
-                        <div id="titulo-aviso" style="font-size:0.75rem; margin-top:4px; text-align:right;"></div>
-                    </div>
-
-                    <div class="copy-group">
-                        <label>Descripción</label>
-                        <textarea id="csv-desc" readonly style="height:80px;"></textarea>
-                        <button class="copy-btn" onclick="copiar('csv-desc')">COPIAR</button>
-                    </div>
-
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
-                        <div class="copy-group">
-                            <label>Categoría (FB)</label>
-                            <input id="csv-cat-fb" readonly>
-                            <button class="copy-btn" onclick="copiar('csv-cat-fb')">COPIAR</button>
-                        </div>
-                        <div class="copy-group">
-                            <label>Etiquetas</label>
-                            <input id="csv-tags" readonly>
-                            <button class="copy-btn" onclick="copiar('csv-tags')">COPIAR</button>
-                        </div>
-                    </div>
-
-                    <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:20px 0;">
-
-                    <h3 style="font-size:1rem; margin-bottom:10px;">🚀 Confirmar Tarea</h3>
-                    <div style="background:rgba(0,0,0,0.3); padding:15px; border-radius:8px;">
-                        <div style="margin-bottom:10px;">
-                            <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:5px;">¿Qué cuenta usaste?</label>
-                            <select id="sel-cuenta-usada" style="width:100%; padding:8px; background:#1e293b; border:1px solid #475569; color:white; border-radius:4px;">
-                                <option>Cargando cuentas...</option>
-                            </select>
-                        </div>
-                        <div style="margin-bottom:15px;">
-                            <label style="font-size:0.75rem; color:#94a3b8; display:block; margin-bottom:5px;">Pegar Link de Marketplace</label>
-                            <input id="inp-link" placeholder="https://www.facebook.com/marketplace/item/..." style="width:100%; padding:8px; background:#1e293b; border:1px solid #475569; color:white; border-radius:4px;">
-                        </div>
-                        <button id="btn-save" class="btn" style="width:100%; background:#10b981;">✅ Guardar y Descontar</button>
-                    </div>
-
-                </section>
-            </div>
-
         </main>
     </div>
     <script type="module" src="./logica.js"></script>
