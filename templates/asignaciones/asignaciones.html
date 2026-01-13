@@ -8,7 +8,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../../assets/js/supabase.js"></script>
     <style>
-        /* Estilos del Modal */
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(2px);
@@ -16,20 +15,21 @@
         }
         .modal-content {
             background: #1e293b; padding: 25px; border-radius: 12px;
-            width: 90%; max-width: 500px; border: 1px solid #334155;
+            width: 90%; max-width: 550px; border: 1px solid #334155;
             box-shadow: 0 10px 25px rgba(0,0,0,0.5);
-            max-height: 90vh; overflow-y: auto; /* Scroll si es muy alto */
+            max-height: 90vh; overflow-y: auto;
         }
-        .hidden { display: none !important; }
         label { display: block; margin-bottom: 4px; color: #94a3b8; font-size: 0.85rem; }
         input, select { 
             width: 100%; padding: 8px; margin-bottom: 12px; 
             background: #0f172a; border: 1px solid #334155; color: white; border-radius: 6px; 
         }
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .action-btn { cursor: pointer; padding: 4px 8px; border-radius: 4px; border: none; font-weight: bold; font-size: 0.8rem; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .action-btn { cursor: pointer; padding: 6px 10px; border-radius: 4px; border: none; font-weight: bold; font-size: 0.8rem; transition: 0.2s; }
         .btn-edit { background: #f59e0b; color: black; margin-right: 5px; }
         .btn-del { background: #ef4444; color: white; }
+        .btn-edit:hover { background: #d97706; }
+        .btn-del:hover { background: #dc2626; }
     </style>
 </head>
 <body>
@@ -45,11 +45,11 @@
                 <table class="table" style="width:100%; text-align:left; border-collapse:collapse;">
                     <thead>
                         <tr style="border-bottom:1px solid rgba(255,255,255,0.1); color:#94a3b8;">
-                            <th style="padding:10px;">Usuario</th>
-                            <th style="padding:10px;">Categoría</th>
-                            <th style="padding:10px;">Fechas</th>
-                            <th style="padding:10px;">Objetivos (M/G/H/W)</th>
-                            <th style="padding:10px; text-align:right;">Acciones</th>
+                            <th style="padding:12px;">Usuario</th>
+                            <th style="padding:12px;">Categoría</th>
+                            <th style="padding:12px;">Fechas (Desde/Hasta)</th>
+                            <th style="padding:12px;">Objetivos (M/G/H/W)</th>
+                            <th style="padding:12px; text-align:right;">Acciones</th>
                         </tr>
                     </thead>
                     <tbody id="lista-asignaciones">
@@ -63,52 +63,36 @@
         <div class="modal-content">
             <h2 id="modal-titulo" style="margin-top:0;">Nueva Asignación</h2>
             
-            <label>Operador</label>
+            <label>Operador Responsable</label>
             <select id="sel-usuario"></select>
 
-            <label>Categoría</label>
+            <label>Categoría de Producto</label>
             <select id="sel-categoria"></select>
 
             <div class="grid-2">
-                <div>
-                    <label>Desde</label>
-                    <input type="date" id="inp-desde">
-                </div>
-                <div>
-                    <label>Hasta</label>
-                    <input type="date" id="inp-hasta">
-                </div>
+                <div><label>Fecha Inicio</label><input type="date" id="inp-desde"></div>
+                <div><label>Fecha Fin</label><input type="date" id="inp-hasta"></div>
             </div>
 
-            <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:10px 0;">
-            <label style="color:#60a5fa; font-weight:bold;">Objetivos Diarios (Cantidad)</label>
+            <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:15px 0;">
+            <label style="color:#60a5fa; font-weight:bold; margin-bottom:10px;">Metas Diarias (Cantidad de Posts)</label>
 
             <div class="grid-2">
-                <div>
-                    <label>🛒 Marketplace</label>
-                    <input type="number" id="inp-daily-mp" value="1" min="0">
-                </div>
-                <div>
-                    <label>👥 Grupos</label>
-                    <input type="number" id="inp-daily-grupos" value="0" min="0">
-                </div>
-                <div>
-                    <label>📖 Historias</label>
-                    <input type="number" id="inp-daily-historia" value="0" min="0">
-                </div>
-                <div>
-                    <label>🏠 Muro</label>
-                    <input type="number" id="inp-daily-muro" value="0" min="0">
-                </div>
+                <div><label>🛒 Marketplace</label><input type="number" id="inp-daily-mp" value="1" min="0"></div>
+                <div><label>👥 Grupos</label><input type="number" id="inp-daily-grupos" value="0" min="0"></div>
+            </div>
+            <div class="grid-2">
+                <div><label>📖 Historias</label><input type="number" id="inp-daily-historia" value="0" min="0"></div>
+                <div><label>🏠 Muro</label><input type="number" id="inp-daily-muro" value="0" min="0"></div>
             </div>
 
-            <div style="display:flex; gap:10px; margin-top:15px;">
-                <button id="btn-guardar" class="btn" style="width:100%;">💾 Guardar</button>
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                <button id="btn-guardar" class="btn" style="width:100%;">💾 Guardar Cambios</button>
                 <button id="btn-cancelar" class="btn2" style="width:100%;">Cancelar</button>
             </div>
         </div>
     </div>
 
-    <script type="module" src="./asignacion.js"></script>
+    <script type="module" src="./asignaciones.js"></script>
 </body>
 </html>

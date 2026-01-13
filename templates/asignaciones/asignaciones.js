@@ -6,65 +6,69 @@ const $ = (id) => document.getElementById(id);
 
 let asignacionEditandoID = null;
 
-// FUNCIÓN DE INICIO BLINDADA
+// INICIALIZACIÓN DEL MÓDULO
 (async function init() {
     try {
-        // 1. Cargar Sidebar (Clave correcta: 'asignaciones')
+        // Carga el sidebar con la llave en plural para que se marque en el menú
         await loadSidebar({ activeKey: "asignaciones", basePath: "../" });
 
-        // 2. Verificar Rol
         if (s.rol !== "gerente") {
-            document.querySelector(".content").innerHTML = "<h2 style='text-align:center;'>⛔ Acceso Restringido</h2>";
+            document.body.innerHTML = "<h2 style='color:white; text-align:center; margin-top:50px;'>⛔ Acceso Restringido a Gerencia</h2>";
             return;
         }
 
-        // 3. Cargar Datos
         await cargarSelects();
         await cargarTabla();
 
-        // 4. Activar Botones
+        // Registro de eventos para botones estáticos
         if($("btn-nuevo")) $("btn-nuevo").onclick = abrirModalCrear;
         if($("btn-cancelar")) $("btn-cancelar").onclick = cerrarModal;
         if($("btn-guardar")) $("btn-guardar").onclick = guardarAsignacion;
 
     } catch (e) {
-        console.error("Error iniciando:", e);
-        alert("Error cargando la página. Verifica la consola.");
+        console.error("Error crítico en Asignaciones:", e);
     }
 })();
 
+// CARGA DE SELECTORES (USUARIOS Y CATEGORÍAS)
 async function cargarSelects() {
-    const selUser = $("sel-usuario");
-    const selCat = $("sel-categoria");
-    if (!selUser || !selCat) return;
-
-    // Usuarios
+    // Solo operadores para asignar tareas
     const { data: users } = await sb.from("usuarios").select("usuario").neq("rol", "gerente");
-    selUser.innerHTML = "";
-    (users || []).forEach(u => selUser.innerHTML += `<option value="${u.usuario}">${u.usuario}</option>`);
+    const selUser = $("sel-usuario");
+    if (selUser) {
+        selUser.innerHTML = "";
+        (users || []).forEach(u => {
+            selUser.innerHTML += `<option value="${u.usuario}">${u.usuario}</option>`;
+        });
+    }
 
-    // Categorías
+    // Categorías disponibles
     const { data: cats } = await sb.from("categoria").select("nombre");
-    selCat.innerHTML = "";
-    (cats || []).forEach(c => selCat.innerHTML += `<option value="${c.nombre}">${c.nombre}</option>`);
+    const selCat = $("sel-categoria");
+    if (selCat) {
+        selCat.innerHTML = "";
+        (cats || []).forEach(c => {
+            selCat.innerHTML += `<option value="${c.nombre}">${c.nombre}</option>`;
+        });
+    }
 }
 
+// RENDERIZADO DE LA TABLA PRINCIPAL
 async function cargarTabla() {
     const tbody = $("lista-asignaciones");
     if (!tbody) return;
-
-    // Mensaje de carga para que no parezca que no funciona
-    tbody.innerHTML = "<tr><td colspan='5' style='text-align:center'>⏳ Cargando datos...</td></tr>";
+    
+    tbody.innerHTML = "<tr><td colspan='5' style='text-align:center'>⏳ Sincronizando datos...</td></tr>";
 
     const { data, error } = await sb.from("usuarios_asignado").select("*").order("fecha_desde", { ascending: false });
-
+    
     if (error) {
-        tbody.innerHTML = `<tr><td colspan='5' style='color:red'>Error: ${error.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="color:#ef4444">Error: ${error.message}</td></tr>`;
         return;
     }
 
     if (!data || data.length === 0) {
-        tbody.innerHTML = `<tr><td colspan='5' style='text-align:center; color:#fbbf24'>⚠️ No hay asignaciones creadas. Pulsa el botón azul.</td></tr>`;
+        tbody.innerHTML = "<tr><td colspan='5' style='text-align:center; color:#94a3b8'>No hay asignaciones registradas hoy.</td></tr>";
         return;
     }
 
@@ -77,9 +81,9 @@ async function cargarTabla() {
             <td style="padding:12px; font-weight:bold; color:#f1f5f9;">${item.usuario}</td>
             <td style="padding:12px; color:#60a5fa;">${item.categoria}</td>
             <td style="padding:12px; font-size:0.9rem;">
-                ${item.fecha_desde} <span class="muted">al</span> ${item.fecha_hasta}
+                ${item.fecha_desde} <span class="muted">/</span> ${item.fecha_hasta}
             </td>
-            <td style="padding:12px; font-size:0.85rem; font-family:monospace;">
+            <td style="padding:12px; font-size:0.85rem; font-family:monospace; color:#94a3b8;">
                 MP:${item.marketplace_daily} | GR:${item.grupos_daily} | ST:${item.historia_daily} | WL:${item.muro_daily}
             </td>
             <td style="padding:12px; text-align:right;">
@@ -90,11 +94,16 @@ async function cargarTabla() {
         tbody.appendChild(tr);
     });
 
-    document.querySelectorAll(".btn-edit").forEach(btn => btn.onclick = () => abrirModalEditar(btn.dataset.id, data));
-    document.querySelectorAll(".btn-del").forEach(btn => btn.onclick = () => eliminarAsignacion(btn.dataset.id));
+    // Delegación de eventos para botones dinámicos
+    document.querySelectorAll(".btn-edit").forEach(btn => {
+        btn.onclick = () => abrirModalEditar(btn.dataset.id, data);
+    });
+    document.querySelectorAll(".btn-del").forEach(btn => {
+        btn.onclick = () => eliminarAsignacion(btn.dataset.id);
+    });
 }
 
-// FUNCIONES DEL MODAL
+// LÓGICA DE VENTANA EMERGENTE (MODAL)
 function abrirModalCrear() {
     asignacionEditandoID = null;
     $("modal-titulo").textContent = "Nueva Asignación";
@@ -116,6 +125,7 @@ function abrirModalEditar(id, listaDatos) {
 
     asignacionEditandoID = id;
     $("modal-titulo").textContent = "Editar Asignación";
+    
     $("sel-usuario").value = item.usuario;
     $("sel-categoria").value = item.categoria;
     $("inp-desde").value = item.fecha_desde;
@@ -132,6 +142,7 @@ function cerrarModal() {
     $("modal-asignacion").style.display = "none";
 }
 
+// PERSISTENCIA EN SUPABASE (INSERT / UPDATE)
 async function guardarAsignacion() {
     const payload = {
         usuario: $("sel-usuario").value,
@@ -145,27 +156,31 @@ async function guardarAsignacion() {
     };
 
     if (!payload.usuario || !payload.categoria || !payload.fecha_desde || !payload.fecha_hasta) {
-        return alert("Completa los campos obligatorios.");
+        return alert("Error: Todos los campos de identificación y fecha son obligatorios.");
     }
 
     let error = null;
     if (asignacionEditandoID) {
+        // Actualizar registro existente
         const res = await sb.from("usuarios_asignado").update(payload).eq("id", asignacionEditandoID);
         error = res.error;
     } else {
+        // Crear nuevo registro
         const res = await sb.from("usuarios_asignado").insert([payload]);
         error = res.error;
     }
 
-    if (error) alert("Error: " + error.message);
-    else {
+    if (error) {
+        alert("Error de base de datos: " + error.message);
+    } else {
         cerrarModal();
-        cargarTabla();
+        await cargarTabla();
     }
 }
 
 async function eliminarAsignacion(id) {
-    if(!confirm("¿Borrar asignación?")) return;
-    await sb.from("usuarios_asignado").delete().eq("id", id);
-    cargarTabla();
+    if(!confirm("¿Está seguro de eliminar esta asignación? Esta acción no se puede deshacer.")) return;
+    const { error } = await sb.from("usuarios_asignado").delete().eq("id", id);
+    if (error) alert("Error al eliminar: " + error.message);
+    else await cargarTabla();
 }

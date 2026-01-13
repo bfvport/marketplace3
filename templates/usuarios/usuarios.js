@@ -6,16 +6,21 @@ const $ = (id) => document.getElementById(id);
 
 let usuarioEditandoID = null;
 
-await loadSidebar({ activeKey: "usuarios", basePath: "../" });
+// Inicialización
+(async function init() {
+    await loadSidebar({ activeKey: "usuarios", basePath: "../" });
+    cargarUsuarios();
+})();
 
+// --- CARGAR USUARIOS DESDE SUPABASE ---
 async function cargarUsuarios() {
     if (s.rol !== "gerente") {
-        document.body.innerHTML = "<h2 style='color:white; text-align:center;'>⛔ Solo Gerentes</h2>";
+        document.body.innerHTML = "<h2 style='color:white; text-align:center; margin-top:50px;'>⛔ Acceso Restringido a Gerentes</h2>";
         return;
     }
 
     const { data, error } = await sb.from("usuarios").select("*").order("usuario");
-    if (error) return alert("Error cargando: " + error.message);
+    if (error) return alert("Error cargando equipo: " + error.message);
 
     const lista = $("lista-usuarios");
     lista.innerHTML = "";
@@ -24,24 +29,23 @@ async function cargarUsuarios() {
         const tr = document.createElement("tr");
         tr.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
         
-        // --- BUSCADOR DE CONTRASEÑA ---
-        // Intentamos adivinar el nombre. Si falla, mostramos JSON para debuggear.
-        let passwordReal = u.contra || u.contra || u.contrasenia || u.clave;
+        // CORRECCIÓN DEFINITIVA: Usamos la columna 'contra'
+        let passwordReal = u.contra;
         
-        // Si no encontramos la pass, mostramos TODO el objeto para que veas el nombre real
+        // Si 'contra' está vacío, mostramos ayuda visual para el gerente
         if (!passwordReal) {
-            passwordReal = `<span style='color:#fbbf24; font-size:0.7rem'>${JSON.stringify(u)}</span>`;
+            passwordReal = `<span style='color:#fbbf24; font-size:0.75rem'>Falta columna 'contra' en DB</span>`;
         }
 
         const badgeColor = u.rol === "gerente" ? "#ef4444" : "#10b981";
         
         tr.innerHTML = `
-            <td style="padding:12px; font-weight:bold;">${u.usuario}</td>
-            <td style="padding:12px; font-family:monospace; color:#94a3b8; word-break:break-all;">${passwordReal}</td>
-            <td style="padding:12px;">
-                <span class="pill" style="background:${badgeColor}; font-size:0.75rem;">${u.rol.toUpperCase()}</span>
+            <td style="padding:15px; font-weight:bold; color:#f1f5f9;">${u.usuario}</td>
+            <td style="padding:15px; font-family:monospace; color:#60a5fa; font-size:0.95rem;">${passwordReal}</td>
+            <td style="padding:15px;">
+                <span class="pill" style="background:${badgeColor}; color:white; font-weight:bold;">${u.rol.toUpperCase()}</span>
             </td>
-            <td style="padding:12px; text-align:right;">
+            <td style="padding:15px; text-align:right;">
                 <button class="action-btn btn-edit" data-id="${u.id}">✏️ Editar</button>
                 <button class="action-btn btn-del" data-id="${u.id}">🗑️</button>
             </td>
@@ -49,11 +53,12 @@ async function cargarUsuarios() {
         lista.appendChild(tr);
     });
 
+    // Re-vincular eventos a los nuevos botones
     document.querySelectorAll(".btn-edit").forEach(btn => btn.onclick = () => abrirModalEditar(btn.dataset.id, data));
     document.querySelectorAll(".btn-del").forEach(btn => btn.onclick = () => eliminarUsuario(btn.dataset.id));
 }
 
-// FUNCIONES MODAL
+// --- LÓGICA DEL MODAL ---
 function abrirModalCrear() {
     usuarioEditandoID = null;
     $("modal-titulo").textContent = "Nuevo Usuario";
@@ -67,14 +72,11 @@ function abrirModalEditar(id, listaDatos) {
     const user = listaDatos.find(u => u.id == id);
     if (!user) return;
     
-    // Recuperar la contraseña para el input
-    const passValue = user.contra || user.password || user.contrasenia || user.clave || "";
-
     usuarioEditandoID = id;
     $("modal-titulo").textContent = "Editar Usuario";
-    $("inp-usuario").value = user.usuario;
-    $("inp-contra").value = passValue; 
-    $("sel-rol").value = user.rol;
+    $("inp-usuario").value = user.usuario || "";
+    $("inp-contra").value = user.contra || ""; // Carga la contraseña actual en el input
+    $("sel-rol").value = user.rol || "operador";
     $("modal-usuario").style.display = "flex";
 }
 
@@ -82,41 +84,39 @@ function cerrarModal() {
     $("modal-usuario").style.display = "none";
 }
 
+// --- GUARDAR (INSERT O UPDATE) ---
 async function guardarUsuario() {
     const usuario = $("inp-usuario").value.trim();
-    const contra = $("inp-contra").value.trim(); // ASUMIMOS 'pass' por defecto al guardar
+    const contra = $("inp-contra").value.trim();
     const rol = $("sel-rol").value;
 
-    if (!usuario || !contra) return alert("Completa todos los datos");
+    if (!usuario || !contra) return alert("⚠️ Debes completar Nombre y Contraseña.");
 
-    // IMPORTANTE: Si tu columna se llama 'password', cambia 'pass' por 'password' abajo
     const payload = { usuario, contra, rol }; 
 
-    let error = null;
+    let res;
     if (usuarioEditandoID) {
-        const res = await sb.from("usuarios").update(payload).eq("id", usuarioEditandoID);
-        error = res.error;
+        res = await sb.from("usuarios").update(payload).eq("id", usuarioEditandoID);
     } else {
-        const res = await sb.from("usuarios").insert([payload]);
-        error = res.error;
+        res = await sb.from("usuarios").insert([payload]);
     }
 
-    if (error) alert("Error al guardar: " + error.message);
-    else {
+    if (res.error) {
+        alert("Error al guardar: " + res.error.message);
+    } else {
         cerrarModal();
         cargarUsuarios(); 
     }
 }
 
 async function eliminarUsuario(id) {
-    if (!confirm("¿Eliminar usuario?")) return;
+    if (!confirm("¿Estás seguro de eliminar a este usuario? Se perderán sus accesos.")) return;
     const { error } = await sb.from("usuarios").delete().eq("id", id);
-    if (error) alert("Error: " + error.message);
+    if (error) alert("Error al eliminar: " + error.message);
     else cargarUsuarios();
 }
 
+// Eventos de botones principales
 if($("btn-nuevo")) $("btn-nuevo").onclick = abrirModalCrear;
 if($("btn-cancelar")) $("btn-cancelar").onclick = cerrarModal;
 if($("btn-guardar")) $("btn-guardar").onclick = guardarUsuario;
-
-cargarUsuarios();
