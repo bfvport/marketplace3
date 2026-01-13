@@ -7,6 +7,15 @@
     <link rel="stylesheet" href="../../assets/css/app.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../../assets/js/supabase.js"></script>
+        <style>
+        .progress-container { width: 100%; background: #0f172a; border-radius: 8px; height: 12px; margin: 10px 0; overflow: hidden; border: 1px solid #334155; }
+        .progress-bar { height: 100%; background: #3b82f6; transition: width 0.4s ease; }
+        .grid-supervision { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+        .card-operador { background: #1e293b; padding: 15px; border-radius: 12px; border: 1px solid #334155; }
+        .copy-btn { background: #334155; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: bold; }
+        .label-fb { color: #60a5fa; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 5px; }
+        .hidden { display: none !important; }
+    </style>
 </head>
 <body>
     <div class="layout">
