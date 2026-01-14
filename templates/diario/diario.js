@@ -1,9 +1,72 @@
 import { getSession, loadSidebar, escapeHtml } from "../../assets/js/app.js";
 
+// Helpers (importa app.js si está disponible; si no, usa fallback)
+const SESSION_KEY_FALLBACK = "mp_session_v1";
+
+function _fallbackGetSession(){
+  try { return JSON.parse(localStorage.getItem(SESSION_KEY_FALLBACK) || "null"); }
+  catch { return null; }
+}
+function _fallbackEscapeHtml(s){
+  return String(s ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#39;");
+}
+async function _fallbackLoadSidebar({ activeKey, basePath }){
+  const host = document.getElementById("sidebar-host");
+  if (!host) return;
+
+  try{
+    const res = await fetch(`${basePath}sidebar.html`, { cache:"no-store" });
+    host.innerHTML = await res.text();
+
+    const s = _fallbackGetSession();
+    const activeEl = host.querySelector(`[data-nav="${activeKey}"]`);
+    if (activeEl) activeEl.classList.add("active");
+
+    const uEl = host.querySelector("#sb-usuario");
+    const rEl = host.querySelector("#sb-rol");
+    if (uEl && s?.usuario) uEl.textContent = s.usuario;
+    if (rEl && s?.rol) rEl.textContent = s.rol;
+
+    if (s?.rol !== "gerente"){
+      host.querySelectorAll("[data-only='gerente']").forEach(el => el.style.display="none");
+    }
+
+    // Logout básico (sin tocar app.js)
+    const btn = host.querySelector("#btn-logout");
+    if (btn){
+      btn.addEventListener("click", () => {
+        localStorage.removeItem(SESSION_KEY_FALLBACK);
+        window.location.href = "/templates/login/login.html";
+      });
+    }
+  }catch(e){
+    console.warn("Sidebar no pudo cargarse (fallback):", e);
+  }
+}
+
+let getSession = _fallbackGetSession;
+let loadSidebar = _fallbackLoadSidebar;
+let escapeHtml = _fallbackEscapeHtml;
+
+async function ensureAppHelpers(){
+  try{
+    const mod = await import("../../assets/js/app.js");
+    if (typeof mod.getSession === "function") getSession = mod.getSession;
+    if (typeof mod.loadSidebar === "function") loadSidebar = mod.loadSidebar;
+    if (typeof mod.escapeHtml === "function") escapeHtml = mod.escapeHtml;
+  }catch(e){
+    // Deja fallback
+    console.warn("No pude importar assets/js/app.js, uso fallback:", e);
+  }
+}
+
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
-
-
 
 // Constantes
 const TABLA_CUENTAS = "cuentas_facebook";
@@ -26,83 +89,16 @@ let cuentaSeleccionada = null;
 let publicacionesHoy = 0;
 
 // Utilidades
-
-function parseCSV(text) {
-  const lines = text.split('\n');
-  if (lines.length < 2) return [];
-  
-  const headers = lines[0].split(',').map(h => h.trim());
-  const data = [];
-  
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-    
-    const values = parseCSVLine(lines[i]);
-    const row = {};
-    
-    for (let j = 0; j < headers.length; j++) {
-      let value = values[j] || '';
-      // Usar la función limpiarEtiquetas para consistencia
-      row[headers[j]] = limpiarEtiquetas(value);
-    }
-    
-    // Agregar ID único basado en título + descripción
-    row._id = hashString((row.titulo || '') + (row.descripcion || ''));
-    row._index = i - 1;
-    row._usado = false;
-    row._seleccionado = false;
-    
-    data.push(row);
-  }
-  
-  return data;
-}
-
 function log(msg) {
   const el = $("#log");
-  if (!el) return;
-  const t = new Date().toTimeString().slice(0, 8);
-  el.innerHTML += `[${t}] ${escapeHtml(msg)}<br>`;
+  const time = new Date().toLocaleTimeString();
+  el.innerHTML += `<div>[${time}] ${escapeHtml(msg)}</div>`;
   el.scrollTop = el.scrollHeight;
 }
 
-
-function limpiarEtiquetas(etiquetas) {
-  if (!etiquetas) return "";
-  
-  let limpias = etiquetas.trim();
-  
-  // Remover comillas dobles exteriores
-  if (limpias.startsWith('"') && limpias.endsWith('"')) {
-    limpias = limpias.substring(1, limpias.length - 1);
-  }
-  
-  // Reemplazar comillas dobles escapadas
-  limpias = limpias.replace(/""/g, '"');
-  
-  return limpias;
-}
-
-// En cargarAsignacionCategoria
-etiquetasCategoria = limpiarEtiquetas(catData.etiquetas);
-
-// En guardarPublicacion
-const etiquetasParaGuardar = limpiarEtiquetas(etiquetasCategoria);
-
-
-function clearLogs() {
-  const el = $("#log");
-  if (el) el.innerHTML = "";
-}
-
-function disable(sel, v) {
-  const el = $(sel);
-  if (el) el.disabled = !!v;
-}
-
-function showCopiedFeedback(button) {
+function toastOk(button, text = "✅ Copiado") {
   const originalText = button.textContent;
-  button.textContent = "✓ Copiado";
+  button.textContent = text;
   button.style.background = "rgba(34, 197, 94, 0.2)";
   setTimeout(() => {
     button.textContent = originalText;
@@ -129,768 +125,390 @@ async function cargarInformacionUsuario() {
       .single();
 
     if (error) throw error;
-    
+
     usuarioActual = data;
     $("#userInfo").innerHTML = `
-      <div><strong>Usuario:</strong> ${escapeHtml(data.usuario)}</div>
-      <div><strong>Rol:</strong> ${escapeHtml(data.rol || "No especificado")}</div>
-      <div><strong>Email:</strong> ${escapeHtml(data.email || "No especificado")}</div>
+      <div><strong>Usuario:</strong> ${escapeHtml(usuarioActual.usuario)}</div>
+      <div><strong>Rol:</strong> ${escapeHtml(usuarioActual.rol)}</div>
     `;
-    
-    log(`✅ Usuario cargado: ${data.usuario}`);
   } catch (e) {
-    log(`❌ Error cargando usuario: ${e.message}`);
+    log("❌ Error cargando usuario: " + (e?.message || e));
+  }
+}
+
+async function cargarAsignacionCategoria() {
+  try {
+    const hoy = new Date().toISOString().split("T")[0];
+
+    const { data, error } = await supabaseClient
+      .from(TABLA_USUARIOS_ASIGNADO)
+      .select("*")
+      .eq("usuario", session.usuario)
+      .lte("fecha_desde", hoy)
+      .gte("fecha_hasta", hoy)
+      .order("created_at", { ascending: false })
+      .limit(1);
+
+    if (error) throw error;
+
+    const asignacion = (data && data[0]) || null;
+    if (!asignacion) {
+      $("#categoriaInfo").innerHTML = `<div class="muted">No tenés asignación activa hoy.</div>`;
+      return;
+    }
+
+    categoriaAsignada = asignacion.categoria;
+    $("#categoriaInfo").innerHTML = `
+      <div><strong>Categoría asignada:</strong> ${escapeHtml(categoriaAsignada)}</div>
+      <div class="muted">MarketDaily: ${escapeHtml(asignacion.marketplace_daily)}</div>
+    `;
+    $("#metaPublicaciones").textContent = asignacion.marketplace_daily || 0;
+
+    // Cargar datos de categoría
+    const { data: cat, error: errCat } = await supabaseClient
+      .from(TABLA_CATEGORIA)
+      .select("*")
+      .eq("nombre", categoriaAsignada)
+      .single();
+
+    if (!errCat && cat) {
+      etiquetasCategoria = cat.mensaje || "";
+      $("#etiquetasInput").value = etiquetasCategoria;
+    }
+  } catch (e) {
+    log("❌ Error cargando asignación: " + (e?.message || e));
   }
 }
 
 async function cargarCuentasFacebook() {
   try {
+    if (!categoriaAsignada) return;
+
     const { data, error } = await supabaseClient
       .from(TABLA_CUENTAS)
-      .select("email, ocupada_por, estado")
+      .select("*")
+      .eq("estado", "disponible")
       .eq("ocupada_por", session.usuario);
 
     if (error) throw error;
-    
+
     cuentasAsignadas = data || [];
-    
+
     // Contar publicaciones de hoy por cuenta
     const hoy = new Date().toISOString().split('T')[0];
     let completadas = 0;
-    
+
     for (const cuenta of cuentasAsignadas) {
       const { count } = await supabaseClient
         .from(TABLA_MARKETPLACE_ACTIVIDAD)
         .select("*", { count: 'exact', head: true })
         .eq("facebook_account_usada", cuenta.email)
-        .gte("fecha_publicacion", hoy + "T00:00:00")
-        .lte("fecha_publicacion", hoy + "T23:59:59");
-      
-      cuenta.publicacionesHoy = count || 0;
-      
-      // Verificar si completó la cuota
-      if (categoriaAsignada && cuenta.publicacionesHoy >= categoriaAsignada.marketplace_daily) {
-        completadas++;
-      }
+        .gte("created_at", `${hoy}T00:00:00`)
+        .lte("created_at", `${hoy}T23:59:59`);
+
+      cuenta.completadas_hoy = count || 0;
+      completadas += (count || 0);
     }
-    
-    // Actualizar estadísticas
-    $("#cuentasCount").textContent = `Cuentas: ${cuentasAsignadas.length}`;
-    $("#completadasCount").textContent = `Completadas: ${completadas}`;
-    
+
+    $("#cuentasCount").textContent = cuentasAsignadas.length;
+    $("#completadasCount").textContent = completadas;
+
     renderTablaCuentas();
-    log(`✅ ${cuentasAsignadas.length} cuenta(s) cargada(s)`);
   } catch (e) {
-    log(`❌ Error cargando cuentas: ${e.message}`);
+    log("❌ Error cargando cuentas: " + (e?.message || e));
   }
 }
 
-function limpiarEtiquetas(etiquetas) {
-  if (!etiquetas) return "";
-  
-  let limpias = etiquetas.trim();
-  
-  // Remover comillas dobles exteriores
-  if (limpias.startsWith('"') && limpias.endsWith('"')) {
-    limpias = limpias.substring(1, limpias.length - 1);
-  }
-  
-  // Reemplazar comillas dobles escapadas
-  limpias = limpias.replace(/""/g, '"');
-  
-  return limpias;
-}
+function renderTablaCuentas() {
+  const tbody = $("#tablaCuentas tbody");
+  tbody.innerHTML = "";
 
-async function cargarAsignacionCategoria() {
-  try {
-    const hoy = new Date().toISOString().split('T')[0];
-    
-    const { data, error } = await supabaseClient
-      .from(TABLA_USUARIOS_ASIGNADO)
-      .select("categoria, marketplace_daily, fecha_desde, fecha_hasta")
-      .eq("usuario", session.usuario)
-      .lte("fecha_desde", hoy)
-      .gte("fecha_hasta", hoy)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        log("⚠️ No tenés asignación activa para hoy");
-        categoriaAsignada = null;
-        return;
-      }
-      throw error;
-    }
-    
-    categoriaAsignada = data;
-    
-    // Cargar detalles de la categoría (INCLUYENDO ETIQUETAS)
-    const { data: catData } = await supabaseClient
-      .from(TABLA_CATEGORIA)
-      .select("nombre, csv_nombre, etiquetas")
-      .eq("nombre", data.categoria)
-      .single();
-    
-    if (catData) {
-      categoriaAsignada.detalles = catData;
-      
-      // LIMPIAR ETIQUETAS - QUITAR COMILLAS DOBLES
-      etiquetasCategoria = limpiarEtiquetas(catData.etiquetas || "");
-      
-      $("#categoriaInfo").innerHTML = `
-        <div><strong>Categoría:</strong> ${escapeHtml(data.categoria)}</div>
-        <div><strong>Etiquetas:</strong> ${escapeHtml(etiquetasCategoria || "Sin etiquetas")}</div>
-        <div><strong>Publicaciones diarias por cuenta:</strong> ${data.marketplace_daily}</div>
-        <div><strong>Período:</strong> ${new Date(data.fecha_desde).toLocaleDateString()} al ${new Date(data.fecha_hasta).toLocaleDateString()}</div>
-      `;
-    } else {
-      $("#categoriaInfo").innerHTML = `
-        <div><strong>Categoría:</strong> ${escapeHtml(data.categoria)}</div>
-        <div><strong>Publicaciones diarias por cuenta:</strong> ${data.marketplace_daily}</div>
-        <div><strong>Período:</strong> ${new Date(data.fecha_desde).toLocaleDateString()} al ${new Date(data.fecha_hasta).toLocaleDateString()}</div>
-      `;
-    }
-    
-    $("#metaPublicaciones").textContent = data.marketplace_daily;
-    
-    log(`✅ Categoría asignada: ${data.categoria}`);
-  } catch (e) {
-    log(`❌ Error cargando asignación: ${e.message}`);
-  }
-}
-async function cargarCSVDeCategoria() {
-  if (!categoriaAsignada?.detalles?.csv_nombre) {
-    log("⚠️ No hay CSV asociado a esta categoría");
-    return;
-  }
-  
-  try {
-    const path = categoriaAsignada.detalles.csv_nombre;
-    log(`📥 Descargando CSV: ${path}`);
-    
-    const { data, error } = await supabaseClient.storage
-      .from(BUCKET_CSV)
-      .download(path);
-    
-    if (error) throw error;
-    
-    const text = await data.text();
-    csvData = parseCSV(text);
-    
-    // Identificar contenido ya usado HOY
-    await identificarContenidoUsado();
-    
-    log(`✅ CSV cargado: ${csvData.length} filas`);
-    
-    // Mostrar estadísticas
-    mostrarEstadisticasContenido();
-    
-  } catch (e) {
-    log(`❌ Error cargando CSV: ${e.message}`);
-  }
-}
-
-function parseCSV(text) {
-  const lines = text.split('\n');
-  if (lines.length < 2) return [];
-  
-  const headers = lines[0].split(',').map(h => h.trim());
-  const data = [];
-  
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-    
-    const values = parseCSVLine(lines[i]);
-    const row = {};
-    
-    for (let j = 0; j < headers.length; j++) {
-      let value = values[j] || '';
-      // Remover comillas dobles si las hay
-      if (value.startsWith('"') && value.endsWith('"')) {
-        value = value.slice(1, -1);
-      }
-      row[headers[j]] = value.trim();
-    }
-    
-    // Agregar ID único basado en título + descripción
-    row._id = hashString((row.titulo || '') + (row.descripcion || ''));
-    row._index = i - 1;
-    row._usado = false;
-    row._seleccionado = false;
-    
-    data.push(row);
-  }
-  
-  return data;
-}
-
-function parseCSVLine(line) {
-  const result = [];
-  let current = '';
-  let inQuotes = false;
-  
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  
-  result.push(current);
-  return result;
-}
-
-function hashString(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return hash.toString();
-}
-
-async function identificarContenidoUsado() {
-  const hoy = new Date().toISOString().split('T')[0];
-  
-  try {
-    const { data, error } = await supabaseClient
-      .from(TABLA_MARKETPLACE_ACTIVIDAD)
-      .select("titulo, descripcion")
-      .eq("usuario", session.usuario)
-      .gte("fecha_publicacion", hoy + "T00:00:00")
-      .lte("fecha_publicacion", hoy + "T23:59:59");
-    
-    if (error) throw error;
-    
-    contenidoUsado.clear();
-    
-    // Marcar contenido ya usado en csvData
-    for (const item of data) {
-      const id = hashString((item.titulo || '') + (item.descripcion || ''));
-      contenidoUsado.add(id);
-      
-      // También marcar en csvData
-      const index = csvData.findIndex(row => row._id === id);
-      if (index !== -1) {
-        csvData[index]._usado = true;
-      }
-    }
-    
-  } catch (e) {
-    log(`⚠️ Error identificando contenido usado: ${e.message}`);
-  }
-}
-
-function mostrarEstadisticasContenido() {
-  const usado = csvData.filter(row => row._usado).length;
-  const total = csvData.length;
-  const disponible = total - usado;
-  
-  const statsEl = $("#estadisticasContenido");
-  statsEl.style.display = "flex";
-  statsEl.innerHTML = `
-    <span class="pill pill-success">Disponible: ${disponible}</span>
-    <span class="pill pill-warning">Usado hoy: ${usado}</span>
-    <span class="pill pill-info">Total: ${total}</span>
-  `;
-}
-
-function seleccionarContenidoAutomatico() {
-  if (csvData.length === 0) {
-    log("⚠️ No hay contenido disponible en el CSV");
-    return null;
-  }
-  
-  // Filtrar contenido no usado
-  const contenidoDisponible = csvData.filter(row => !row._usado);
-  
-  if (contenidoDisponible.length === 0) {
-    log("❌ Ya usaste todo el contenido disponible para hoy");
-    return null;
-  }
-  
-  // Limpiar selección anterior
-  if (contenidoSeleccionado) {
-    contenidoSeleccionado._seleccionado = false;
-  }
-  
-  // Seleccionar aleatoriamente
-  const randomIndex = Math.floor(Math.random() * contenidoDisponible.length);
-  contenidoSeleccionado = contenidoDisponible[randomIndex];
-  contenidoSeleccionado._seleccionado = true;
-  
-  // Actualizar interfaz
-  actualizarContenidoFila(contenidoSeleccionado);
-  
-  log(`✅ Contenido seleccionado: "${contenidoSeleccionado.titulo?.substring(0, 30) || 'Sin título'}..."`);
-  
-  return contenidoSeleccionado;
-}
-
-function actualizarContenidoFila(fila) {
-  if (!fila) return;
-  
-  // Actualizar inputs de visualización
-  $("#tituloInput").value = fila.titulo || "";
-  $("#descripcionInput").value = fila.descripcion || "";
-  $("#categoriaInput").value = fila.categoria || "";
-  $("#etiquetasInput").value = etiquetasCategoria || "";
-  
-  // Actualizar formulario de guardado
-  $("#etiquetasInput").value = etiquetasCategoria || "";
-  $("#etiquetasUsadasInput").value = etiquetasCategoria || "";
-  $("#tituloUsadoInput").value = fila.titulo || "";
-  $("#descripcionUsadaInput").value = fila.descripcion || "";
-  $("#categoriaUsadaInput").value = fila.categoria || "";
-  $("#etiquetasUsadasInput").value = etiquetasCategoria || "";
-  $("#urlPortadaInput").value = fila.url_imagenes_portadas || "";
-  
-  // Actualizar estado visual de los inputs
-  const tituloInput = $("#tituloInput");
-  const descInput = $("#descripcionInput");
-  
-  tituloInput.className = fila._usado ? "content-used" : (fila._seleccionado ? "content-selected" : "content-available");
-  descInput.className = fila._usado ? "content-used" : (fila._seleccionado ? "content-selected" : "content-available");
-  
-  // Actualizar badge de estado en título
-  const tituloStatus = $("#tituloStatus");
-  if (fila._usado) {
-    tituloStatus.innerHTML = '<span class="used-badge">USADO</span>';
-  } else if (fila._seleccionado) {
-    tituloStatus.innerHTML = '<span class="available-badge">SELECCIONADO</span>';
-  } else {
-    tituloStatus.innerHTML = "";
-  }
-  
-  // Actualizar imágenes fijas
-  const container = $("#imagenesFijasContainer");
-  container.innerHTML = "";
-  
-  for (let i = 1; i <= 4; i++) {
-    const url = fila[`url_img_fijas_${i}`];
-    if (url) {
-      const div = document.createElement("div");
-      div.className = `image-preview ${fila._usado ? 'used' : ''}`;
-      div.innerHTML = `
-        <img src="${escapeHtml(url)}" alt="Imagen ${i}" onerror="this.style.display='none'">
-        <div style="font-size:11px; padding:2px; text-align:center;">${i}</div>
-      `;
-      container.appendChild(div);
-    }
-  }
-  
-  // Actualizar portada
-  const portadaContainer = $("#portadaContainer");
-  portadaContainer.innerHTML = "";
-  
-  if (fila.url_imagenes_portadas) {
-    const div = document.createElement("div");
-    div.className = `image-preview ${fila._usado ? 'used' : ''}`;
-    div.innerHTML = `
-      <img src="${escapeHtml(fila.url_imagenes_portadas)}" alt="Portada" onerror="this.style.display='none'">
-      <div style="font-size:11px; padding:2px; text-align:center;">Portada</div>
+  for (const c of cuentasAsignadas) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(c.email)}</td>
+      <td>${escapeHtml(c.nombre || "")}</td>
+      <td>${escapeHtml(c.calidad || "")}</td>
+      <td>${c.completadas_hoy || 0}</td>
+      <td>
+        <button class="btn-secondary btn-sm" data-email="${escapeHtml(c.email)}">Usar</button>
+      </td>
     `;
-    portadaContainer.appendChild(div);
+    tbody.appendChild(tr);
   }
+
+  // bind botones
+  tbody.querySelectorAll("button[data-email]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const email = btn.getAttribute("data-email");
+      cuentaSeleccionada = cuentasAsignadas.find(x => x.email === email) || null;
+      $("#cuentaUsadaInput").value = cuentaSeleccionada?.email || "";
+      log(`✅ Cuenta seleccionada: ${email}`);
+    });
+  });
 }
 
 async function cargarHistorialHoy() {
   try {
-    const hoy = new Date().toISOString().split('T')[0];
-    
+    const hoy = new Date().toISOString().split("T")[0];
+
     const { data, error } = await supabaseClient
       .from(TABLA_MARKETPLACE_ACTIVIDAD)
       .select("*")
       .eq("usuario", session.usuario)
-      .gte("fecha_publicacion", hoy + "T00:00:00")
-      .lte("fecha_publicacion", hoy + "T23:59:59")
-      .order("fecha_publicacion", { ascending: false });
-    
+      .gte("created_at", `${hoy}T00:00:00`)
+      .lte("created_at", `${hoy}T23:59:59`)
+      .order("created_at", { ascending: false });
+
     if (error) throw error;
-    
-    publicacionesHoy = data.length;
+
+    const rows = data || [];
+    publicacionesHoy = rows.length;
     $("#contadorPublicaciones").textContent = publicacionesHoy;
-    $("#historialInfo").textContent = `${data.length} publicación(es) hoy`;
-    
-    renderTablaHistorial(data);
-  } catch (e) {
-    log(`❌ Error cargando historial: ${e.message}`);
-  }
-}
 
-// Funciones de renderizado
-function renderTablaCuentas() {
-  const tbody = $("#tablaCuentas tbody");
-  if (!tbody) return;
-  
-  tbody.innerHTML = "";
-  
-  if (cuentasAsignadas.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="muted">No tenés cuentas asignadas</td></tr>`;
-    return;
-  }
-  
-  for (const cuenta of cuentasAsignadas) {
-    const tr = document.createElement("tr");
-    
-    // Email
-    const tdEmail = document.createElement("td");
-    tdEmail.innerHTML = `<span class="mono">${escapeHtml(cuenta.email)}</span>`;
-    tr.appendChild(tdEmail);
-    
-    // Estado
-    const tdEstado = document.createElement("td");
-    const estadoPill = document.createElement("span");
-    estadoPill.className = `pill ${cuenta.estado === 'activa' ? 'pill-success' : 'pill-warning'}`;
-    estadoPill.textContent = cuenta.estado || 'desconocido';
-    tdEstado.appendChild(estadoPill);
-    tr.appendChild(tdEstado);
-    
-    // Publicaciones hoy
-    const tdPublicaciones = document.createElement("td");
-    const meta = categoriaAsignada?.marketplace_daily || 0;
-    const completado = cuenta.publicacionesHoy >= meta;
-    tdPublicaciones.innerHTML = `
-      <span style="font-weight:bold; color: ${completado ? '#22c55e' : '#f59e0b'}">${cuenta.publicacionesHoy}</span>
-      <span class="muted">/${meta}</span>
-    `;
-    tr.appendChild(tdPublicaciones);
-    
-    // Acciones
-    const tdAcciones = document.createElement("td");
-    tdAcciones.className = "actions";
-    
-    const btnSeleccionar = document.createElement("button");
-    btnSeleccionar.className = cuentaSeleccionada?.email === cuenta.email ? "btn active" : "btn";
-    btnSeleccionar.textContent = cuentaSeleccionada?.email === cuenta.email ? "✓ Seleccionada" : "Seleccionar";
-    btnSeleccionar.onclick = () => seleccionarCuenta(cuenta);
-    btnSeleccionar.disabled = completado;
-    
-    tdAcciones.appendChild(btnSeleccionar);
-    tr.appendChild(tdAcciones);
-    
-    tbody.appendChild(tr);
-  }
-}
+    const tbody = $("#tablaHistorial tbody");
+    tbody.innerHTML = "";
 
-function renderTablaHistorial(historial) {
-  const tbody = $("#tablaHistorial tbody");
-  if (!tbody) return;
-  
-  tbody.innerHTML = "";
-  
-  if (historial.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="muted">No hay publicaciones hoy</td></tr>`;
-    return;
-  }
-  
-  for (const item of historial) {
-    const tr = document.createElement("tr");
-    
-    // Hora
-    const tdHora = document.createElement("td");
-    const fecha = new Date(item.fecha_publicacion);
-    tdHora.textContent = fecha.toLocaleTimeString('es-AR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-    tr.appendChild(tdHora);
-    
-    // Cuenta
-    const tdCuenta = document.createElement("td");
-    tdCuenta.innerHTML = `<span class="mono">${escapeHtml(item.facebook_account_usada)}</span>`;
-    tr.appendChild(tdCuenta);
-    
-    // Título
-    const tdTitulo = document.createElement("td");
-    tdTitulo.textContent = item.titulo ? (item.titulo.substring(0, 40) + (item.titulo.length > 40 ? '...' : '')) : '';
-    tr.appendChild(tdTitulo);
-    
-    // Link
-    const tdLink = document.createElement("td");
-    if (item.marketplace_link_publicacion) {
-      tdLink.innerHTML = `<a href="${escapeHtml(item.marketplace_link_publicacion)}" target="_blank" style="color:#60a5fa; font-size:12px;">${escapeHtml(item.marketplace_link_publicacion.substring(0, 40))}...</a>`;
-    } else {
-      tdLink.textContent = "Sin link";
+    for (const r of rows) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${escapeHtml(new Date(r.created_at).toLocaleTimeString())}</td>
+        <td>${escapeHtml(r.facebook_account_usada || "")}</td>
+        <td>${escapeHtml(r.titulo || "")}</td>
+        <td>${escapeHtml(r.marketplace_link_publicacion || "")}</td>
+      `;
+      tbody.appendChild(tr);
     }
-    tr.appendChild(tdLink);
-    
-    // Acciones
-    const tdAcciones = document.createElement("td");
-    tdAcciones.className = "actions";
-    
-    const btnCopiar = document.createElement("button");
-    btnCopiar.className = "btn2";
-    btnCopiar.textContent = "Copiar";
-    btnCopiar.onclick = () => {
-      navigator.clipboard.writeText(item.marketplace_link_publicacion || '');
-      log("📋 Link copiado al portapapeles");
-    };
-    
-    tdAcciones.appendChild(btnCopiar);
-    tr.appendChild(tdAcciones);
-    
-    tbody.appendChild(tr);
+  } catch (e) {
+    log("❌ Error cargando historial: " + (e?.message || e));
   }
 }
 
-// Funciones de interacción
-function seleccionarCuenta(cuenta) {
-  cuentaSeleccionada = cuenta;
-  
-  // Actualizar UI
-  renderTablaCuentas();
-  
-  // Mostrar contenido
-  $("#contenidoContainer").style.display = "block";
-  $("#csvInfo").textContent = `Contenido para: ${cuenta.email}`;
-  
-  // Actualizar cuenta usada en formulario
-  $("#cuentaUsadaInput").value = cuenta.email;
-  
-  // Cargar CSV si no está cargado
-  if (csvData.length === 0 && categoriaAsignada) {
-    cargarCSVDeCategoria().then(() => {
-      if (csvData.length > 0) {
-        seleccionarContenidoAutomatico();
-      }
-    });
-  } else if (csvData.length > 0) {
-    seleccionarContenidoAutomatico();
+async function descargarCSVCategoria() {
+  try {
+    if (!categoriaAsignada) return;
+
+    log("⬇️ Buscando CSV en bucket...");
+    const fileName = `${categoriaAsignada}.csv`;
+
+    const { data, error } = await supabaseClient
+      .storage
+      .from(BUCKET_CSV)
+      .download(fileName);
+
+    if (error) throw error;
+
+    const text = await data.text();
+    csvData = parseCSV(text);
+
+    $("#csvInfo").innerHTML = `
+      <div><strong>CSV:</strong> ${escapeHtml(fileName)}</div>
+      <div class="muted">Filas: ${csvData.length}</div>
+    `;
+
+    log(`✅ CSV cargado (${csvData.length} filas)`);
+    seleccionarContenidoAleatorio();
+  } catch (e) {
+    log("❌ Error descargando CSV: " + (e?.message || e));
   }
-  
-  log(`✅ Cuenta seleccionada: ${cuenta.email}`);
+}
+
+function parseCSV(text) {
+  // parse simple (sin comillas complejas)
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  if (!lines.length) return [];
+
+  const headers = lines[0].split(",").map(h => h.trim());
+  const rows = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = lines[i].split(",");
+    const row = {};
+    headers.forEach((h, idx) => row[h] = (cols[idx] ?? "").trim());
+    rows.push(row);
+  }
+  return rows;
+}
+
+function seleccionarContenidoAleatorio() {
+  if (!csvData.length) {
+    log("⚠️ No hay CSV cargado para seleccionar contenido.");
+    return;
+  }
+
+  // Selecciona fila no usada
+  const disponibles = csvData.filter((r, idx) => !contenidoUsado.has(idx));
+  if (!disponibles.length) {
+    log("⚠️ Ya se usaron todas las filas del CSV.");
+    return;
+  }
+
+  const pick = disponibles[Math.floor(Math.random() * disponibles.length)];
+  const idxPick = csvData.indexOf(pick);
+
+  contenidoSeleccionado = { ...pick, _idx: idxPick };
+  contenidoUsado.add(idxPick);
+
+  // Ajustá nombres de columnas del CSV si difieren
+  const titulo = pick.titulo || pick.title || "";
+  const descripcion = pick.descripcion || pick.description || "";
+  const portada = pick.portada || pick.image || pick.imagen || "";
+
+  $("#categoriaUsadaInput").value = categoriaAsignada || "";
+  $("#etiquetasUsadasInput").value = etiquetasCategoria || "";
+  $("#tituloInput").value = titulo;
+  $("#descripcionInput").value = descripcion;
+
+  // Render portadita
+  $("#portadaContainer").innerHTML = portada
+    ? `<img src="${escapeHtml(portada)}" alt="portada" style="max-width:220px;border-radius:10px;">`
+    : `<div class="muted">Sin portada</div>`;
+
+  // Render imágenes fijas si vienen como columnas imagen1/imagen2...
+  const imgs = [];
+  Object.keys(pick).forEach(k => {
+    const kk = k.toLowerCase();
+    if (kk.startsWith("imagen") || kk.startsWith("image") || kk.startsWith("foto") || kk.startsWith("pic")) {
+      const v = pick[k];
+      if (v && /^https?:\/\//i.test(v)) imgs.push(v);
+    }
+  });
+
+  $("#imagenesFijasContainer").innerHTML = imgs.length
+    ? imgs.map(u => `<img src="${escapeHtml(u)}" style="max-width:140px;border-radius:10px;margin:6px;">`).join("")
+    : `<div class="muted">Sin imágenes extra</div>`;
+
+  // Stats
+  $("#estadisticasContenido").innerHTML = `
+    <div class="muted">Fila CSV usada: ${contenidoSeleccionado._idx}</div>
+    <div class="muted">Restantes: ${csvData.length - contenidoUsado.size}</div>
+  `;
+
+  log("🎲 Contenido seleccionado del CSV");
+}
+
+function setupEventListeners() {
+  $("#btnCambiarContenido").addEventListener("click", () => {
+    seleccionarContenidoAleatorio();
+  });
+
+  $("#btnCopiarCategoria").addEventListener("click", async (e) => {
+    await navigator.clipboard.writeText($("#categoriaUsadaInput").value || "");
+    toastOk(e.target);
+  });
+
+  $("#btnCopiarEtiquetas").addEventListener("click", async (e) => {
+    await navigator.clipboard.writeText($("#etiquetasUsadasInput").value || "");
+    toastOk(e.target);
+  });
+
+  $("#btnCopiarTitulo").addEventListener("click", async (e) => {
+    await navigator.clipboard.writeText($("#tituloInput").value || "");
+    toastOk(e.target);
+  });
+
+  $("#btnCopiarDescripcion").addEventListener("click", async (e) => {
+    await navigator.clipboard.writeText($("#descripcionInput").value || "");
+    toastOk(e.target);
+  });
+
+  $("#btnLimpiarFormulario").addEventListener("click", () => {
+    $("#marketplaceLinkInput").value = "";
+    $("#cuentaUsadaInput").value = "";
+    cuentaSeleccionada = null;
+    log("🧽 Formulario limpiado");
+  });
+
+  $("#btnLimpiarLogs").addEventListener("click", () => {
+    $("#log").innerHTML = "";
+  });
+
+  $("#btnGuardarPublicacion").addEventListener("click", guardarPublicacion);
+
+  $("#btnDescargarTodasImagenes").addEventListener("click", () => {
+    const imgs = Array.from($("#imagenesFijasContainer").querySelectorAll("img")).map(i => i.src);
+    if ($("#portadaContainer img")) imgs.unshift($("#portadaContainer img").src);
+    if (!imgs.length) return log("⚠️ No hay imágenes para descargar.");
+
+    imgs.forEach((u) => window.open(u, "_blank"));
+    log(`🖼️ Abiertas ${imgs.length} imágenes en pestañas`);
+  });
 }
 
 async function guardarPublicacion() {
-  // Validaciones
-  if (!cuentaSeleccionada) {
-    log("❌ Seleccioná una cuenta primero");
-    return;
-  }
-  
-  if (!contenidoSeleccionado) {
-    log("❌ No hay contenido seleccionado");
-    return;
-  }
-  
-  // Verificar si ya completó la cuota diaria
-  const meta = categoriaAsignada?.marketplace_daily || 0;
-  const completado = cuentaSeleccionada.publicacionesHoy >= meta;
-  if (completado) {
-    log(`❌ Ya completaste las ${meta} publicaciones diarias para esta cuenta`);
-    return;
-  }
-  
-  if (contenidoSeleccionado._usado) {
-    log("⚠️ Este contenido ya fue usado hoy. Seleccionando nuevo contenido...");
-    seleccionarContenidoAutomatico();
-    return;
-  }
-  
-  const link = $("#marketplaceLinkInput").value.trim();
-  if (!link) {
-    log("❌ El link de Marketplace es obligatorio");
-    return;
-  }
-  
-  const titulo = $("#tituloUsadoInput").value.trim();
-  const descripcion = $("#descripcionUsadaInput").value.trim();
-  const categoria = $("#categoriaUsadaInput").value.trim();
-  
-  if (!titulo || !descripcion || !categoria) {
-    log("❌ Falta completar campos obligatorios");
-    return;
-  }
-  
-  disable("#btnGuardarPublicacion", true);
-  
-
-
   try {
+    const link = ($("#marketplaceLinkInput").value || "").trim();
+    if (!link) {
+      log("⚠️ Pegá el link de la publicación antes de guardar.");
+      return;
+    }
+    if (!cuentaSeleccionada?.email) {
+      log("⚠️ Seleccioná una cuenta de Facebook antes de guardar.");
+      return;
+    }
+
+    const payload = {
+      usuario: session.usuario,
+      facebook_account_usada: cuentaSeleccionada.email,
+      fecha_publicacion: new Date().toISOString(),
+      marketplace_link_publicacion: link,
+
+      titulo: ($("#tituloInput").value || "").trim(),
+      descripcion: ($("#descripcionInput").value || "").trim(),
+      categoria: categoriaAsignada || "",
+      etiquetas_usadas: etiquetasCategoria || ""
+    };
+
     const { error } = await supabaseClient
       .from(TABLA_MARKETPLACE_ACTIVIDAD)
-      .insert([{
-        usuario: session.usuario,
-        facebook_account_usada: cuentaSeleccionada.email,
-        fecha_publicacion: new Date().toISOString(),
-        marketplace_link_publicacion: link,
-        titulo: titulo,
-        descripcion: descripcion,
-        categoria: categoria,
-        etiquetas_usadas: limpiarEtiquetas(etiquetasCategoria), // <- AQUÍ TAMBIÉN
-        url_imagenes_portada: $("#urlPortadaInput").value.trim()
-      }]);
-    
+      .insert([payload]);
+
     if (error) throw error;
-    
-    // ... resto del código ...
-  } catch (e) {
-    log(`❌ Error guardando publicación: ${e.message}`);
-    console.error(e);
-}
 
-async function cargarAsignacionCategoria() {
-  try {
-    // ... código anterior ...
-    
-    if (catData) {
-      categoriaAsignada.detalles = catData;
-      
-      // Limpiar comillas dobles de las etiquetas
-      let etiquetasRaw = catData.etiquetas || "";
-      if (etiquetasRaw.startsWith('"') && etiquetasRaw.endsWith('"')) {
-        etiquetasCategoria = etiquetasRaw.substring(1, etiquetasRaw.length - 1);
-      } else {
-        etiquetasCategoria = etiquetasRaw;
-      }
-      
-      // Reemplazar comillas escapadas
-      etiquetasCategoria = etiquetasCategoria.replace(/""/g, '"');
-      
-      $("#categoriaInfo").innerHTML = `
-        <div><strong>Categoría:</strong> ${escapeHtml(data.categoria)}</div>
-        <div><strong>Etiquetas:</strong> ${escapeHtml(etiquetasCategoria || "Sin etiquetas")}</div>
-        <div><strong>Publicaciones diarias por cuenta:</strong> ${data.marketplace_daily}</div>
-        <div><strong>Período:</strong> ${new Date(data.fecha_desde).toLocaleDateString()} al ${new Date(data.fecha_hasta).toLocaleDateString()}</div>
-      `;
-    }
-    
-    // ... resto del código ...
-  } catch (e) {
-    log(`❌ Error cargando asignación: ${e.message}`);
-  }
-}
-
-function descargarTodasImagenes() {
-  if (!contenidoSeleccionado) {
-    log("❌ No hay contenido seleccionado");
-    return;
-  }
-  
-  const fila = contenidoSeleccionado;
-  const urls = [];
-  
-  // Agregar imágenes fijas
-  for (let i = 1; i <= 4; i++) {
-    const url = fila[`url_img_fijas_${i}`];
-    if (url) {
-      const nombre = fila.titulo ? 
-        `imagen_${i}_${fila.titulo.replace(/[^a-z0-9]/gi, '_').substring(0, 20)}.jpg` :
-        `imagen_${i}.jpg`;
-      urls.push({ url, name: nombre });
-    }
-  }
-  
-  // Agregar portada
-  if (fila.url_imagenes_portadas) {
-    const nombrePortada = fila.titulo ?
-      `portada_${fila.titulo.replace(/[^a-z0-9]/gi, '_').substring(0, 20)}.jpg` :
-      `portada.jpg`;
-    urls.push({ url: fila.url_imagenes_portadas, name: nombrePortada });
-  }
-  
-  if (urls.length === 0) {
-    log("⚠️ No hay URLs de imágenes para descargar");
-    return;
-  }
-  
-  log(`⬇️ Descargando ${urls.length} imagen(es)...`);
-  
-  // Descargar cada imagen
-  urls.forEach(item => {
-    const a = document.createElement("a");
-    a.href = item.url;
-    a.download = item.name;
-    a.target = "_blank";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  });
-}
-
-// Event Listeners
-function setupEventListeners() {
-  // Copiar contenido
-  $("#btnCopiarTitulo")?.addEventListener("click", () => {
-    navigator.clipboard.writeText($("#tituloInput").value);
-    showCopiedFeedback($("#btnCopiarTitulo"));
-  });
-  
-  $("#btnCopiarDescripcion")?.addEventListener("click", () => {
-    navigator.clipboard.writeText($("#descripcionInput").value);
-    showCopiedFeedback($("#btnCopiarDescripcion"));
-  });
-  
-  $("#btnCopiarCategoria")?.addEventListener("click", () => {
-    navigator.clipboard.writeText($("#categoriaInput").value);
-    showCopiedFeedback($("#btnCopiarCategoria"));
-  });
-  
-  $("#btnCopiarEtiquetas")?.addEventListener("click", () => {
-    navigator.clipboard.writeText($("#etiquetasInput").value);
-    showCopiedFeedback($("#btnCopiarEtiquetas"));
-  });
-  
-  // Descargar imágenes
-  $("#btnDescargarTodasImagenes")?.addEventListener("click", descargarTodasImagenes);
-  
-  // Cambiar contenido
-  $("#btnCambiarContenido")?.addEventListener("click", () => {
-    const nuevo = seleccionarContenidoAutomatico();
-    if (nuevo) {
-      log("🔄 Contenido cambiado manualmente");
-    }
-  });
-  
-  // Guardar publicación
-  $("#btnGuardarPublicacion")?.addEventListener("click", guardarPublicacion);
-  
-  // Limpiar formulario (solo el link)
-  $("#btnLimpiarFormulario")?.addEventListener("click", () => {
+    log("✅ Publicación guardada en marketplace_actividad");
     $("#marketplaceLinkInput").value = "";
-    log("🧹 Link limpiado");
-  });
-  
-  // Limpiar logs
-  $("#btnLimpiarLogs")?.addEventListener("click", clearLogs);
+
+    await cargarCuentasFacebook();
+    await cargarHistorialHoy();
+  } catch (e) {
+    log("❌ Error guardando publicación: " + (e?.message || e));
+  }
 }
 
 // Inicialización
 document.addEventListener("DOMContentLoaded", async () => {
+  await ensureAppHelpers();
+
   // 1) Cargar sesión
   session = getSession();
   if (!session?.usuario) {
     log("❌ No hay sesión activa. Volvé al login.");
     return;
   }
-  
+
   // 2) Cargar sidebar
   await loadSidebar({ activeKey: "diario", basePath: "../" });
-  
+
   // 3) Conectar a Supabase
   supabaseClient = await waitSupabaseClient(2000);
   if (!supabaseClient) {
     log("❌ No se pudo conectar con Supabase");
     return;
   }
-  
+
   log("✅ Supabase client conectado");
-  
+
   // 4) Configurar eventos
   setupEventListeners();
-  
+
   // 5) Cargar datos iniciales
   await cargarInformacionUsuario();
   await cargarAsignacionCategoria();
   await cargarCuentasFacebook();
   await cargarHistorialHoy();
-  
+
+  // 6) Intentar cargar CSV automáticamente
+  await descargarCSVCategoria();
+
   log("✅ Sistema de diario listo");
 });
