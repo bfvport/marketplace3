@@ -196,6 +196,23 @@ async function cargarCSVDeCategoria() {
   }
 }
 
+
+function normalizeTags(input) {
+  // Si ya es array, lo sanitiza
+  if (Array.isArray(input)) {
+    return input.map(s => String(s).trim()).filter(Boolean);
+  }
+
+  const s = String(input || "").trim();
+  if (!s) return [];
+
+  // Soporta: "tag1,tag2" | "tag1; tag2" | "tag1 | tag2" | "tag1 tag2"
+  return s
+    .split(/[,;|]/g)               // separadores más comunes
+    .map(t => t.trim())
+    .filter(Boolean);
+}
+
 function parseCSV(text) {
   const lines = text.split('\n');
   if (lines.length < 2) return [];
@@ -219,6 +236,11 @@ function parseCSV(text) {
     }
     
     // Agregar ID único basado en título + descripción
+
+  
+
+
+
     row._id = hashString((row.titulo || '') + (row.descripcion || ''));
     row._index = i - 1; // Índice original
     row._usado = false; // Se actualizará después
@@ -629,7 +651,7 @@ async function guardarPublicacion() {
         titulo: titulo,
         descripcion: descripcion,
         categoria: categoria,
-        etiquetas_usadas: etiquetasCategoria, // Usar etiquetas de la BD
+        etiquetas_usadas: normalizeTags(etiquetasCategoria),
         url_imagenes_portada: urlPortada
       }]);
     
