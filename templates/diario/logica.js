@@ -1,177 +1,619 @@
-import { requireSession, loadSidebar, fmtDateISO, nowISO } from "../../assets/js/app.js";
+import { getSession, loadSidebar, escapeHtml } from "../../assets/js/app.js";
 
-const s = requireSession();
-const sb = window.supabaseClient;
-const $ = (id) => document.getElementById(id);
-const today = fmtDateISO(new Date());
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
 
-let itemsCSV = [];
-let itemActual = null;
-let asignacionActiva = null;
+// Constantes
+const TABLA_CUENTAS = "cuentas_facebook";
+const TABLA_USUARIOS_ASIGNADO = "usuarios_asignado";
+const TABLA_MARKETPLACE_ACTIVIDAD = "marketplace_actividad";
+const TABLA_CATEGORIA = "categoria";
+const BUCKET_CSV = "categoria_csv";
 
-(async function init() {
-    await loadSidebar({ activeKey: "diario", basePath: "../" });
+// Variables de estado
+let session = null;
+let supabaseClient = null;
+let usuarioActual = null;
+let cuentasAsignadas = [];
+let categoriaAsignada = null;
+let csvData = [];
+let cuentaSeleccionada = null;
+let filaActual = 0;
+let publicacionesHoy = 0;
 
-    if (s.rol === "gerente") {
-        $("view-gerente").classList.remove("hidden");
-        await cargarVistaGerente();
-        setInterval(cargarVistaGerente, 20000); // Refresco automático
+// Utilidades
+function log(msg) {
+  const el = $("#log");
+  if (!el) return;
+  const t = new Date().toTimeString().slice(0, 8);
+  el.innerHTML += `[${t}] ${escapeHtml(msg)}<br>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+function disable(sel, v) {
+  const el = $(sel);
+  if (el) el.disabled = !!v;
+}
+
+function showCopiedFeedback(button) {
+  const originalText = button.textContent;
+  button.textContent = "✓ Copiado";
+  button.style.background = "rgba(34, 197, 94, 0.2)";
+  setTimeout(() => {
+    button.textContent = originalText;
+    button.style.background = "";
+  }, 1500);
+}
+
+// Funciones de datos
+async function waitSupabaseClient(timeoutMs = 2000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (window.supabaseClient) return window.supabaseClient;
+    await new Promise(r => setTimeout(r, 50));
+  }
+  return null;
+}
+
+async function cargarInformacionUsuario() {
+  try {
+    const { data, error } = await supabaseClient
+      .from("usuarios")
+      .select("*")
+      .eq("usuario", session.usuario)
+      .single();
+
+    if (error) throw error;
+    
+    usuarioActual = data;
+    $("#userInfo").innerHTML = `
+      <div><strong>Usuario:</strong> ${escapeHtml(data.usuario)}</div>
+      <div><strong>Rol:</strong> ${escapeHtml(data.rol || "No especificado")}</div>
+      <div><strong>Email:</strong> ${escapeHtml(data.email || "No especificado")}</div>
+    `;
+    
+    log(`✅ Usuario cargado: ${data.usuario}`);
+  } catch (e) {
+    log(`❌ Error cargando usuario: ${e.message}`);
+  }
+}
+
+async function cargarCuentasFacebook() {
+  try {
+    const { data, error } = await supabaseClient
+      .from(TABLA_CUENTAS)
+      .select("email, ocupada_por, estado")
+      .eq("ocupada_por", session.usuario);
+
+    if (error) throw error;
+    
+    cuentasAsignadas = data || [];
+    
+    // Contar publicaciones de hoy por cuenta
+    const hoy = new Date().toISOString().split('T')[0];
+    for (const cuenta of cuentasAsignadas) {
+      const { count } = await supabaseClient
+        .from(TABLA_MARKETPLACE_ACTIVIDAD)
+        .select("*", { count: 'exact', head: true })
+        .eq("facebook_account_usada", cuenta.email)
+        .gte("fecha_publicacion", hoy + "T00:00:00")
+        .lte("fecha_publicacion", hoy + "T23:59:59");
+      
+      cuenta.publicacionesHoy = count || 0;
+    }
+    
+    renderTablaCuentas();
+    log(`✅ ${cuentasAsignadas.length} cuenta(s) cargada(s)`);
+  } catch (e) {
+    log(`❌ Error cargando cuentas: ${e.message}`);
+  }
+}
+
+async function cargarAsignacionCategoria() {
+  try {
+    const hoy = new Date().toISOString().split('T')[0];
+    
+    const { data, error } = await supabaseClient
+      .from(TABLA_USUARIOS_ASIGNADO)
+      .select("categoria, marketplace_daily, fecha_desde, fecha_hasta")
+      .eq("usuario", session.usuario)
+      .lte("fecha_desde", hoy)
+      .gte("fecha_hasta", hoy)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        log("⚠️ No tenés asignación activa para hoy");
+        categoriaAsignada = null;
+        return;
+      }
+      throw error;
+    }
+    
+    categoriaAsignada = data;
+    
+    // Cargar detalles de la categoría
+    const { data: catData } = await supabaseClient
+      .from(TABLA_CATEGORIA)
+      .select("nombre, csv_nombre")
+      .eq("nombre", data.categoria)
+      .single();
+    
+    categoriaAsignada.detalles = catData;
+    
+    $("#categoriaInfo").innerHTML = `
+      <div><strong>Categoría:</strong> ${escapeHtml(data.categoria)}</div>
+      <div><strong>Publicaciones diarias por cuenta:</strong> ${data.marketplace_daily}</div>
+      <div><strong>Período:</strong> ${new Date(data.fecha_desde).toLocaleDateString()} al ${new Date(data.fecha_hasta).toLocaleDateString()}</div>
+    `;
+    
+    $("#metaPublicaciones").textContent = data.marketplace_daily;
+    
+    log(`✅ Categoría asignada: ${data.categoria}`);
+  } catch (e) {
+    log(`❌ Error cargando asignación: ${e.message}`);
+  }
+}
+
+async function cargarCSVDeCategoria() {
+  if (!categoriaAsignada?.detalles?.csv_nombre) {
+    log("⚠️ No hay CSV asociado a esta categoría");
+    return;
+  }
+  
+  try {
+    const path = categoriaAsignada.detalles.csv_nombre;
+    log(`📥 Descargando CSV: ${path}`);
+    
+    const { data, error } = await supabaseClient.storage
+      .from(BUCKET_CSV)
+      .download(path);
+    
+    if (error) throw error;
+    
+    const text = await data.text();
+    csvData = parseCSV(text);
+    
+    log(`✅ CSV cargado: ${csvData.length} filas`);
+    
+    // Actualizar selector de filas
+    actualizarSelectorFilas();
+  } catch (e) {
+    log(`❌ Error cargando CSV: ${e.message}`);
+  }
+}
+
+function parseCSV(text) {
+  const lines = text.split('\n');
+  if (lines.length < 2) return [];
+  
+  const headers = lines[0].split(',').map(h => h.trim());
+  const data = [];
+  
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    
+    const values = lines[i].split(',');
+    const row = {};
+    
+    for (let j = 0; j < headers.length; j++) {
+      let value = values[j] || '';
+      // Remover comillas dobles si las hay
+      if (value.startsWith('"') && value.endsWith('"')) {
+        value = value.slice(1, -1);
+      }
+      row[headers[j]] = value.trim();
+    }
+    
+    data.push(row);
+  }
+  
+  return data;
+}
+
+async function cargarHistorialHoy() {
+  try {
+    const hoy = new Date().toISOString().split('T')[0];
+    
+    const { data, error } = await supabaseClient
+      .from(TABLA_MARKETPLACE_ACTIVIDAD)
+      .select("*")
+      .eq("usuario", session.usuario)
+      .gte("fecha_publicacion", hoy + "T00:00:00")
+      .lte("fecha_publicacion", hoy + "T23:59:59")
+      .order("fecha_publicacion", { ascending: false });
+    
+    if (error) throw error;
+    
+    publicacionesHoy = data.length;
+    $("#contadorPublicaciones").textContent = publicacionesHoy;
+    
+    renderTablaHistorial(data);
+    log(`✅ Historial cargado: ${data.length} publicación(es) hoy`);
+  } catch (e) {
+    log(`❌ Error cargando historial: ${e.message}`);
+  }
+}
+
+// Funciones de renderizado
+function renderTablaCuentas() {
+  const tbody = $("#tablaCuentas tbody");
+  if (!tbody) return;
+  
+  tbody.innerHTML = "";
+  
+  if (cuentasAsignadas.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="muted">No tenés cuentas asignadas</td></tr>`;
+    return;
+  }
+  
+  for (const cuenta of cuentasAsignadas) {
+    const tr = document.createElement("tr");
+    
+    // Email
+    const tdEmail = document.createElement("td");
+    tdEmail.innerHTML = `<span class="mono">${escapeHtml(cuenta.email)}</span>`;
+    tr.appendChild(tdEmail);
+    
+    // Estado
+    const tdEstado = document.createElement("td");
+    const estadoPill = document.createElement("span");
+    estadoPill.className = `pill ${cuenta.estado === 'activa' ? 'pill-success' : 'pill-warning'}`;
+    estadoPill.textContent = cuenta.estado || 'desconocido';
+    tdEstado.appendChild(estadoPill);
+    tr.appendChild(tdEstado);
+    
+    // Publicaciones hoy
+    const tdPublicaciones = document.createElement("td");
+    tdPublicaciones.innerHTML = `
+      <span style="font-weight:bold;">${cuenta.publicacionesHoy}</span>
+      <span class="muted">/${categoriaAsignada?.marketplace_daily || '?'}</span>
+    `;
+    tr.appendChild(tdPublicaciones);
+    
+    // Acciones
+    const tdAcciones = document.createElement("td");
+    tdAcciones.className = "actions";
+    
+    const btnSeleccionar = document.createElement("button");
+    btnSeleccionar.className = "btn";
+    btnSeleccionar.textContent = "Seleccionar";
+    btnSeleccionar.onclick = () => seleccionarCuenta(cuenta);
+    
+    tdAcciones.appendChild(btnSeleccionar);
+    tr.appendChild(tdAcciones);
+    
+    tbody.appendChild(tr);
+  }
+}
+
+function renderTablaHistorial(historial) {
+  const tbody = $("#tablaHistorial tbody");
+  if (!tbody) return;
+  
+  tbody.innerHTML = "";
+  
+  if (historial.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="muted">No hay publicaciones hoy</td></tr>`;
+    return;
+  }
+  
+  for (const item of historial) {
+    const tr = document.createElement("tr");
+    
+    // Fecha
+    const tdFecha = document.createElement("td");
+    const fecha = new Date(item.fecha_publicacion);
+    tdFecha.textContent = fecha.toLocaleTimeString('es-AR', { 
+      hour: '2-digit', 
+      minute: '2-digit' 
+    });
+    tr.appendChild(tdFecha);
+    
+    // Cuenta
+    const tdCuenta = document.createElement("td");
+    tdCuenta.innerHTML = `<span class="mono">${escapeHtml(item.facebook_account_usada)}</span>`;
+    tr.appendChild(tdCuenta);
+    
+    // Link
+    const tdLink = document.createElement("td");
+    if (item.marketplace_link_publicacion) {
+      tdLink.innerHTML = `<a href="${escapeHtml(item.marketplace_link_publicacion)}" target="_blank" style="color:#60a5fa;">${escapeHtml(item.marketplace_link_publicacion.substring(0, 50))}...</a>`;
     } else {
-        await cargarVistaOperador();
+      tdLink.textContent = "Sin link";
     }
-})();
-
-// --- VISTA GERENTE: CONTROL DE EQUIPO ---
-async function cargarVistaGerente() {
-    const { data: asigs } = await sb.from("usuarios_asignado").select("*").lte("fecha_desde", today).gte("fecha_hasta", today);
-    const { data: hechos } = await sb.from("marketplace_actividad").select("usuario").eq("fecha_publicacion", today);
-
-    const grid = $("grid-supervision");
-    grid.innerHTML = "";
-    $("last-sync").textContent = `Sincronizado: ${new Date().toLocaleTimeString()}`;
-
-    asigs.forEach(a => {
-        const totalHechos = hechos.filter(x => x.usuario === a.usuario).length;
-        const meta = a.marketplace_daily || 0;
-        const porc = meta > 0 ? Math.min((totalHechos / meta) * 100, 100) : 0;
-
-        grid.innerHTML += `
-            <div class="card-operador">
-                <div style="display:flex; justify-content:space-between; align-items:start;">
-                    <strong>${a.usuario}</strong>
-                    <span class="pill" style="background:#3b82f6;">${totalHechos} / ${meta}</span>
-                </div>
-                <div class="muted" style="font-size:0.8rem; margin:8px 0;">📦 Categoría: ${a.categoria}</div>
-                <div class="progress-container"><div class="progress-bar" style="width:${porc}%"></div></div>
-                <div style="font-size:0.7rem; text-align:right; color:#94a3b8;">${porc === 100 ? '✅ META CUMPLIDA' : 'En progreso...'}</div>
-            </div>`;
-    });
-}
-
-// --- VISTA OPERADOR: CARGA Y CSV ---
-async function cargarVistaOperador() {
-    // 1. Buscar asignación del día (Categoría asignada)
-    const { data: asig, error } = await sb.from("usuarios_asignado")
-        .select("*")
-        .eq("usuario", s.usuario)
-        .lte("fecha_desde", today)
-        .gte("fecha_hasta", today)
-        .maybeSingle();
-
-    if (!asig || error) {
-        return $("panel-error").classList.remove("hidden");
-    }
-
-    asignacionActiva = asig;
-    $("view-operador").classList.remove("hidden");
-
-    await actualizarStatusCuentas();
-    await procesarCSV();
-
-    $("btn-rotar").onclick = rotarRecurso;
-    $("btn-save").onclick = guardarLink;
-}
-
-async function actualizarStatusCuentas() {
-    // Guardar cuenta seleccionada para no perder el foco
-    const select = $("sel-cuenta");
-    const cuentaPrevia = select.value;
-
-    const { data: cuentas } = await sb.from("cuentas_facebook").select("email").eq("ocupada_por", s.usuario);
-    const { data: hechos } = await sb.from("marketplace_actividad").select("*").eq("usuario", s.usuario).eq("fecha_publicacion", today);
-
-    const lista = $("lista-cuentas-status");
-    lista.innerHTML = "";
-    select.innerHTML = "";
-
-    // Header de progreso general
-    const total = hechos.length;
-    const metaGral = asignacionActiva.marketplace_daily;
-    $("header-progreso").innerHTML = `
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-            <span>Trabajando hoy en: <strong>${asignacionActiva.categoria}</strong></span>
-            <span style="font-size:1.1rem; font-weight:bold;">${total} / ${metaGral} Publicaciones</span>
-        </div>
-        <div class="progress-container"><div class="progress-bar" style="width:${(total/metaGral)*100}%"></div></div>`;
-
-    // Detalle por cada cuenta (Faltantes)
-    cuentas.forEach(c => {
-        const hechosCuenta = hechos.filter(h => h.facebook_account_usada === c.email).length;
-        const faltan = Math.max(0, 10 - hechosCuenta); // Meta de 10 por cuenta según captura
-
-        lista.innerHTML += `
-            <div style="display:flex; justify-content:space-between; font-size:0.85rem; padding:5px 0; border-bottom:1px solid rgba(255,255,255,0.03);">
-                <span class="muted">${c.email}</span>
-                <span style="color:${faltan === 0 ? '#10b981' : '#f59e0b'}; font-weight:bold;">${faltan === 0 ? 'LISTO' : 'Faltan ' + faltan}</span>
-            </div>`;
-
-        const opt = document.createElement("option");
-        opt.value = c.email; opt.textContent = c.email;
-        select.appendChild(opt);
-    });
-
-    if (cuentaPrevia) select.value = cuentaPrevia;
-}
-
-async function procesarCSV() {
-    // Buscar la ruta del CSV en la tabla categoria
-    const { data: cat } = await sb.from("categoria").select("csv_nombre").eq("nombre", asignacionActiva.categoria).single();
+    tr.appendChild(tdLink);
     
-    if (!cat?.csv_nombre) {
-        return alert("Error: No hay CSV cargado para esta categoría.");
-    }
-
-    // Descargar desde el storage
-    const { data: blob } = await sb.storage.from('categoria_csv').download(cat.csv_nombre);
-    const text = await blob.text();
-    const rows = text.split("\n").filter(r => r.trim());
-    const headers = rows[0].split(",").map(h => h.trim().toLowerCase());
-
-    itemsCSV = rows.slice(1).map(row => {
-        const cells = row.split(",");
-        return headers.reduce((obj, h, i) => { obj[h] = cells[i]?.trim(); return obj; }, {});
-    });
-
-    rotarRecurso();
-}
-
-function rotarRecurso() {
-    if (itemsCSV.length === 0) return;
-    itemActual = itemsCSV[Math.floor(Math.random() * itemsCSV.length)];
+    // Acciones
+    const tdAcciones = document.createElement("td");
+    tdAcciones.className = "actions";
     
-    $("csv-titulo").value = itemActual.titulo || "";
-    $("csv-desc").value = itemActual.descripcion || "";
-    $("csv-cat-fb").value = itemActual.categoria || "N/A"; // Categoría real de FB
-    $("csv-tags").value = itemActual.etiquetas || ""; // Etiquetas del CSV
+    const btnCopiar = document.createElement("button");
+    btnCopiar.className = "btn2";
+    btnCopiar.textContent = "Copiar link";
+    btnCopiar.onclick = () => {
+      navigator.clipboard.writeText(item.marketplace_link_publicacion || '');
+      log("📋 Link copiado al portapapeles");
+    };
+    
+    tdAcciones.appendChild(btnCopiar);
+    tr.appendChild(tdAcciones);
+    
+    tbody.appendChild(tr);
+  }
 }
 
-async function guardarLink() {
-    const link = $("inp-link").value.trim();
-    if (!link.startsWith("http")) return alert("Por favor, pega un link válido de Marketplace.");
+function actualizarSelectorFilas() {
+  const selector = $("#selectorFila");
+  if (!selector) return;
+  
+  selector.innerHTML = "";
+  
+  for (let i = 0; i < csvData.length; i++) {
+    const option = document.createElement("option");
+    option.value = i;
+    option.textContent = `Fila ${i + 1}: ${csvData[i].titulo?.substring(0, 30) || 'Sin título'}...`;
+    selector.appendChild(option);
+  }
+  
+  if (csvData.length > 0) {
+    selector.value = filaActual;
+    actualizarContenidoFila();
+  }
+}
 
-    const { error } = await sb.from("marketplace_actividad").insert([{
-        usuario: s.usuario,
-        fecha_publicacion: today,
-        titulo: $("csv-titulo").value,
-        descripcion: $("csv-desc").value,
-        categoria: asignacionActiva.categoria,
+function actualizarContenidoFila() {
+  if (!csvData[filaActual]) return;
+  
+  const fila = csvData[filaActual];
+  
+  // Actualizar inputs
+  $("#tituloInput").value = fila.titulo || "";
+  $("#descripcionInput").value = fila.descripcion || "";
+  $("#categoriaInput").value = fila.categoria || "";
+  $("#etiquetasInput").value = fila.etiquetas || "";
+  
+  // Actualizar formulario de guardado
+  $("#tituloUsadoInput").value = fila.titulo || "";
+  $("#descripcionUsadaInput").value = fila.descripcion || "";
+  $("#categoriaUsadaInput").value = fila.categoria || "";
+  $("#etiquetasUsadasInput").value = fila.etiquetas || "";
+  $("#urlPortadaInput").value = fila.url_imagenes_portadas || "";
+  
+  // Actualizar imágenes fijas
+  const container = $("#imagenesFijasContainer");
+  container.innerHTML = "";
+  
+  for (let i = 1; i <= 4; i++) {
+    const url = fila[`url_img_fijas_${i}`];
+    if (url) {
+      const div = document.createElement("div");
+      div.className = "image-preview";
+      div.innerHTML = `
+        <img src="${escapeHtml(url)}" alt="Imagen ${i}" onerror="this.style.display='none'">
+        <div style="font-size:11px; padding:2px; text-align:center;">${i}</div>
+      `;
+      container.appendChild(div);
+    }
+  }
+  
+  // Actualizar portada
+  const portadaContainer = $("#portadaContainer");
+  portadaContainer.innerHTML = "";
+  
+  if (fila.url_imagenes_portadas) {
+    const div = document.createElement("div");
+    div.className = "image-preview";
+    div.innerHTML = `
+      <img src="${escapeHtml(fila.url_imagenes_portadas)}" alt="Portada" onerror="this.style.display='none'">
+      <div style="font-size:11px; padding:2px; text-align:center;">Portada</div>
+    `;
+    portadaContainer.appendChild(div);
+  }
+}
+
+// Funciones de interacción
+function seleccionarCuenta(cuenta) {
+  cuentaSeleccionada = cuenta;
+  
+  // Mostrar contenido
+  $("#contenidoContainer").style.display = "block";
+  $("#csvInfo").innerHTML = `Contenido de CSV para: <span class="mono">${escapeHtml(cuenta.email)}</span>`;
+  
+  // Actualizar cuenta usada en formulario
+  $("#cuentaUsadaInput").value = cuenta.email;
+  
+  // Cargar CSV si no está cargado
+  if (csvData.length === 0) {
+    cargarCSVDeCategoria();
+  }
+  
+  log(`✅ Cuenta seleccionada: ${cuenta.email}`);
+}
+
+async function guardarPublicacion() {
+  // Validaciones
+  if (!cuentaSeleccionada) {
+    log("❌ Seleccioná una cuenta primero");
+    return;
+  }
+  
+  const link = $("#marketplaceLinkInput").value.trim();
+  if (!link) {
+    log("❌ El link de Marketplace es obligatorio");
+    return;
+  }
+  
+  const titulo = $("#tituloUsadoInput").value.trim();
+  const descripcion = $("#descripcionUsadaInput").value.trim();
+  const categoria = $("#categoriaUsadaInput").value.trim();
+  const urlPortada = $("#urlPortadaInput").value.trim();
+  
+  if (!titulo || !descripcion || !categoria) {
+    log("❌ Completa todos los campos obligatorios");
+    return;
+  }
+  
+  disable("#btnGuardarPublicacion", true);
+  
+  try {
+    const { error } = await supabaseClient
+      .from(TABLA_MARKETPLACE_ACTIVIDAD)
+      .insert([{
+        usuario: session.usuario,
+        facebook_account_usada: cuentaSeleccionada.email,
+        fecha_publicacion: new Date().toISOString(),
         marketplace_link_publicacion: link,
-        facebook_account_usada: $("sel-cuenta").value,
-        created_at: nowISO()
-    }]);
-
-    if (!error) {
-        $("inp-link").value = "";
-        await actualizarStatusCuentas();
-        rotarRecurso();
-    } else {
-        alert("Error al guardar: " + error.message);
+        titulo: titulo,
+        descripcion: descripcion,
+        categoria: categoria,
+        etiquetas_usadas: $("#etiquetasUsadasInput").value.trim(),
+        url_imagenes_portada: urlPortada
+      }]);
+    
+    if (error) throw error;
+    
+    log("✅ Publicación guardada correctamente");
+    
+    // Limpiar formulario
+    $("#marketplaceLinkInput").value = "";
+    
+    // Actualizar contadores
+    await cargarHistorialHoy();
+    await cargarCuentasFacebook();
+    
+    // Avanzar a siguiente fila automáticamente
+    if (csvData.length > 0) {
+      filaActual = (filaActual + 1) % csvData.length;
+      $("#selectorFila").value = filaActual;
+      actualizarContenidoFila();
+      log(`🔄 Avanzando a fila ${filaActual + 1}`);
     }
+    
+  } catch (e) {
+    log(`❌ Error guardando publicación: ${e.message}`);
+    console.error(e);
+  } finally {
+    disable("#btnGuardarPublicacion", false);
+  }
 }
 
-// Función global para botones copiar
-window.copiar = (id) => {
-    const el = $(id);
-    el.select();
-    navigator.clipboard.writeText(el.value);
-};
+function descargarTodasImagenes() {
+  if (!csvData[filaActual]) {
+    log("❌ No hay contenido cargado");
+    return;
+  }
+  
+  const fila = csvData[filaActual];
+  const urls = [];
+  
+  // Agregar imágenes fijas
+  for (let i = 1; i <= 4; i++) {
+    const url = fila[`url_img_fijas_${i}`];
+    if (url) urls.push({ url, name: `imagen_fija_${i}.jpg` });
+  }
+  
+  // Agregar portada
+  if (fila.url_imagenes_portadas) {
+    urls.push({ url: fila.url_imagenes_portadas, name: "portada.jpg" });
+  }
+  
+  if (urls.length === 0) {
+    log("⚠️ No hay URLs de imágenes para descargar");
+    return;
+  }
+  
+  log(`⬇️ Descargando ${urls.length} imagen(es)...`);
+  
+  // Descargar cada imagen
+  urls.forEach(item => {
+    const a = document.createElement("a");
+    a.href = item.url;
+    a.download = item.name;
+    a.target = "_blank";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  });
+}
+
+// Event Listeners
+function setupEventListeners() {
+  // Copiar contenido
+  $("#btnCopiarTitulo")?.addEventListener("click", () => {
+    navigator.clipboard.writeText($("#tituloInput").value);
+    showCopiedFeedback($("#btnCopiarTitulo"));
+  });
+  
+  $("#btnCopiarDescripcion")?.addEventListener("click", () => {
+    navigator.clipboard.writeText($("#descripcionInput").value);
+    showCopiedFeedback($("#btnCopiarDescripcion"));
+  });
+  
+  $("#btnCopiarCategoria")?.addEventListener("click", () => {
+    navigator.clipboard.writeText($("#categoriaInput").value);
+    showCopiedFeedback($("#btnCopiarCategoria"));
+  });
+  
+  $("#btnCopiarEtiquetas")?.addEventListener("click", () => {
+    navigator.clipboard.writeText($("#etiquetasInput").value);
+    showCopiedFeedback($("#btnCopiarEtiquetas"));
+  });
+  
+  // Cambiar fila
+  $("#btnActualizarFila")?.addEventListener("click", () => {
+    filaActual = parseInt($("#selectorFila").value) || 0;
+    actualizarContenidoFila();
+    log(`🔄 Contenido actualizado a fila ${filaActual + 1}`);
+  });
+  
+  // Descargar imágenes
+  $("#btnDescargarTodasImagenes")?.addEventListener("click", descargarTodasImagenes);
+  
+  // Guardar publicación
+  $("#btnGuardarPublicacion")?.addEventListener("click", guardarPublicacion);
+  
+  // Limpiar formulario
+  $("#btnLimpiarFormulario")?.addEventListener("click", () => {
+    $("#marketplaceLinkInput").value = "";
+    log("🧹 Formulario limpiado");
+  });
+}
+
+// Inicialización
+document.addEventListener("DOMContentLoaded", async () => {
+  // 1) Cargar sesión
+  session = getSession();
+  if (!session?.usuario) {
+    log("❌ No hay sesión activa. Volvé al login.");
+    return;
+  }
+  
+  // 2) Cargar sidebar
+  await loadSidebar({ activeKey: "diario", basePath: "../" });
+  
+  // 3) Conectar a Supabase
+  supabaseClient = await waitSupabaseClient(2000);
+  if (!supabaseClient) {
+    log("❌ No se pudo conectar con Supabase");
+    return;
+  }
+  
+  log("✅ Supabase client conectado");
+  
+  // 4) Configurar eventos
+  setupEventListeners();
+  
+  // 5) Cargar datos iniciales
+  await cargarInformacionUsuario();
+  await cargarAsignacionCategoria();
+  await cargarCuentasFacebook();
+  await cargarHistorialHoy();
+  
+  // 6) Si hay categoría asignada, cargar CSV
+  if (categoriaAsignada) {
+    await cargarCSVDeCategoria();
+  }
+  
+  log("✅ Sistema de diario listo");
+});
