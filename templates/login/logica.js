@@ -4,17 +4,18 @@ const sb = window.supabaseClient;
 const $ = (id) => document.getElementById(id);
 const msg = (t) => ($("msg").textContent = t || "");
 
+// Si ya está logueado, mandar al dashboard
 const existing = getSession();
 if (existing?.usuario) window.location.href = "../dashboard/dashboard.html";
 
 async function login(){
-    msg("Verificando credenciales...");
+    msg("⏳ Verificando...");
     const usuario = $("usuario").value.trim();
     const contra = $("contra").value;
 
-    if (!usuario || !contra) return msg("Falta usuario o contraseña.");
+    if (!usuario || !contra) return msg("Falta datos.");
 
-    // 1. VERIFICAR USUARIO
+    // 1. Verificar Usuario
     const { data, error } = await sb
         .from("usuarios")
         .select("id, usuario, rol")
@@ -22,22 +23,20 @@ async function login(){
         .eq("contra", contra)
         .limit(1);
 
-    if (error) return msg("Error DB: " + error.message);
-    if (!data || data.length === 0) return msg("Usuario o contraseña incorrectos.");
+    if (error || !data || data.length === 0) return msg("Datos incorrectos.");
 
     const u = data[0];
 
-    // 2. REGISTRAR LA ENTRADA EN LA BASE DE DATOS (ESTO FALTABA)
-    msg("Registrando acceso...");
-    
+    // 2. REGISTRAR EL LOGIN (Aquí estaba el error antes)
+    // Ahora enviamos explícitamente a la columna 'evento'
     await sb.from("usuarios_actividad").insert([{
         usuario: u.usuario,
-        evento: "🟢 LOGIN (Entró)", // Para que salga verde en la tabla
-        cuenta_fb: "Sistema"
-        // created_at se pone solo en Supabase
+        evento: "🟢 LOGIN",  // Esto es lo que salía undefined
+        cuenta_fb: "Sistema Web",
+        // created_at se genera solo
     }]);
 
-    // 3. GUARDAR SESIÓN Y ENTRAR
+    // 3. Guardar sesión y entrar
     setSession({ usuario: u.usuario, rol: u.rol, user_id: u.id });
     window.location.href = "../dashboard/dashboard.html";
 }
