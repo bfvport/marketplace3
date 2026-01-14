@@ -7,19 +7,19 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../../assets/js/supabase.js"></script>
     <style>
-        /* Estilos para el encabezado y botones de acción */
+        /* Contenedor principal para botones de administración y título */
         .controls-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #1e293b; padding: 15px; border-radius: 10px; border: 1px solid #334155; }
         
-        /* Configuración del grid para las tarjetas de los operadores */
+        /* Sistema de rejilla para mostrar las tarjetas de todos los operadores */
         .super-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; margin-bottom: 30px; }
         
-        /* Diseño de la tarjeta individual de cada operador */
+        /* Estilo visual de la tarjeta de operador con efectos de hover */
         .op-card { background: #0f172a; border: 1px solid #334155; border-radius: 12px; overflow: hidden; position: relative; transition: transform 0.2s; }
         .op-card:hover { border-color: #60a5fa; }
         .op-header { padding: 15px; background: #1e293b; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
         .op-body { padding: 15px; display: flex; flex-direction: column; gap: 10px; }
         
-        /* Indicadores de estado, barras de progreso y semáforos */
+        /* Formato para filas de estadísticas, medallas de estado y barras de progreso */
         .stat-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px; }
         .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; }
         .bg-green { background: #065f46; color: #34d399; }
@@ -40,11 +40,11 @@
             <div class="controls-header">
                 <div>
                     <h1 style="margin:0; font-size:1.5rem; color:white;">📡 Torre de Control Total</h1>
-                    <p class="muted" style="margin:5px 0 0 0;">Supervisión 360° de tareas, cuentas y actividad del equipo.</p>
+                    <p class="muted" style="margin:5px 0 0 0;">Supervisión 360° de tareas y actividad en tiempo real.</p>
                 </div>
                 <div style="display:flex; gap:10px;">
-                    <button id="btn-descargar" class="btn2" style="background:#0284c7;">📥 Descargar Excel</button>
-                    <button id="btn-limpiar" class="btn-danger" style="background:#dc2626; color:white; border:none; padding:8px 15px; border-radius:5px; cursor:pointer;">🗑️ Vaciar Logs</button>
+                    <button id="btn-descargar" class="btn2" style="background:#0284c7;">📥 Exportar Excel</button>
+                    <button id="btn-limpiar" class="btn-danger" style="background:#dc2626; color:white; border:none; padding:8px 15px; border-radius:5px; cursor:pointer;">🗑️ Limpiar Historial</button>
                 </div>
             </div>
 
@@ -53,11 +53,11 @@
             </p>
 
             <div id="grid-team" class="super-grid">
-                <div style="padding:20px; text-align:center; color:#94a3b8;">⏳ Sincronizando datos del equipo...</div>
+                <div style="padding:20px; text-align:center; color:#94a3b8;">Sincronizando con la base de datos...</div>
             </div>
 
             <section class="card">
-                <h3>🔐 Registro de Accesos (Tiempo Real)</h3>
+                <h3>🔐 Registro de Accesos (Logins/Logouts)</h3>
                 <div style="max-height: 500px; overflow-y: auto;">
                     <table class="table" style="width:100%; text-align:left; border-collapse:collapse;">
                         <thead style="position:sticky; top:0; background:#1e293b; z-index:10;">
