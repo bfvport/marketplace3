@@ -3,6 +3,8 @@ import { getSession, loadSidebar, escapeHtml } from "../../assets/js/app.js";
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => document.querySelectorAll(sel);
 
+
+
 // Constantes
 const TABLA_CUENTAS = "cuentas_facebook";
 const TABLA_USUARIOS_ASIGNADO = "usuarios_asignado";
@@ -24,6 +26,38 @@ let cuentaSeleccionada = null;
 let publicacionesHoy = 0;
 
 // Utilidades
+
+function parseCSV(text) {
+  const lines = text.split('\n');
+  if (lines.length < 2) return [];
+  
+  const headers = lines[0].split(',').map(h => h.trim());
+  const data = [];
+  
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    
+    const values = parseCSVLine(lines[i]);
+    const row = {};
+    
+    for (let j = 0; j < headers.length; j++) {
+      let value = values[j] || '';
+      // Usar la función limpiarEtiquetas para consistencia
+      row[headers[j]] = limpiarEtiquetas(value);
+    }
+    
+    // Agregar ID único basado en título + descripción
+    row._id = hashString((row.titulo || '') + (row.descripcion || ''));
+    row._index = i - 1;
+    row._usado = false;
+    row._seleccionado = false;
+    
+    data.push(row);
+  }
+  
+  return data;
+}
+
 function log(msg) {
   const el = $("#log");
   if (!el) return;
@@ -31,6 +65,30 @@ function log(msg) {
   el.innerHTML += `[${t}] ${escapeHtml(msg)}<br>`;
   el.scrollTop = el.scrollHeight;
 }
+
+
+function limpiarEtiquetas(etiquetas) {
+  if (!etiquetas) return "";
+  
+  let limpias = etiquetas.trim();
+  
+  // Remover comillas dobles exteriores
+  if (limpias.startsWith('"') && limpias.endsWith('"')) {
+    limpias = limpias.substring(1, limpias.length - 1);
+  }
+  
+  // Reemplazar comillas dobles escapadas
+  limpias = limpias.replace(/""/g, '"');
+  
+  return limpias;
+}
+
+// En cargarAsignacionCategoria
+etiquetasCategoria = limpiarEtiquetas(catData.etiquetas);
+
+// En guardarPublicacion
+const etiquetasParaGuardar = limpiarEtiquetas(etiquetasCategoria);
+
 
 function clearLogs() {
   const el = $("#log");
@@ -127,6 +185,22 @@ async function cargarCuentasFacebook() {
   }
 }
 
+function limpiarEtiquetas(etiquetas) {
+  if (!etiquetas) return "";
+  
+  let limpias = etiquetas.trim();
+  
+  // Remover comillas dobles exteriores
+  if (limpias.startsWith('"') && limpias.endsWith('"')) {
+    limpias = limpias.substring(1, limpias.length - 1);
+  }
+  
+  // Reemplazar comillas dobles escapadas
+  limpias = limpias.replace(/""/g, '"');
+  
+  return limpias;
+}
+
 async function cargarAsignacionCategoria() {
   try {
     const hoy = new Date().toISOString().split('T')[0];
@@ -159,11 +233,13 @@ async function cargarAsignacionCategoria() {
     
     if (catData) {
       categoriaAsignada.detalles = catData;
-      etiquetasCategoria = catData.etiquetas || "";
+      
+      // LIMPIAR ETIQUETAS - QUITAR COMILLAS DOBLES
+      etiquetasCategoria = limpiarEtiquetas(catData.etiquetas || "");
       
       $("#categoriaInfo").innerHTML = `
         <div><strong>Categoría:</strong> ${escapeHtml(data.categoria)}</div>
-        <div><strong>Etiquetas:</strong> ${escapeHtml(catData.etiquetas || "Sin etiquetas")}</div>
+        <div><strong>Etiquetas:</strong> ${escapeHtml(etiquetasCategoria || "Sin etiquetas")}</div>
         <div><strong>Publicaciones diarias por cuenta:</strong> ${data.marketplace_daily}</div>
         <div><strong>Período:</strong> ${new Date(data.fecha_desde).toLocaleDateString()} al ${new Date(data.fecha_hasta).toLocaleDateString()}</div>
       `;
@@ -182,7 +258,6 @@ async function cargarAsignacionCategoria() {
     log(`❌ Error cargando asignación: ${e.message}`);
   }
 }
-
 async function cargarCSVDeCategoria() {
   if (!categoriaAsignada?.detalles?.csv_nombre) {
     log("⚠️ No hay CSV asociado a esta categoría");
@@ -368,6 +443,8 @@ function actualizarContenidoFila(fila) {
   $("#etiquetasInput").value = etiquetasCategoria || "";
   
   // Actualizar formulario de guardado
+  $("#etiquetasInput").value = etiquetasCategoria || "";
+  $("#etiquetasUsadasInput").value = etiquetasCategoria || "";
   $("#tituloUsadoInput").value = fila.titulo || "";
   $("#descripcionUsadaInput").value = fila.descripcion || "";
   $("#categoriaUsadaInput").value = fila.categoria || "";
@@ -634,6 +711,8 @@ async function guardarPublicacion() {
   
   disable("#btnGuardarPublicacion", true);
   
+
+
   try {
     const { error } = await supabaseClient
       .from(TABLA_MARKETPLACE_ACTIVIDAD)
@@ -645,37 +724,47 @@ async function guardarPublicacion() {
         titulo: titulo,
         descripcion: descripcion,
         categoria: categoria,
-        etiquetas_usadas: etiquetasCategoria,
+        etiquetas_usadas: limpiarEtiquetas(etiquetasCategoria), // <- AQUÍ TAMBIÉN
         url_imagenes_portada: $("#urlPortadaInput").value.trim()
       }]);
     
     if (error) throw error;
     
-    // Marcar contenido como usado
-    contenidoSeleccionado._usado = true;
-    contenidoUsado.add(contenidoSeleccionado._id);
-    
-    log("✅ Publicación guardada correctamente");
-    
-    // Limpiar solo el link
-    $("#marketplaceLinkInput").value = "";
-    
-    // Actualizar contadores y UI
-    await cargarHistorialHoy();
-    await cargarCuentasFacebook();
-    mostrarEstadisticasContenido();
-    
-    // Seleccionar nuevo contenido automáticamente
-    const nuevoContenido = seleccionarContenidoAutomatico();
-    if (!nuevoContenido) {
-      log("ℹ️ Ya usaste todo el contenido disponible para hoy");
-    }
-    
+    // ... resto del código ...
   } catch (e) {
     log(`❌ Error guardando publicación: ${e.message}`);
     console.error(e);
-  } finally {
-    disable("#btnGuardarPublicacion", false);
+}
+
+async function cargarAsignacionCategoria() {
+  try {
+    // ... código anterior ...
+    
+    if (catData) {
+      categoriaAsignada.detalles = catData;
+      
+      // Limpiar comillas dobles de las etiquetas
+      let etiquetasRaw = catData.etiquetas || "";
+      if (etiquetasRaw.startsWith('"') && etiquetasRaw.endsWith('"')) {
+        etiquetasCategoria = etiquetasRaw.substring(1, etiquetasRaw.length - 1);
+      } else {
+        etiquetasCategoria = etiquetasRaw;
+      }
+      
+      // Reemplazar comillas escapadas
+      etiquetasCategoria = etiquetasCategoria.replace(/""/g, '"');
+      
+      $("#categoriaInfo").innerHTML = `
+        <div><strong>Categoría:</strong> ${escapeHtml(data.categoria)}</div>
+        <div><strong>Etiquetas:</strong> ${escapeHtml(etiquetasCategoria || "Sin etiquetas")}</div>
+        <div><strong>Publicaciones diarias por cuenta:</strong> ${data.marketplace_daily}</div>
+        <div><strong>Período:</strong> ${new Date(data.fecha_desde).toLocaleDateString()} al ${new Date(data.fecha_hasta).toLocaleDateString()}</div>
+      `;
+    }
+    
+    // ... resto del código ...
+  } catch (e) {
+    log(`❌ Error cargando asignación: ${e.message}`);
   }
 }
 
