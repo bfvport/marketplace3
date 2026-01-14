@@ -8,7 +8,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../../assets/js/supabase.js"></script>
     <style>
-        /* Contenedor del modal con efecto blur */
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);
@@ -25,13 +24,10 @@
             background: #0f172a; border: 1px solid #334155; color: white; border-radius: 6px;
             box-sizing: border-box;
         }
-        /* Botones de acción rápidos */
         .action-btn { cursor: pointer; padding: 6px 12px; border-radius: 6px; border: none; font-weight: bold; transition: 0.2s; }
         .btn-edit { background: #f59e0b; color: #000; margin-right: 8px; }
         .btn-del { background: #ef4444; color: #fff; }
-        .btn-edit:hover { background: #fbbf24; }
-        .btn-del:hover { background: #dc2626; }
-        td { padding: 15px 10px; vertical-align: middle; }
+        td { padding: 15px 10px; vertical-align: middle; border-bottom: 1px solid rgba(255,255,255,0.05); }
     </style>
 </head>
 <body>
@@ -44,7 +40,7 @@
             </div>
 
             <section class="card">
-                <table class="table" style="width:100%; text-align:left; border-collapse:collapse;">
+                <table style="width:100%; text-align:left; border-collapse:collapse;">
                     <thead>
                         <tr style="border-bottom:2px solid #334155; color:#94a3b8; font-size: 0.9rem;">
                             <th style="padding:12px;">Usuario</th>
@@ -61,27 +57,22 @@
 
     <div id="modal-usuario" class="modal-overlay">
         <div class="modal-content">
-            <h2 id="modal-titulo" style="margin-top:0; margin-bottom:20px; color:white;">Nuevo Usuario</h2>
-            
+            <h2 id="modal-titulo" style="margin-top:0; color:white;">Usuario</h2>
             <label>Nombre de Usuario</label>
-            <input type="text" id="inp-usuario" placeholder="Ej: jesus.funes">
-
+            <input type="text" id="inp-usuario">
             <label>Contraseña Acceso</label>
-            <input type="text" id="inp-contra" placeholder="Contraseña">
-
-            <label>Rol de Sistema</label>
+            <input type="text" id="inp-contra">
+            <label>Rol</label>
             <select id="sel-rol">
                 <option value="operador">Operador</option>
                 <option value="gerente">Gerente</option>
             </select>
-
-            <div style="display:flex; gap:12px; margin-top:10px;">
-                <button id="btn-guardar" class="btn" style="width:100%; padding:12px;">💾 Guardar</button>
-                <button id="btn-cancelar" class="btn2" style="width:100%; padding:12px;">Cancelar</button>
+            <div style="display:flex; gap:12px;">
+                <button id="btn-guardar" class="btn" style="width:100%;">💾 Guardar</button>
+                <button id="btn-cancelar" class="btn2" style="width:100%;">Cancelar</button>
             </div>
         </div>
     </div>
-
     <script type="module" src="./usuarios.js"></script>
 </body>
 </html>

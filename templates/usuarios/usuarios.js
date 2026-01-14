@@ -4,141 +4,101 @@ const s = requireSession();
 const sb = window.supabaseClient;
 const $ = (id) => document.getElementById(id);
 
-let usuarioEditandoID = null;
-let nombreOriginalEditando = null;
+let editID = null;
+let oldName = null;
 
-// Inicialización
 (async function init() {
     await loadSidebar({ activeKey: "usuarios", basePath: "../" });
-    cargarUsuarios();
+    fetchUsers();
+
+    if($("btn-nuevo")) $("btn-nuevo").onclick = () => openModal();
+    if($("btn-cancelar")) $("btn-cancelar").onclick = closeModal;
+    if($("btn-guardar")) $("btn-guardar").onclick = saveUser;
 })();
 
-// --- 1. CARGAR LISTADO ---
-async function cargarUsuarios() {
-    if (s.rol !== "gerente") {
-        document.body.innerHTML = "<h2 style='color:white; text-align:center; margin-top:50px;'>⛔ Acceso Restringido</h2>";
-        return;
-    }
+async function fetchUsers() {
+    if (s.rol !== "gerente") return;
 
     const { data, error } = await sb.from("usuarios").select("*").order("usuario");
-    if (error) return alert("Error: " + error.message);
+    if (error) return console.error(error);
 
-    const lista = $("lista-usuarios");
-    lista.innerHTML = "";
+    const tbody = $("lista-usuarios");
+    tbody.innerHTML = "";
 
     data.forEach(u => {
         const tr = document.createElement("tr");
-        tr.style.borderBottom = "1px solid rgba(255,255,255,0.05)";
-        
-        // Usamos la variable 'contra'
-        const passwordReal = u.contra || "Sin clave";
-        const badgeColor = u.rol === "gerente" ? "#ef4444" : "#10b981";
-        
         tr.innerHTML = `
-            <td style="padding:15px; font-weight:bold; color:#f1f5f9;">${u.usuario}</td>
-            <td style="padding:15px; font-family:monospace; color:#60a5fa;">${passwordReal}</td>
-            <td style="padding:15px;">
-                <span class="pill" style="background:${badgeColor}; color:white;">${u.rol.toUpperCase()}</span>
-            </td>
-            <td style="padding:15px; text-align:right;">
-                <button class="action-btn btn-edit" data-id="${u.id}">✏️ Editar</button>
-                <button class="action-btn btn-del" data-id="${u.id}" data-user="${u.usuario}">🗑️</button>
+            <td style="font-weight:bold; color:white;">${u.usuario}</td>
+            <td style="font-family:monospace; color:#60a5fa;">${u.contra || '---'}</td>
+            <td><span style="background:${u.rol === 'gerente' ? '#ef4444':'#10b981'}; color:white; padding:4px 8px; border-radius:4px; font-size:0.8rem; font-weight:bold;">${u.rol.toUpperCase()}</span></td>
+            <td style="text-align:right;">
+                <button class="action-btn btn-edit" id="edit-${u.id}">✏️</button>
+                <button class="action-btn btn-del" id="del-${u.id}">🗑️</button>
             </td>
         `;
-        lista.appendChild(tr);
-    });
+        tbody.appendChild(tr);
 
-    document.querySelectorAll(".btn-edit").forEach(btn => btn.onclick = () => abrirModalEditar(btn.dataset.id, data));
-    document.querySelectorAll(".btn-del").forEach(btn => btn.onclick = () => eliminarUsuarioProfundo(btn.dataset.id, btn.dataset.user));
+        $(`edit-${u.id}`).onclick = () => {
+            editID = u.id;
+            oldName = u.usuario;
+            $("modal-titulo").innerText = "Editar Usuario";
+            $("inp-usuario").value = u.usuario;
+            $("inp-contra").value = u.contra;
+            $("sel-rol").value = u.rol;
+            $("modal-usuario").style.display = "flex";
+        };
+
+        $(`del-${u.id}`).onclick = async () => {
+            if (!confirm(`¿Eliminar a ${u.usuario}?`)) return;
+            
+            // LIMPIEZA DE VÍNCULOS
+            await sb.from("cuentas_facebook").update({ ocupada_por: null }).eq("ocupada_por", u.usuario);
+            await sb.from("usuarios_asignado").delete().eq("usuario", u.usuario);
+            await sb.from("marketplace_actividad").delete().eq("usuario", u.usuario);
+            await sb.from("usuarios_actividad").delete().eq("usuario", u.usuario);
+
+            const { error: delErr } = await sb.from("usuarios").delete().eq("id", u.id);
+            if (delErr) alert("Error: " + delErr.message);
+            else fetchUsers();
+        };
+    });
 }
 
-// --- 2. MODALES ---
-function abrirModalCrear() {
-    usuarioEditandoID = null;
-    nombreOriginalEditando = null;
-    $("modal-titulo").textContent = "Nuevo Usuario";
+function openModal() {
+    editID = null;
+    oldName = null;
+    $("modal-titulo").innerText = "Nuevo Usuario";
     $("inp-usuario").value = "";
     $("inp-contra").value = "";
     $("sel-rol").value = "operador";
     $("modal-usuario").style.display = "flex";
 }
 
-function abrirModalEditar(id, listaDatos) {
-    const user = listaDatos.find(u => u.id == id);
-    if (!user) return;
-    usuarioEditandoID = id;
-    nombreOriginalEditando = user.usuario;
-    $("modal-titulo").textContent = "Editar Usuario";
-    $("inp-usuario").value = user.usuario || "";
-    $("inp-contra").value = user.contra || "";
-    $("sel-rol").value = user.rol || "operador";
-    $("modal-usuario").style.display = "flex";
-}
+function closeModal() { $("modal-usuario").style.display = "none"; }
 
-function cerrarModal() { $("modal-usuario").style.display = "none"; }
-
-// --- 3. GUARDAR (CON LIMPIEZA DE VÍNCULOS) ---
-async function guardarUsuario() {
-    const usuarioNuevo = $("inp-usuario").value.trim();
+async function saveUser() {
+    const usuario = $("inp-usuario").value.trim();
     const contra = $("inp-contra").value.trim();
     const rol = $("sel-rol").value;
 
-    if (!usuarioNuevo || !contra) return alert("⚠️ Completa usuario y contra.");
+    if (!usuario || !contra) return alert("Completa los datos.");
 
     try {
-        // LIMPIEZA DE VÍNCULOS: Si el nombre cambió, actualizamos TODAS las tablas relacionadas
-        // Esto evita los errores de "foreign key constraint"
-        if (usuarioEditandoID && usuarioNuevo !== nombreOriginalEditando) {
-            console.log("Actualizando vínculos de tablas relacionadas...");
-            await sb.from("cuentas_facebook").update({ ocupada_por: usuarioNuevo }).eq("ocupada_por", nombreOriginalEditando);
-            await sb.from("usuarios_asignado").update({ usuario: usuarioNuevo }).eq("usuario", nombreOriginalEditando);
-            await sb.from("marketplace_actividad").update({ usuario: usuarioNuevo }).eq("usuario", nombreOriginalEditando);
-            await sb.from("calentamiento_actividad").update({ usuario: usuarioNuevo }).eq("usuario", nombreOriginalEditando);
-            await sb.from("usuarios_actividad").update({ usuario: usuarioNuevo }).eq("usuario", nombreOriginalEditando);
-        }
-
-        const payload = { usuario: usuarioNuevo, contra, rol }; 
-
-        if (usuarioEditandoID) {
-            const { error } = await sb.from("usuarios").update(payload).eq("id", usuarioEditandoID);
-            if (error) throw error;
+        if (editID) {
+            // ACTUALIZACIÓN DE VÍNCULOS EN OTRAS TABLAS
+            if (usuario !== oldName) {
+                await sb.from("cuentas_facebook").update({ ocupada_por: usuario }).eq("ocupada_por", oldName);
+                await sb.from("usuarios_asignado").update({ usuario: usuario }).eq("usuario", oldName);
+                await sb.from("marketplace_actividad").update({ usuario: usuario }).eq("usuario", oldName);
+                await sb.from("usuarios_actividad").update({ usuario: usuario }).eq("usuario", oldName);
+            }
+            await sb.from("usuarios").update({ usuario, contra, rol }).eq("id", editID);
         } else {
-            const { error } = await sb.from("usuarios").insert([payload]);
-            if (error) throw error;
+            await sb.from("usuarios").insert([{ usuario, contra, rol }]);
         }
-
-        cerrarModal();
-        cargarUsuarios(); 
-    } catch (e) {
-        alert("Error crítico: " + e.message);
+        closeModal();
+        fetchUsers();
+    } catch (err) {
+        alert("Error: " + err.message);
     }
 }
-
-// --- 4. ELIMINAR (CON LIMPIEZA TOTAL) ---
-// Esta función barre con todo el historial para permitir el borrado
-async function eliminarUsuarioProfundo(id, usuarioNombre) {
-    if (!confirm(`⚠️ ¿ELIMINAR A ${usuarioNombre.toUpperCase()}?\nSe borrará todo su historial de tareas y se liberarán sus cuentas.`)) return;
-
-    try {
-        // Borramos rastro en todas las tablas con Foreign Keys
-        await sb.from("cuentas_facebook").update({ ocupada_por: null, estado: 'disponible' }).eq("ocupada_por", usuarioNombre);
-        await sb.from("usuarios_asignado").delete().eq("usuario", usuarioNombre);
-        await sb.from("marketplace_actividad").delete().eq("usuario", usuarioNombre);
-        await sb.from("calentamiento_actividad").delete().eq("usuario", usuarioNombre);
-        await sb.from("usuarios_actividad").delete().eq("usuario", usuarioNombre);
-
-        // Finalmente borramos el perfil
-        const { error } = await sb.from("usuarios").delete().eq("id", id);
-        if (error) throw error;
-
-        alert("Usuario eliminado correctamente.");
-        cargarUsuarios();
-    } catch (e) {
-        alert("No se pudo eliminar: " + e.message);
-    }
-}
-
-// Eventos
-if($("btn-nuevo")) $("btn-nuevo").onclick = abrirModalCrear;
-if($("btn-cancelar")) $("btn-cancelar").onclick = cerrarModal;
-if($("btn-guardar")) $("btn-guardar").onclick = guardarUsuario;
