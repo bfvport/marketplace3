@@ -1,14 +1,15 @@
 import { requireSession, loadSidebar } from "../../assets/js/app.js";
 
-const s = requireSession();
+const s = requireSession(); //
 const sb = window.supabaseClient;
 const $ = (id) => document.getElementById(id);
 
 let editID = null;
 let oldName = null;
 
+// Inicio de la página
 (async function init() {
-    await loadSidebar({ activeKey: "usuarios", basePath: "../" });
+    await loadSidebar({ activeKey: "usuarios", basePath: "../" }); //
     fetchUsers();
 
     if($("btn-nuevo")) $("btn-nuevo").onclick = () => openModal();
@@ -16,6 +17,7 @@ let oldName = null;
     if($("btn-guardar")) $("btn-guardar").onclick = saveUser;
 })();
 
+// Cargar la lista desde la tabla 'usuarios'
 async function fetchUsers() {
     if (s.rol !== "gerente") return;
 
@@ -38,27 +40,29 @@ async function fetchUsers() {
         `;
         tbody.appendChild(tr);
 
+        // Botón Editar
         $(`edit-${u.id}`).onclick = () => {
             editID = u.id;
             oldName = u.usuario;
             $("modal-titulo").innerText = "Editar Usuario";
             $("inp-usuario").value = u.usuario;
-            $("inp-contra").value = u.contra;
+            $("inp-contra").value = u.contra; // Variable contra
             $("sel-rol").value = u.rol;
             $("modal-usuario").style.display = "flex";
         };
 
+        // Botón Eliminar con limpieza profunda
         $(`del-${u.id}`).onclick = async () => {
-            if (!confirm(`¿Eliminar a ${u.usuario}?`)) return;
+            if (!confirm(`¿Eliminar a ${u.usuario}? Se borrará su historial de tareas.`)) return;
             
-            // LIMPIEZA DE VÍNCULOS
+            // Limpiamos las tablas que bloquean el borrado
             await sb.from("cuentas_facebook").update({ ocupada_por: null }).eq("ocupada_por", u.usuario);
             await sb.from("usuarios_asignado").delete().eq("usuario", u.usuario);
             await sb.from("marketplace_actividad").delete().eq("usuario", u.usuario);
             await sb.from("usuarios_actividad").delete().eq("usuario", u.usuario);
 
             const { error: delErr } = await sb.from("usuarios").delete().eq("id", u.id);
-            if (delErr) alert("Error: " + delErr.message);
+            if (delErr) alert("Error al eliminar: " + delErr.message);
             else fetchUsers();
         };
     });
@@ -76,6 +80,7 @@ function openModal() {
 
 function closeModal() { $("modal-usuario").style.display = "none"; }
 
+// Función Guardar (Insert o Update)
 async function saveUser() {
     const usuario = $("inp-usuario").value.trim();
     const contra = $("inp-contra").value.trim();
@@ -85,7 +90,7 @@ async function saveUser() {
 
     try {
         if (editID) {
-            // ACTUALIZACIÓN DE VÍNCULOS EN OTRAS TABLAS
+            // SI EL NOMBRE CAMBIÓ, ACTUALIZAMOS LOS VÍNCULOS PRIMERO (ARREGLA ERROR KARIM)
             if (usuario !== oldName) {
                 await sb.from("cuentas_facebook").update({ ocupada_por: usuario }).eq("ocupada_por", oldName);
                 await sb.from("usuarios_asignado").update({ usuario: usuario }).eq("usuario", oldName);
@@ -99,6 +104,6 @@ async function saveUser() {
         closeModal();
         fetchUsers();
     } catch (err) {
-        alert("Error: " + err.message);
+        alert("Error crítico: " + err.message);
     }
 }
