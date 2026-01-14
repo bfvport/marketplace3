@@ -1,29 +1,9 @@
 import { getSession, loadSidebar, escapeHtml } from "../../assets/js/app.js";
 
 const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
+const TABLE = "categoria";
+const BUCKET = "categoria_csv";
 
-// Constantes
-const TABLA_CUENTAS = "cuentas_facebook";
-const TABLA_USUARIOS_ASIGNADO = "usuarios_asignado";
-const TABLA_MARKETPLACE_ACTIVIDAD = "marketplace_actividad";
-const TABLA_CATEGORIA = "categoria";
-const BUCKET_CSV = "categoria_csv";
-
-// Variables de estado
-let session = null;
-let supabaseClient = null;
-let usuarioActual = null;
-let cuentasAsignadas = [];
-let categoriaAsignada = null;
-let etiquetasCategoria = "";
-let csvData = [];
-let contenidoUsado = new Set();
-let contenidoSeleccionado = null;
-let cuentaSeleccionada = null;
-let publicacionesHoy = 0;
-
-// Utilidades
 function log(msg) {
   const el = $("#log");
   if (!el) return;
@@ -32,27 +12,21 @@ function log(msg) {
   el.scrollTop = el.scrollHeight;
 }
 
-function clearLogs() {
-  const el = $("#log");
-  if (el) el.innerHTML = "";
-}
-
 function disable(sel, v) {
   const el = $(sel);
   if (el) el.disabled = !!v;
 }
 
-function showCopiedFeedback(button) {
-  const originalText = button.textContent;
-  button.textContent = "✓ Copiado";
-  button.style.background = "rgba(34, 197, 94, 0.2)";
-  setTimeout(() => {
-    button.textContent = originalText;
-    button.style.background = "";
-  }, 1500);
+function nowTsCompact() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}T${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
 }
 
-// Funciones de datos
+function safeName(name) {
+  return String(name || "archivo.csv").replace(/[^\w.\-]+/g, "_");
+}
+
 async function waitSupabaseClient(timeoutMs = 2000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
@@ -62,746 +36,372 @@ async function waitSupabaseClient(timeoutMs = 2000) {
   return null;
 }
 
-async function cargarInformacionUsuario() {
-  try {
-    const { data, error } = await supabaseClient
-      .from("usuarios")
-      .select("*")
-      .eq("usuario", session.usuario)
-      .single();
-
-    if (error) throw error;
-    
-    usuarioActual = data;
-    $("#userInfo").innerHTML = `
-      <div><strong>Usuario:</strong> ${escapeHtml(data.usuario)}</div>
-      <div><strong>Rol:</strong> ${escapeHtml(data.rol || "No especificado")}</div>
-      <div><strong>Email:</strong> ${escapeHtml(data.email || "No especificado")}</div>
-    `;
-    
-    log(`✅ Usuario cargado: ${data.usuario}`);
-  } catch (e) {
-    log(`❌ Error cargando usuario: ${e.message}`);
-  }
-}
-
-async function cargarCuentasFacebook() {
-  try {
-    const { data, error } = await supabaseClient
-      .from(TABLA_CUENTAS)
-      .select("email, ocupada_por, estado")
-      .eq("ocupada_por", session.usuario);
-
-    if (error) throw error;
-    
-    cuentasAsignadas = data || [];
-    
-    // Contar publicaciones de hoy por cuenta
-    const hoy = new Date().toISOString().split('T')[0];
-    let completadas = 0;
-    
-    for (const cuenta of cuentasAsignadas) {
-      const { count } = await supabaseClient
-        .from(TABLA_MARKETPLACE_ACTIVIDAD)
-        .select("*", { count: 'exact', head: true })
-        .eq("facebook_account_usada", cuenta.email)
-        .gte("fecha_publicacion", hoy + "T00:00:00")
-        .lte("fecha_publicacion", hoy + "T23:59:59");
-      
-      cuenta.publicacionesHoy = count || 0;
-      
-      // Verificar si completó la cuota
-      if (categoriaAsignada && cuenta.publicacionesHoy >= categoriaAsignada.marketplace_daily) {
-        completadas++;
-      }
-    }
-    
-    // Actualizar estadísticas
-    $("#cuentasCount").textContent = `Cuentas: ${cuentasAsignadas.length}`;
-    $("#completadasCount").textContent = `Completadas: ${completadas}`;
-    
-    renderTablaCuentas();
-    log(`✅ ${cuentasAsignadas.length} cuenta(s) cargada(s)`);
-  } catch (e) {
-    log(`❌ Error cargando cuentas: ${e.message}`);
-  }
-}
-
-async function cargarAsignacionCategoria() {
-  try {
-    const hoy = new Date().toISOString().split('T')[0];
-    
-    const { data, error } = await supabaseClient
-      .from(TABLA_USUARIOS_ASIGNADO)
-      .select("categoria, marketplace_daily, fecha_desde, fecha_hasta")
-      .eq("usuario", session.usuario)
-      .lte("fecha_desde", hoy)
-      .gte("fecha_hasta", hoy)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        log("⚠️ No tenés asignación activa para hoy");
-        categoriaAsignada = null;
-        return;
-      }
-      throw error;
-    }
-    
-    categoriaAsignada = data;
-    
-    // Cargar detalles de la categoría (INCLUYENDO ETIQUETAS)
-    const { data: catData } = await supabaseClient
-      .from(TABLA_CATEGORIA)
-      .select("nombre, csv_nombre, etiquetas")
-      .eq("nombre", data.categoria)
-      .single();
-    
-    if (catData) {
-      categoriaAsignada.detalles = catData;
-      etiquetasCategoria = catData.etiquetas || "";
-      
-      $("#categoriaInfo").innerHTML = `
-        <div><strong>Categoría:</strong> ${escapeHtml(data.categoria)}</div>
-        <div><strong>Etiquetas:</strong> ${escapeHtml(catData.etiquetas || "Sin etiquetas")}</div>
-        <div><strong>Publicaciones diarias por cuenta:</strong> ${data.marketplace_daily}</div>
-        <div><strong>Período:</strong> ${new Date(data.fecha_desde).toLocaleDateString()} al ${new Date(data.fecha_hasta).toLocaleDateString()}</div>
-      `;
-    } else {
-      $("#categoriaInfo").innerHTML = `
-        <div><strong>Categoría:</strong> ${escapeHtml(data.categoria)}</div>
-        <div><strong>Publicaciones diarias por cuenta:</strong> ${data.marketplace_daily}</div>
-        <div><strong>Período:</strong> ${new Date(data.fecha_desde).toLocaleDateString()} al ${new Date(data.fecha_hasta).toLocaleDateString()}</div>
-      `;
-    }
-    
-    $("#metaPublicaciones").textContent = data.marketplace_daily;
-    
-    log(`✅ Categoría asignada: ${data.categoria}`);
-  } catch (e) {
-    log(`❌ Error cargando asignación: ${e.message}`);
-  }
-}
-
-async function cargarCSVDeCategoria() {
-  if (!categoriaAsignada?.detalles?.csv_nombre) {
-    log("⚠️ No hay CSV asociado a esta categoría");
+function setSessionPill(session) {
+  const pill = $("#sessionPill");
+  if (!pill) return;
+  if (!session?.usuario) {
+    pill.style.display = "inline-block";
+    pill.textContent = "Sesión: NO encontrada";
     return;
   }
-  
-  try {
-    const path = categoriaAsignada.detalles.csv_nombre;
-    log(`📥 Descargando CSV: ${path}`);
-    
-    const { data, error } = await supabaseClient.storage
-      .from(BUCKET_CSV)
-      .download(path);
-    
-    if (error) throw error;
-    
-    const text = await data.text();
-    csvData = parseCSV(text);
-    
-    // Identificar contenido ya usado HOY
-    await identificarContenidoUsado();
-    
-    log(`✅ CSV cargado: ${csvData.length} filas`);
-    
-    // Mostrar estadísticas
-    mostrarEstadisticasContenido();
-    
-  } catch (e) {
-    log(`❌ Error cargando CSV: ${e.message}`);
+  pill.style.display = "inline-block";
+  pill.textContent = `Sesión: ${session.usuario} (${session.rol || "?"})`;
+}
+
+function clearForm(session) {
+  $("#cat_id").value = "";
+  $("#cat_nombre").value = "";
+  $("#cat_mensaje").value = "";
+  $("#cat_etiquetas").value = "";
+  $("#cat_csv_nombre").value = "(sin CSV)";
+  $("#cat_creado_por_view").value = session?.usuario ? session.usuario : "(sesión no encontrada)";
+}
+
+function fillForm(cat) {
+  $("#cat_id").value = String(cat.id);
+  $("#cat_nombre").value = cat.nombre || "";
+  $("#cat_mensaje").value = cat.mensaje || "";
+  $("#cat_etiquetas").value = cat.etiquetas || "";
+  $("#cat_csv_nombre").value = cat.csv_nombre || "(sin CSV)";
+  $("#cat_creado_por_view").value = cat.creado_por || "(sin dato)";
+}
+
+async function fetchCategorias(sb) {
+  const { data, error } = await sb
+    .from(TABLE)
+    .select("id, nombre, mensaje, etiquetas, csv_nombre, creado_por, created_at, updated_at")
+    .order("id", { ascending: false });
+
+  if (error) throw error;
+  return data || [];
+}
+
+function renderSelect(cats) {
+  const sel = $("#selCategoria");
+  if (!sel) return;
+
+  sel.innerHTML = "";
+  const opt0 = document.createElement("option");
+  opt0.value = "";
+  opt0.textContent = "— Seleccioná —";
+  sel.appendChild(opt0);
+
+  for (const c of cats) {
+    const opt = document.createElement("option");
+    opt.value = String(c.id);
+    opt.textContent = c.nombre;
+    sel.appendChild(opt);
   }
 }
 
-function parseCSV(text) {
-  const lines = text.split('\n');
-  if (lines.length < 2) return [];
-  
-  const headers = lines[0].split(',').map(h => h.trim());
-  const data = [];
-  
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-    
-    const values = parseCSVLine(lines[i]);
-    const row = {};
-    
-    for (let j = 0; j < headers.length; j++) {
-      let value = values[j] || '';
-      // Remover comillas dobles si las hay
-      if (value.startsWith('"') && value.endsWith('"')) {
-        value = value.slice(1, -1);
-      }
-      row[headers[j]] = value.trim();
-    }
-    
-    // Agregar ID único basado en título + descripción
-    row._id = hashString((row.titulo || '') + (row.descripcion || ''));
-    row._index = i - 1;
-    row._usado = false;
-    row._seleccionado = false;
-    
-    data.push(row);
-  }
-  
-  return data;
-}
-
-function parseCSVLine(line) {
-  const result = [];
-  let current = '';
-  let inQuotes = false;
-  
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  
-  result.push(current);
-  return result;
-}
-
-function hashString(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return hash.toString();
-}
-
-async function identificarContenidoUsado() {
-  const hoy = new Date().toISOString().split('T')[0];
-  
-  try {
-    const { data, error } = await supabaseClient
-      .from(TABLA_MARKETPLACE_ACTIVIDAD)
-      .select("titulo, descripcion")
-      .eq("usuario", session.usuario)
-      .gte("fecha_publicacion", hoy + "T00:00:00")
-      .lte("fecha_publicacion", hoy + "T23:59:59");
-    
-    if (error) throw error;
-    
-    contenidoUsado.clear();
-    
-    // Marcar contenido ya usado en csvData
-    for (const item of data) {
-      const id = hashString((item.titulo || '') + (item.descripcion || ''));
-      contenidoUsado.add(id);
-      
-      // También marcar en csvData
-      const index = csvData.findIndex(row => row._id === id);
-      if (index !== -1) {
-        csvData[index]._usado = true;
-      }
-    }
-    
-  } catch (e) {
-    log(`⚠️ Error identificando contenido usado: ${e.message}`);
-  }
-}
-
-function mostrarEstadisticasContenido() {
-  const usado = csvData.filter(row => row._usado).length;
-  const total = csvData.length;
-  const disponible = total - usado;
-  
-  const statsEl = $("#estadisticasContenido");
-  statsEl.style.display = "flex";
-  statsEl.innerHTML = `
-    <span class="pill pill-success">Disponible: ${disponible}</span>
-    <span class="pill pill-warning">Usado hoy: ${usado}</span>
-    <span class="pill pill-info">Total: ${total}</span>
-  `;
-}
-
-function seleccionarContenidoAutomatico() {
-  if (csvData.length === 0) {
-    log("⚠️ No hay contenido disponible en el CSV");
-    return null;
-  }
-  
-  // Filtrar contenido no usado
-  const contenidoDisponible = csvData.filter(row => !row._usado);
-  
-  if (contenidoDisponible.length === 0) {
-    log("❌ Ya usaste todo el contenido disponible para hoy");
-    return null;
-  }
-  
-  // Limpiar selección anterior
-  if (contenidoSeleccionado) {
-    contenidoSeleccionado._seleccionado = false;
-  }
-  
-  // Seleccionar aleatoriamente
-  const randomIndex = Math.floor(Math.random() * contenidoDisponible.length);
-  contenidoSeleccionado = contenidoDisponible[randomIndex];
-  contenidoSeleccionado._seleccionado = true;
-  
-  // Actualizar interfaz
-  actualizarContenidoFila(contenidoSeleccionado);
-  
-  log(`✅ Contenido seleccionado: "${contenidoSeleccionado.titulo?.substring(0, 30) || 'Sin título'}..."`);
-  
-  return contenidoSeleccionado;
-}
-
-function actualizarContenidoFila(fila) {
-  if (!fila) return;
-  
-  // Actualizar inputs de visualización
-  $("#tituloInput").value = fila.titulo || "";
-  $("#descripcionInput").value = fila.descripcion || "";
-  $("#categoriaInput").value = fila.categoria || "";
-  $("#etiquetasInput").value = etiquetasCategoria || "";
-  
-  // Actualizar formulario de guardado
-  $("#tituloUsadoInput").value = fila.titulo || "";
-  $("#descripcionUsadaInput").value = fila.descripcion || "";
-  $("#categoriaUsadaInput").value = fila.categoria || "";
-  $("#etiquetasUsadasInput").value = etiquetasCategoria || "";
-  $("#urlPortadaInput").value = fila.url_imagenes_portadas || "";
-  
-  // Actualizar estado visual de los inputs
-  const tituloInput = $("#tituloInput");
-  const descInput = $("#descripcionInput");
-  
-  tituloInput.className = fila._usado ? "content-used" : (fila._seleccionado ? "content-selected" : "content-available");
-  descInput.className = fila._usado ? "content-used" : (fila._seleccionado ? "content-selected" : "content-available");
-  
-  // Actualizar badge de estado en título
-  const tituloStatus = $("#tituloStatus");
-  if (fila._usado) {
-    tituloStatus.innerHTML = '<span class="used-badge">USADO</span>';
-  } else if (fila._seleccionado) {
-    tituloStatus.innerHTML = '<span class="available-badge">SELECCIONADO</span>';
-  } else {
-    tituloStatus.innerHTML = "";
-  }
-  
-  // Actualizar imágenes fijas
-  const container = $("#imagenesFijasContainer");
-  container.innerHTML = "";
-  
-  for (let i = 1; i <= 4; i++) {
-    const url = fila[`url_img_fijas_${i}`];
-    if (url) {
-      const div = document.createElement("div");
-      div.className = `image-preview ${fila._usado ? 'used' : ''}`;
-      div.innerHTML = `
-        <img src="${escapeHtml(url)}" alt="Imagen ${i}" onerror="this.style.display='none'">
-        <div style="font-size:11px; padding:2px; text-align:center;">${i}</div>
-      `;
-      container.appendChild(div);
-    }
-  }
-  
-  // Actualizar portada
-  const portadaContainer = $("#portadaContainer");
-  portadaContainer.innerHTML = "";
-  
-  if (fila.url_imagenes_portadas) {
-    const div = document.createElement("div");
-    div.className = `image-preview ${fila._usado ? 'used' : ''}`;
-    div.innerHTML = `
-      <img src="${escapeHtml(fila.url_imagenes_portadas)}" alt="Portada" onerror="this.style.display='none'">
-      <div style="font-size:11px; padding:2px; text-align:center;">Portada</div>
-    `;
-    portadaContainer.appendChild(div);
-  }
-}
-
-async function cargarHistorialHoy() {
-  try {
-    const hoy = new Date().toISOString().split('T')[0];
-    
-    const { data, error } = await supabaseClient
-      .from(TABLA_MARKETPLACE_ACTIVIDAD)
-      .select("*")
-      .eq("usuario", session.usuario)
-      .gte("fecha_publicacion", hoy + "T00:00:00")
-      .lte("fecha_publicacion", hoy + "T23:59:59")
-      .order("fecha_publicacion", { ascending: false });
-    
-    if (error) throw error;
-    
-    publicacionesHoy = data.length;
-    $("#contadorPublicaciones").textContent = publicacionesHoy;
-    $("#historialInfo").textContent = `${data.length} publicación(es) hoy`;
-    
-    renderTablaHistorial(data);
-  } catch (e) {
-    log(`❌ Error cargando historial: ${e.message}`);
-  }
-}
-
-// Funciones de renderizado
-function renderTablaCuentas() {
-  const tbody = $("#tablaCuentas tbody");
+function renderTabla(cats) {
+  const tbody = $("#tablaCats tbody");
   if (!tbody) return;
-  
   tbody.innerHTML = "";
-  
-  if (cuentasAsignadas.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="muted">No tenés cuentas asignadas</td></tr>`;
-    return;
-  }
-  
-  for (const cuenta of cuentasAsignadas) {
-    const tr = document.createElement("tr");
-    
-    // Email
-    const tdEmail = document.createElement("td");
-    tdEmail.innerHTML = `<span class="mono">${escapeHtml(cuenta.email)}</span>`;
-    tr.appendChild(tdEmail);
-    
-    // Estado
-    const tdEstado = document.createElement("td");
-    const estadoPill = document.createElement("span");
-    estadoPill.className = `pill ${cuenta.estado === 'activa' ? 'pill-success' : 'pill-warning'}`;
-    estadoPill.textContent = cuenta.estado || 'desconocido';
-    tdEstado.appendChild(estadoPill);
-    tr.appendChild(tdEstado);
-    
-    // Publicaciones hoy
-    const tdPublicaciones = document.createElement("td");
-    const meta = categoriaAsignada?.marketplace_daily || 0;
-    const completado = cuenta.publicacionesHoy >= meta;
-    tdPublicaciones.innerHTML = `
-      <span style="font-weight:bold; color: ${completado ? '#22c55e' : '#f59e0b'}">${cuenta.publicacionesHoy}</span>
-      <span class="muted">/${meta}</span>
-    `;
-    tr.appendChild(tdPublicaciones);
-    
-    // Acciones
-    const tdAcciones = document.createElement("td");
-    tdAcciones.className = "actions";
-    
-    const btnSeleccionar = document.createElement("button");
-    btnSeleccionar.className = cuentaSeleccionada?.email === cuenta.email ? "btn active" : "btn";
-    btnSeleccionar.textContent = cuentaSeleccionada?.email === cuenta.email ? "✓ Seleccionada" : "Seleccionar";
-    btnSeleccionar.onclick = () => seleccionarCuenta(cuenta);
-    btnSeleccionar.disabled = completado;
-    
-    tdAcciones.appendChild(btnSeleccionar);
-    tr.appendChild(tdAcciones);
-    
-    tbody.appendChild(tr);
-  }
-}
 
-function renderTablaHistorial(historial) {
-  const tbody = $("#tablaHistorial tbody");
-  if (!tbody) return;
-  
-  tbody.innerHTML = "";
-  
-  if (historial.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="muted">No hay publicaciones hoy</td></tr>`;
-    return;
-  }
-  
-  for (const item of historial) {
+  for (const c of cats) {
     const tr = document.createElement("tr");
-    
-    // Hora
-    const tdHora = document.createElement("td");
-    const fecha = new Date(item.fecha_publicacion);
-    tdHora.textContent = fecha.toLocaleTimeString('es-AR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-    tr.appendChild(tdHora);
-    
-    // Cuenta
-    const tdCuenta = document.createElement("td");
-    tdCuenta.innerHTML = `<span class="mono">${escapeHtml(item.facebook_account_usada)}</span>`;
-    tr.appendChild(tdCuenta);
-    
-    // Título
-    const tdTitulo = document.createElement("td");
-    tdTitulo.textContent = item.titulo ? (item.titulo.substring(0, 40) + (item.titulo.length > 40 ? '...' : '')) : '';
-    tr.appendChild(tdTitulo);
-    
-    // Link
-    const tdLink = document.createElement("td");
-    if (item.marketplace_link_publicacion) {
-      tdLink.innerHTML = `<a href="${escapeHtml(item.marketplace_link_publicacion)}" target="_blank" style="color:#60a5fa; font-size:12px;">${escapeHtml(item.marketplace_link_publicacion.substring(0, 40))}...</a>`;
-    } else {
-      tdLink.textContent = "Sin link";
-    }
-    tr.appendChild(tdLink);
-    
-    // Acciones
-    const tdAcciones = document.createElement("td");
-    tdAcciones.className = "actions";
-    
-    const btnCopiar = document.createElement("button");
-    btnCopiar.className = "btn2";
-    btnCopiar.textContent = "Copiar";
-    btnCopiar.onclick = () => {
-      navigator.clipboard.writeText(item.marketplace_link_publicacion || '');
-      log("📋 Link copiado al portapapeles");
+    tr.dataset.id = String(c.id);
+
+    const tdNombre = document.createElement("td");
+    tdNombre.innerHTML = `<b>${escapeHtml(c.nombre)}</b>`;
+    tr.appendChild(tdNombre);
+
+    const tdCreado = document.createElement("td");
+    tdCreado.textContent = c.creado_por || "-";
+    tr.appendChild(tdCreado);
+
+    const tdMsg = document.createElement("td");
+    const m = c.mensaje || "";
+    tdMsg.textContent = m.slice(0, 120) + (m.length > 120 ? "…" : "");
+    tr.appendChild(tdMsg);
+
+    const tdEtiquetas = document.createElement("td");
+    const et = c.etiquetas || "";
+    tdEtiquetas.textContent = et.slice(0, 80) + (et.length > 80 ? "…" : "");
+    tr.appendChild(tdEtiquetas);
+
+    const tdCsv = document.createElement("td");
+    tdCsv.innerHTML = `<span class="mono">${escapeHtml(c.csv_nombre || "(sin CSV)")}</span>`;
+    tr.appendChild(tdCsv);
+
+    const tdAcc = document.createElement("td");
+    tdAcc.className = "actions";
+
+    const btnEdit = document.createElement("button");
+    btnEdit.className = "btn2";
+    btnEdit.textContent = "Editar";
+    btnEdit.onclick = () => {
+      fillForm(c);
+      log(`✏️ Editando "${c.nombre}"`);
     };
-    
-    tdAcciones.appendChild(btnCopiar);
-    tr.appendChild(tdAcciones);
-    
+
+    const btnVer = document.createElement("button");
+    btnVer.className = "btn2";
+    btnVer.textContent = "Ver CSV";
+    btnVer.onclick = async () => {
+      $("#selCategoria").value = String(c.id);
+      await listarCsvDeCategoria();
+    };
+
+    tdAcc.appendChild(btnEdit);
+    tdAcc.appendChild(btnVer);
+    tr.appendChild(tdAcc);
+
     tbody.appendChild(tr);
   }
 }
 
-// Funciones de interacción
-function seleccionarCuenta(cuenta) {
-  cuentaSeleccionada = cuenta;
-  
-  // Actualizar UI
-  renderTablaCuentas();
-  
-  // Mostrar contenido
-  $("#contenidoContainer").style.display = "block";
-  $("#csvInfo").textContent = `Contenido para: ${cuenta.email}`;
-  
-  // Actualizar cuenta usada en formulario
-  $("#cuentaUsadaInput").value = cuenta.email;
-  
-  // Cargar CSV si no está cargado
-  if (csvData.length === 0 && categoriaAsignada) {
-    cargarCSVDeCategoria().then(() => {
-      if (csvData.length > 0) {
-        seleccionarContenidoAutomatico();
-      }
-    });
-  } else if (csvData.length > 0) {
-    seleccionarContenidoAutomatico();
-  }
-  
-  log(`✅ Cuenta seleccionada: ${cuenta.email}`);
+async function refreshUI(sb) {
+  const cats = await fetchCategorias(sb);
+  renderSelect(cats);
+  renderTabla(cats);
 }
 
-async function guardarPublicacion() {
-  // Validaciones
-  if (!cuentaSeleccionada) {
-    log("❌ Seleccioná una cuenta primero");
-    return;
-  }
-  
-  if (!contenidoSeleccionado) {
-    log("❌ No hay contenido seleccionado");
-    return;
-  }
-  
-  // Verificar si ya completó la cuota diaria
-  const meta = categoriaAsignada?.marketplace_daily || 0;
-  const completado = cuentaSeleccionada.publicacionesHoy >= meta;
-  if (completado) {
-    log(`❌ Ya completaste las ${meta} publicaciones diarias para esta cuenta`);
-    return;
-  }
-  
-  if (contenidoSeleccionado._usado) {
-    log("⚠️ Este contenido ya fue usado hoy. Seleccionando nuevo contenido...");
-    seleccionarContenidoAutomatico();
-    return;
-  }
-  
-  const link = $("#marketplaceLinkInput").value.trim();
-  if (!link) {
-    log("❌ El link de Marketplace es obligatorio");
-    return;
-  }
-  
-  const titulo = $("#tituloUsadoInput").value.trim();
-  const descripcion = $("#descripcionUsadaInput").value.trim();
-  const categoria = $("#categoriaUsadaInput").value.trim();
-  
-  if (!titulo || !descripcion || !categoria) {
-    log("❌ Falta completar campos obligatorios");
-    return;
-  }
-  
-  disable("#btnGuardarPublicacion", true);
-  
+async function guardarCategoria(sb, session) {
+  const id = ($("#cat_id")?.value || "").trim();
+  const nombre = ($("#cat_nombre")?.value || "").trim();
+  const mensaje = ($("#cat_mensaje")?.value || "").trim();
+  const etiquetas = ($("#cat_etiquetas")?.value || "").trim();
+
+  if (!session?.usuario) return log("❌ No hay sesión (mp_session_v1). Volvé al login.");
+  if (!nombre) return log("❌ Falta nombre.");
+  if (!mensaje) return log("❌ Falta mensaje.");
+
+  disable("#btnGuardar", true);
   try {
-    const { error } = await supabaseClient
-      .from(TABLA_MARKETPLACE_ACTIVIDAD)
-      .insert([{
-        usuario: session.usuario,
-        facebook_account_usada: cuentaSeleccionada.email,
-        fecha_publicacion: new Date().toISOString(),
-        marketplace_link_publicacion: link,
-        titulo: titulo,
-        descripcion: descripcion,
-        categoria: categoria,
-        etiquetas_usadas: etiquetasCategoria,
-        url_imagenes_portada: $("#urlPortadaInput").value.trim()
-      }]);
-    
-    if (error) throw error;
-    
-    // Marcar contenido como usado
-    contenidoSeleccionado._usado = true;
-    contenidoUsado.add(contenidoSeleccionado._id);
-    
-    log("✅ Publicación guardada correctamente");
-    
-    // Limpiar solo el link
-    $("#marketplaceLinkInput").value = "";
-    
-    // Actualizar contadores y UI
-    await cargarHistorialHoy();
-    await cargarCuentasFacebook();
-    mostrarEstadisticasContenido();
-    
-    // Seleccionar nuevo contenido automáticamente
-    const nuevoContenido = seleccionarContenidoAutomatico();
-    if (!nuevoContenido) {
-      log("ℹ️ Ya usaste todo el contenido disponible para hoy");
+    if (!id) {
+      log(`🧾 Creando categoría "${nombre}" (creado_por=${session.usuario})`);
+
+      const { data, error } = await sb
+        .from(TABLE)
+        .insert([{ 
+          nombre, 
+          mensaje, 
+          etiquetas,
+          creado_por: session.usuario 
+        }])
+        .select("id, nombre, mensaje, etiquetas, csv_nombre, creado_por")
+        .single();
+
+      if (error) throw error;
+
+      fillForm(data);
+      log(`✅ Creada OK (id interno ${data.id})`);
+    } else {
+      log(`🧾 Actualizando categoría (id interno oculto)`);
+
+      const { error } = await sb
+        .from(TABLE)
+        .update({ nombre, mensaje, etiquetas })
+        .eq("id", Number(id));
+
+      if (error) {
+        // Manejo específico del error de foreign key
+        if (error.message.includes("violates foreign key constraint") && 
+            error.message.includes("usuarios_asignado_categoria_fkey")) {
+          throw new Error("❌ No se puede actualizar: esta categoría está asignada a usuarios. Primero desasignala.");
+        }
+        throw error;
+      }
+
+      log(`✅ Actualizada OK`);
     }
-    
+
+    await refreshUI(sb);
   } catch (e) {
-    log(`❌ Error guardando publicación: ${e.message}`);
+    log(`❌ Guardar error: ${e.message || e}`);
     console.error(e);
   } finally {
-    disable("#btnGuardarPublicacion", false);
+    disable("#btnGuardar", false);
   }
 }
 
-function descargarTodasImagenes() {
-  if (!contenidoSeleccionado) {
-    log("❌ No hay contenido seleccionado");
-    return;
-  }
-  
-  const fila = contenidoSeleccionado;
-  const urls = [];
-  
-  // Agregar imágenes fijas
-  for (let i = 1; i <= 4; i++) {
-    const url = fila[`url_img_fijas_${i}`];
-    if (url) {
-      const nombre = fila.titulo ? 
-        `imagen_${i}_${fila.titulo.replace(/[^a-z0-9]/gi, '_').substring(0, 20)}.jpg` :
-        `imagen_${i}.jpg`;
-      urls.push({ url, name: nombre });
+async function subirCSV(sb, session) {
+  if (!session?.usuario) return log("❌ No hay sesión (mp_session_v1). Volvé al login.");
+
+  const catId = ($("#selCategoria")?.value || "").trim();
+  if (!catId) return log("❌ Seleccioná una categoría.");
+
+  const file = $("#fileCsv")?.files?.[0];
+  if (!file) return log("❌ Elegí un CSV.");
+
+  const path = `${catId}/${nowTsCompact()}_${safeName(file.name)}`;
+
+  disable("#btnSubir", true);
+  try {
+    log(`📤 Subiendo a bucket ${BUCKET}: ${path}`);
+
+    const { error: upErr } = await sb.storage
+      .from(BUCKET)
+      .upload(path, file, { upsert: true, contentType: "text/csv" });
+
+    if (upErr) throw upErr;
+
+    const { error: updErr } = await sb
+      .from(TABLE)
+      .update({ csv_nombre: path })
+      .eq("id", Number(catId));
+
+    if (updErr) throw updErr;
+
+    log(`✅ CSV subido y asociado: ${path}`);
+
+    if ($("#cat_id")?.value?.trim() === String(catId)) {
+      $("#cat_csv_nombre").value = path;
     }
+
+    await refreshUI(sb);
+  } catch (e) {
+    log(`❌ upload/db error: ${e.message || e}`);
+    console.error(e);
+  } finally {
+    disable("#btnSubir", false);
   }
-  
-  // Agregar portada
-  if (fila.url_imagenes_portadas) {
-    const nombrePortada = fila.titulo ?
-      `portada_${fila.titulo.replace(/[^a-z0-9]/gi, '_').substring(0, 20)}.jpg` :
-      `portada.jpg`;
-    urls.push({ url: fila.url_imagenes_portadas, name: nombrePortada });
-  }
-  
-  if (urls.length === 0) {
-    log("⚠️ No hay URLs de imágenes para descargar");
-    return;
-  }
-  
-  log(`⬇️ Descargando ${urls.length} imagen(es)...`);
-  
-  // Descargar cada imagen
-  urls.forEach(item => {
-    const a = document.createElement("a");
-    a.href = item.url;
-    a.download = item.name;
-    a.target = "_blank";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  });
 }
 
-// Event Listeners
-function setupEventListeners() {
-  // Copiar contenido
-  $("#btnCopiarTitulo")?.addEventListener("click", () => {
-    navigator.clipboard.writeText($("#tituloInput").value);
-    showCopiedFeedback($("#btnCopiarTitulo"));
-  });
-  
-  $("#btnCopiarDescripcion")?.addEventListener("click", () => {
-    navigator.clipboard.writeText($("#descripcionInput").value);
-    showCopiedFeedback($("#btnCopiarDescripcion"));
-  });
-  
-  $("#btnCopiarCategoria")?.addEventListener("click", () => {
-    navigator.clipboard.writeText($("#categoriaInput").value);
-    showCopiedFeedback($("#btnCopiarCategoria"));
-  });
-  
-  $("#btnCopiarEtiquetas")?.addEventListener("click", () => {
-    navigator.clipboard.writeText($("#etiquetasInput").value);
-    showCopiedFeedback($("#btnCopiarEtiquetas"));
-  });
-  
-  // Descargar imágenes
-  $("#btnDescargarTodasImagenes")?.addEventListener("click", descargarTodasImagenes);
-  
-  // Cambiar contenido
-  $("#btnCambiarContenido")?.addEventListener("click", () => {
-    const nuevo = seleccionarContenidoAutomatico();
-    if (nuevo) {
-      log("🔄 Contenido cambiado manualmente");
+async function listarCsvDeCategoria() {
+  const sb = window.supabaseClient;
+  if (!sb) return log("❌ Supabase client no disponible.");
+
+  const catId = ($("#selCategoria")?.value || "").trim();
+  if (!catId) return log("❌ Seleccioná una categoría.");
+
+  const panel = $("#csvPanel");
+  const hint = $("#csvPanelHint");
+  const tbody = $("#tablaCsv tbody");
+
+  if (panel) panel.style.display = "block";
+  if (hint) hint.innerHTML = `Mostrando: <span class="mono">${BUCKET}/${catId}/</span>`;
+  if (tbody) tbody.innerHTML = "";
+
+  disable("#btnListarCsv", true);
+  try {
+    log(`📚 Listando ${BUCKET}/${catId}/`);
+
+    const { data, error } = await sb.storage
+      .from(BUCKET)
+      .list(`${catId}`, { limit: 100, sortBy: { column: "updated_at", order: "desc" } });
+
+    if (error) throw error;
+
+    const files = (data || []).filter(f => f?.name && f.name.toLowerCase().endsWith(".csv"));
+    if (!files.length) {
+      if (tbody) tbody.innerHTML = `<tr><td colspan="3" class="muted">No hay CSV subidos.</td></tr>`;
+      return;
     }
-  });
-  
-  // Guardar publicación
-  $("#btnGuardarPublicacion")?.addEventListener("click", guardarPublicacion);
-  
-  // Limpiar formulario (solo el link)
-  $("#btnLimpiarFormulario")?.addEventListener("click", () => {
-    $("#marketplaceLinkInput").value = "";
-    log("🧹 Link limpiado");
-  });
-  
-  // Limpiar logs
-  $("#btnLimpiarLogs")?.addEventListener("click", clearLogs);
+
+    for (const f of files) {
+      const fullPath = `${catId}/${f.name}`;
+      const tr = document.createElement("tr");
+
+      const tdFile = document.createElement("td");
+      tdFile.innerHTML = `<span class="mono">${escapeHtml(fullPath)}</span>`;
+      tr.appendChild(tdFile);
+
+      const tdMod = document.createElement("td");
+      tdMod.textContent = f.updated_at || f.created_at || "-";
+      tr.appendChild(tdMod);
+
+      const tdAcc = document.createElement("td");
+      tdAcc.className = "actions";
+
+      const btnCopy = document.createElement("button");
+      btnCopy.className = "btn2";
+      btnCopy.textContent = "Copiar path";
+      btnCopy.onclick = async () => {
+        try {
+          await navigator.clipboard.writeText(fullPath);
+          log(`📋 Copiado: ${fullPath}`);
+        } catch {
+          log("❌ No pude copiar.");
+        }
+      };
+
+      tdAcc.appendChild(btnCopy);
+      tr.appendChild(tdAcc);
+
+      tbody.appendChild(tr);
+    }
+  } catch (e) {
+    log(`❌ listar csv error: ${e.message || e}`);
+    console.error(e);
+  } finally {
+    disable("#btnListarCsv", false);
+  }
 }
 
-// Inicialización
+function descargarPlantilla() {
+  const headers = [
+    "titulo",
+    "descripcion", 
+    "categoria",
+    "etiquetas",
+    "url_img_fijas_1",
+    "url_img_fijas_2", 
+    "url_img_fijas_3",
+    "url_img_fijas_4",
+    "url_imagenes_portadas"
+  ];
+  
+  // Crear fila de ejemplo con datos de muestra
+  const ejemplo = [
+    "Producto Ejemplo",
+    "Descripción del producto",
+    "nombre-de-la-categoria",
+    '"etiqueta1, etiqueta2, etiqueta3"',
+    "https://ejemplo.com/img1.jpg",
+    "https://ejemplo.com/img2.jpg",
+    "https://ejemplo.com/img3.jpg",
+    "https://ejemplo.com/img4.jpg",
+    "https://ejemplo.com/portada.jpg"
+  ];
+  
+  const csv = headers.join(",") + "\n" + ejemplo.join(",") + "\n";
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "plantilla_categoria_con_4_imagenes.csv";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  log("⬇️ Plantilla descargada (con 4 columnas de imágenes fijas).");
+  log("📝 Las etiquetas con comas deben ir entre comillas dobles: \"etiqueta1, etiqueta2\"");
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
-  // 1) Cargar sesión
-  session = getSession();
-  if (!session?.usuario) {
-    log("❌ No hay sesión activa. Volvé al login.");
+  // 1) sesión
+  const session = getSession();
+  setSessionPill(session);
+
+  // 2) sidebar (tu sidebar está en templates/sidebar.html, desde templates/categoria/ => basePath "../")
+  await loadSidebar({ activeKey: "categorias", basePath: "../" });
+
+  // 3) espera supabase
+  const client = await waitSupabaseClient(2000);
+  if (!client) {
+    log("❌ No encuentro window.supabaseClient. Revisá que ../../assets/js/supabase.js lo seteé ANTES del module.");
     return;
   }
-  
-  // 2) Cargar sidebar
-  await loadSidebar({ activeKey: "diario", basePath: "../" });
-  
-  // 3) Conectar a Supabase
-  supabaseClient = await waitSupabaseClient(2000);
-  if (!supabaseClient) {
-    log("❌ No se pudo conectar con Supabase");
-    return;
+  log("✅ Supabase client OK.");
+
+  // 4) init UI
+  clearForm(session);
+
+  $("#btnGuardar")?.addEventListener("click", () => guardarCategoria(client, session));
+  $("#btnNuevo")?.addEventListener("click", () => { clearForm(session); log("🆕 Form limpio."); });
+  $("#btnSubir")?.addEventListener("click", () => subirCSV(client, session));
+  $("#btnListarCsv")?.addEventListener("click", listarCsvDeCategoria);
+  $("#btnDescargarPlantilla")?.addEventListener("click", descargarPlantilla);
+
+  // 5) cargar lista
+  try {
+    await refreshUI(client);
+    log("✅ Categorías cargadas.");
+  } catch (e) {
+    log(`❌ No pude cargar categorías: ${e.message || e}`);
+    console.error(e);
   }
-  
-  log("✅ Supabase client conectado");
-  
-  // 4) Configurar eventos
-  setupEventListeners();
-  
-  // 5) Cargar datos iniciales
-  await cargarInformacionUsuario();
-  await cargarAsignacionCategoria();
-  await cargarCuentasFacebook();
-  await cargarHistorialHoy();
-  
-  log("✅ Sistema de diario listo");
 });

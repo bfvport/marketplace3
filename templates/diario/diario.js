@@ -16,9 +16,11 @@ let supabaseClient = null;
 let usuarioActual = null;
 let cuentasAsignadas = [];
 let categoriaAsignada = null;
+let etiquetasCategoria = "";
 let csvData = [];
+let contenidoUsado = new Set();
+let contenidoSeleccionado = null;
 let cuentaSeleccionada = null;
-let filaActual = 0;
 let publicacionesHoy = 0;
 
 // Utilidades
@@ -28,6 +30,11 @@ function log(msg) {
   const t = new Date().toTimeString().slice(0, 8);
   el.innerHTML += `[${t}] ${escapeHtml(msg)}<br>`;
   el.scrollTop = el.scrollHeight;
+}
+
+function clearLogs() {
+  const el = $("#log");
+  if (el) el.innerHTML = "";
 }
 
 function disable(sel, v) {
@@ -91,6 +98,8 @@ async function cargarCuentasFacebook() {
     
     // Contar publicaciones de hoy por cuenta
     const hoy = new Date().toISOString().split('T')[0];
+    let completadas = 0;
+    
     for (const cuenta of cuentasAsignadas) {
       const { count } = await supabaseClient
         .from(TABLA_MARKETPLACE_ACTIVIDAD)
@@ -100,7 +109,16 @@ async function cargarCuentasFacebook() {
         .lte("fecha_publicacion", hoy + "T23:59:59");
       
       cuenta.publicacionesHoy = count || 0;
+      
+      // Verificar si completó la cuota
+      if (categoriaAsignada && cuenta.publicacionesHoy >= categoriaAsignada.marketplace_daily) {
+        completadas++;
+      }
     }
+    
+    // Actualizar estadísticas
+    $("#cuentasCount").textContent = `Cuentas: ${cuentasAsignadas.length}`;
+    $("#completadasCount").textContent = `Completadas: ${completadas}`;
     
     renderTablaCuentas();
     log(`✅ ${cuentasAsignadas.length} cuenta(s) cargada(s)`);
@@ -132,20 +150,30 @@ async function cargarAsignacionCategoria() {
     
     categoriaAsignada = data;
     
-    // Cargar detalles de la categoría
+    // Cargar detalles de la categoría (INCLUYENDO ETIQUETAS)
     const { data: catData } = await supabaseClient
       .from(TABLA_CATEGORIA)
-      .select("nombre, csv_nombre")
+      .select("nombre, csv_nombre, etiquetas")
       .eq("nombre", data.categoria)
       .single();
     
-    categoriaAsignada.detalles = catData;
-    
-    $("#categoriaInfo").innerHTML = `
-      <div><strong>Categoría:</strong> ${escapeHtml(data.categoria)}</div>
-      <div><strong>Publicaciones diarias por cuenta:</strong> ${data.marketplace_daily}</div>
-      <div><strong>Período:</strong> ${new Date(data.fecha_desde).toLocaleDateString()} al ${new Date(data.fecha_hasta).toLocaleDateString()}</div>
-    `;
+    if (catData) {
+      categoriaAsignada.detalles = catData;
+      etiquetasCategoria = catData.etiquetas || "";
+      
+      $("#categoriaInfo").innerHTML = `
+        <div><strong>Categoría:</strong> ${escapeHtml(data.categoria)}</div>
+        <div><strong>Etiquetas:</strong> ${escapeHtml(catData.etiquetas || "Sin etiquetas")}</div>
+        <div><strong>Publicaciones diarias por cuenta:</strong> ${data.marketplace_daily}</div>
+        <div><strong>Período:</strong> ${new Date(data.fecha_desde).toLocaleDateString()} al ${new Date(data.fecha_hasta).toLocaleDateString()}</div>
+      `;
+    } else {
+      $("#categoriaInfo").innerHTML = `
+        <div><strong>Categoría:</strong> ${escapeHtml(data.categoria)}</div>
+        <div><strong>Publicaciones diarias por cuenta:</strong> ${data.marketplace_daily}</div>
+        <div><strong>Período:</strong> ${new Date(data.fecha_desde).toLocaleDateString()} al ${new Date(data.fecha_hasta).toLocaleDateString()}</div>
+      `;
+    }
     
     $("#metaPublicaciones").textContent = data.marketplace_daily;
     
@@ -174,10 +202,14 @@ async function cargarCSVDeCategoria() {
     const text = await data.text();
     csvData = parseCSV(text);
     
+    // Identificar contenido ya usado HOY
+    await identificarContenidoUsado();
+    
     log(`✅ CSV cargado: ${csvData.length} filas`);
     
-    // Actualizar selector de filas
-    actualizarSelectorFilas();
+    // Mostrar estadísticas
+    mostrarEstadisticasContenido();
+    
   } catch (e) {
     log(`❌ Error cargando CSV: ${e.message}`);
   }
@@ -193,7 +225,7 @@ function parseCSV(text) {
   for (let i = 1; i < lines.length; i++) {
     if (!lines[i].trim()) continue;
     
-    const values = lines[i].split(',');
+    const values = parseCSVLine(lines[i]);
     const row = {};
     
     for (let j = 0; j < headers.length; j++) {
@@ -205,10 +237,190 @@ function parseCSV(text) {
       row[headers[j]] = value.trim();
     }
     
+    // Agregar ID único basado en título + descripción
+    row._id = hashString((row.titulo || '') + (row.descripcion || ''));
+    row._index = i - 1;
+    row._usado = false;
+    row._seleccionado = false;
+    
     data.push(row);
   }
   
   return data;
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  result.push(current);
+  return result;
+}
+
+function hashString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash.toString();
+}
+
+async function identificarContenidoUsado() {
+  const hoy = new Date().toISOString().split('T')[0];
+  
+  try {
+    const { data, error } = await supabaseClient
+      .from(TABLA_MARKETPLACE_ACTIVIDAD)
+      .select("titulo, descripcion")
+      .eq("usuario", session.usuario)
+      .gte("fecha_publicacion", hoy + "T00:00:00")
+      .lte("fecha_publicacion", hoy + "T23:59:59");
+    
+    if (error) throw error;
+    
+    contenidoUsado.clear();
+    
+    // Marcar contenido ya usado en csvData
+    for (const item of data) {
+      const id = hashString((item.titulo || '') + (item.descripcion || ''));
+      contenidoUsado.add(id);
+      
+      // También marcar en csvData
+      const index = csvData.findIndex(row => row._id === id);
+      if (index !== -1) {
+        csvData[index]._usado = true;
+      }
+    }
+    
+  } catch (e) {
+    log(`⚠️ Error identificando contenido usado: ${e.message}`);
+  }
+}
+
+function mostrarEstadisticasContenido() {
+  const usado = csvData.filter(row => row._usado).length;
+  const total = csvData.length;
+  const disponible = total - usado;
+  
+  const statsEl = $("#estadisticasContenido");
+  statsEl.style.display = "flex";
+  statsEl.innerHTML = `
+    <span class="pill pill-success">Disponible: ${disponible}</span>
+    <span class="pill pill-warning">Usado hoy: ${usado}</span>
+    <span class="pill pill-info">Total: ${total}</span>
+  `;
+}
+
+function seleccionarContenidoAutomatico() {
+  if (csvData.length === 0) {
+    log("⚠️ No hay contenido disponible en el CSV");
+    return null;
+  }
+  
+  // Filtrar contenido no usado
+  const contenidoDisponible = csvData.filter(row => !row._usado);
+  
+  if (contenidoDisponible.length === 0) {
+    log("❌ Ya usaste todo el contenido disponible para hoy");
+    return null;
+  }
+  
+  // Limpiar selección anterior
+  if (contenidoSeleccionado) {
+    contenidoSeleccionado._seleccionado = false;
+  }
+  
+  // Seleccionar aleatoriamente
+  const randomIndex = Math.floor(Math.random() * contenidoDisponible.length);
+  contenidoSeleccionado = contenidoDisponible[randomIndex];
+  contenidoSeleccionado._seleccionado = true;
+  
+  // Actualizar interfaz
+  actualizarContenidoFila(contenidoSeleccionado);
+  
+  log(`✅ Contenido seleccionado: "${contenidoSeleccionado.titulo?.substring(0, 30) || 'Sin título'}..."`);
+  
+  return contenidoSeleccionado;
+}
+
+function actualizarContenidoFila(fila) {
+  if (!fila) return;
+  
+  // Actualizar inputs de visualización
+  $("#tituloInput").value = fila.titulo || "";
+  $("#descripcionInput").value = fila.descripcion || "";
+  $("#categoriaInput").value = fila.categoria || "";
+  $("#etiquetasInput").value = etiquetasCategoria || "";
+  
+  // Actualizar formulario de guardado
+  $("#tituloUsadoInput").value = fila.titulo || "";
+  $("#descripcionUsadaInput").value = fila.descripcion || "";
+  $("#categoriaUsadaInput").value = fila.categoria || "";
+  $("#etiquetasUsadasInput").value = etiquetasCategoria || "";
+  $("#urlPortadaInput").value = fila.url_imagenes_portadas || "";
+  
+  // Actualizar estado visual de los inputs
+  const tituloInput = $("#tituloInput");
+  const descInput = $("#descripcionInput");
+  
+  tituloInput.className = fila._usado ? "content-used" : (fila._seleccionado ? "content-selected" : "content-available");
+  descInput.className = fila._usado ? "content-used" : (fila._seleccionado ? "content-selected" : "content-available");
+  
+  // Actualizar badge de estado en título
+  const tituloStatus = $("#tituloStatus");
+  if (fila._usado) {
+    tituloStatus.innerHTML = '<span class="used-badge">USADO</span>';
+  } else if (fila._seleccionado) {
+    tituloStatus.innerHTML = '<span class="available-badge">SELECCIONADO</span>';
+  } else {
+    tituloStatus.innerHTML = "";
+  }
+  
+  // Actualizar imágenes fijas
+  const container = $("#imagenesFijasContainer");
+  container.innerHTML = "";
+  
+  for (let i = 1; i <= 4; i++) {
+    const url = fila[`url_img_fijas_${i}`];
+    if (url) {
+      const div = document.createElement("div");
+      div.className = `image-preview ${fila._usado ? 'used' : ''}`;
+      div.innerHTML = `
+        <img src="${escapeHtml(url)}" alt="Imagen ${i}" onerror="this.style.display='none'">
+        <div style="font-size:11px; padding:2px; text-align:center;">${i}</div>
+      `;
+      container.appendChild(div);
+    }
+  }
+  
+  // Actualizar portada
+  const portadaContainer = $("#portadaContainer");
+  portadaContainer.innerHTML = "";
+  
+  if (fila.url_imagenes_portadas) {
+    const div = document.createElement("div");
+    div.className = `image-preview ${fila._usado ? 'used' : ''}`;
+    div.innerHTML = `
+      <img src="${escapeHtml(fila.url_imagenes_portadas)}" alt="Portada" onerror="this.style.display='none'">
+      <div style="font-size:11px; padding:2px; text-align:center;">Portada</div>
+    `;
+    portadaContainer.appendChild(div);
+  }
 }
 
 async function cargarHistorialHoy() {
@@ -227,9 +439,9 @@ async function cargarHistorialHoy() {
     
     publicacionesHoy = data.length;
     $("#contadorPublicaciones").textContent = publicacionesHoy;
+    $("#historialInfo").textContent = `${data.length} publicación(es) hoy`;
     
     renderTablaHistorial(data);
-    log(`✅ Historial cargado: ${data.length} publicación(es) hoy`);
   } catch (e) {
     log(`❌ Error cargando historial: ${e.message}`);
   }
@@ -265,9 +477,11 @@ function renderTablaCuentas() {
     
     // Publicaciones hoy
     const tdPublicaciones = document.createElement("td");
+    const meta = categoriaAsignada?.marketplace_daily || 0;
+    const completado = cuenta.publicacionesHoy >= meta;
     tdPublicaciones.innerHTML = `
-      <span style="font-weight:bold;">${cuenta.publicacionesHoy}</span>
-      <span class="muted">/${categoriaAsignada?.marketplace_daily || '?'}</span>
+      <span style="font-weight:bold; color: ${completado ? '#22c55e' : '#f59e0b'}">${cuenta.publicacionesHoy}</span>
+      <span class="muted">/${meta}</span>
     `;
     tr.appendChild(tdPublicaciones);
     
@@ -276,9 +490,10 @@ function renderTablaCuentas() {
     tdAcciones.className = "actions";
     
     const btnSeleccionar = document.createElement("button");
-    btnSeleccionar.className = "btn";
-    btnSeleccionar.textContent = "Seleccionar";
+    btnSeleccionar.className = cuentaSeleccionada?.email === cuenta.email ? "btn active" : "btn";
+    btnSeleccionar.textContent = cuentaSeleccionada?.email === cuenta.email ? "✓ Seleccionada" : "Seleccionar";
     btnSeleccionar.onclick = () => seleccionarCuenta(cuenta);
+    btnSeleccionar.disabled = completado;
     
     tdAcciones.appendChild(btnSeleccionar);
     tr.appendChild(tdAcciones);
@@ -294,31 +509,36 @@ function renderTablaHistorial(historial) {
   tbody.innerHTML = "";
   
   if (historial.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="muted">No hay publicaciones hoy</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="muted">No hay publicaciones hoy</td></tr>`;
     return;
   }
   
   for (const item of historial) {
     const tr = document.createElement("tr");
     
-    // Fecha
-    const tdFecha = document.createElement("td");
+    // Hora
+    const tdHora = document.createElement("td");
     const fecha = new Date(item.fecha_publicacion);
-    tdFecha.textContent = fecha.toLocaleTimeString('es-AR', { 
+    tdHora.textContent = fecha.toLocaleTimeString('es-AR', { 
       hour: '2-digit', 
       minute: '2-digit' 
     });
-    tr.appendChild(tdFecha);
+    tr.appendChild(tdHora);
     
     // Cuenta
     const tdCuenta = document.createElement("td");
     tdCuenta.innerHTML = `<span class="mono">${escapeHtml(item.facebook_account_usada)}</span>`;
     tr.appendChild(tdCuenta);
     
+    // Título
+    const tdTitulo = document.createElement("td");
+    tdTitulo.textContent = item.titulo ? (item.titulo.substring(0, 40) + (item.titulo.length > 40 ? '...' : '')) : '';
+    tr.appendChild(tdTitulo);
+    
     // Link
     const tdLink = document.createElement("td");
     if (item.marketplace_link_publicacion) {
-      tdLink.innerHTML = `<a href="${escapeHtml(item.marketplace_link_publicacion)}" target="_blank" style="color:#60a5fa;">${escapeHtml(item.marketplace_link_publicacion.substring(0, 50))}...</a>`;
+      tdLink.innerHTML = `<a href="${escapeHtml(item.marketplace_link_publicacion)}" target="_blank" style="color:#60a5fa; font-size:12px;">${escapeHtml(item.marketplace_link_publicacion.substring(0, 40))}...</a>`;
     } else {
       tdLink.textContent = "Sin link";
     }
@@ -330,7 +550,7 @@ function renderTablaHistorial(historial) {
     
     const btnCopiar = document.createElement("button");
     btnCopiar.className = "btn2";
-    btnCopiar.textContent = "Copiar link";
+    btnCopiar.textContent = "Copiar";
     btnCopiar.onclick = () => {
       navigator.clipboard.writeText(item.marketplace_link_publicacion || '');
       log("📋 Link copiado al portapapeles");
@@ -343,89 +563,29 @@ function renderTablaHistorial(historial) {
   }
 }
 
-function actualizarSelectorFilas() {
-  const selector = $("#selectorFila");
-  if (!selector) return;
-  
-  selector.innerHTML = "";
-  
-  for (let i = 0; i < csvData.length; i++) {
-    const option = document.createElement("option");
-    option.value = i;
-    option.textContent = `Fila ${i + 1}: ${csvData[i].titulo?.substring(0, 30) || 'Sin título'}...`;
-    selector.appendChild(option);
-  }
-  
-  if (csvData.length > 0) {
-    selector.value = filaActual;
-    actualizarContenidoFila();
-  }
-}
-
-function actualizarContenidoFila() {
-  if (!csvData[filaActual]) return;
-  
-  const fila = csvData[filaActual];
-  
-  // Actualizar inputs
-  $("#tituloInput").value = fila.titulo || "";
-  $("#descripcionInput").value = fila.descripcion || "";
-  $("#categoriaInput").value = fila.categoria || "";
-  $("#etiquetasInput").value = fila.etiquetas || "";
-  
-  // Actualizar formulario de guardado
-  $("#tituloUsadoInput").value = fila.titulo || "";
-  $("#descripcionUsadaInput").value = fila.descripcion || "";
-  $("#categoriaUsadaInput").value = fila.categoria || "";
-  $("#etiquetasUsadasInput").value = fila.etiquetas || "";
-  $("#urlPortadaInput").value = fila.url_imagenes_portadas || "";
-  
-  // Actualizar imágenes fijas
-  const container = $("#imagenesFijasContainer");
-  container.innerHTML = "";
-  
-  for (let i = 1; i <= 4; i++) {
-    const url = fila[`url_img_fijas_${i}`];
-    if (url) {
-      const div = document.createElement("div");
-      div.className = "image-preview";
-      div.innerHTML = `
-        <img src="${escapeHtml(url)}" alt="Imagen ${i}" onerror="this.style.display='none'">
-        <div style="font-size:11px; padding:2px; text-align:center;">${i}</div>
-      `;
-      container.appendChild(div);
-    }
-  }
-  
-  // Actualizar portada
-  const portadaContainer = $("#portadaContainer");
-  portadaContainer.innerHTML = "";
-  
-  if (fila.url_imagenes_portadas) {
-    const div = document.createElement("div");
-    div.className = "image-preview";
-    div.innerHTML = `
-      <img src="${escapeHtml(fila.url_imagenes_portadas)}" alt="Portada" onerror="this.style.display='none'">
-      <div style="font-size:11px; padding:2px; text-align:center;">Portada</div>
-    `;
-    portadaContainer.appendChild(div);
-  }
-}
-
 // Funciones de interacción
 function seleccionarCuenta(cuenta) {
   cuentaSeleccionada = cuenta;
   
+  // Actualizar UI
+  renderTablaCuentas();
+  
   // Mostrar contenido
   $("#contenidoContainer").style.display = "block";
-  $("#csvInfo").innerHTML = `Contenido de CSV para: <span class="mono">${escapeHtml(cuenta.email)}</span>`;
+  $("#csvInfo").textContent = `Contenido para: ${cuenta.email}`;
   
   // Actualizar cuenta usada en formulario
   $("#cuentaUsadaInput").value = cuenta.email;
   
   // Cargar CSV si no está cargado
-  if (csvData.length === 0) {
-    cargarCSVDeCategoria();
+  if (csvData.length === 0 && categoriaAsignada) {
+    cargarCSVDeCategoria().then(() => {
+      if (csvData.length > 0) {
+        seleccionarContenidoAutomatico();
+      }
+    });
+  } else if (csvData.length > 0) {
+    seleccionarContenidoAutomatico();
   }
   
   log(`✅ Cuenta seleccionada: ${cuenta.email}`);
@@ -438,6 +598,25 @@ async function guardarPublicacion() {
     return;
   }
   
+  if (!contenidoSeleccionado) {
+    log("❌ No hay contenido seleccionado");
+    return;
+  }
+  
+  // Verificar si ya completó la cuota diaria
+  const meta = categoriaAsignada?.marketplace_daily || 0;
+  const completado = cuentaSeleccionada.publicacionesHoy >= meta;
+  if (completado) {
+    log(`❌ Ya completaste las ${meta} publicaciones diarias para esta cuenta`);
+    return;
+  }
+  
+  if (contenidoSeleccionado._usado) {
+    log("⚠️ Este contenido ya fue usado hoy. Seleccionando nuevo contenido...");
+    seleccionarContenidoAutomatico();
+    return;
+  }
+  
   const link = $("#marketplaceLinkInput").value.trim();
   if (!link) {
     log("❌ El link de Marketplace es obligatorio");
@@ -447,10 +626,9 @@ async function guardarPublicacion() {
   const titulo = $("#tituloUsadoInput").value.trim();
   const descripcion = $("#descripcionUsadaInput").value.trim();
   const categoria = $("#categoriaUsadaInput").value.trim();
-  const urlPortada = $("#urlPortadaInput").value.trim();
   
   if (!titulo || !descripcion || !categoria) {
-    log("❌ Completa todos los campos obligatorios");
+    log("❌ Falta completar campos obligatorios");
     return;
   }
   
@@ -467,27 +645,30 @@ async function guardarPublicacion() {
         titulo: titulo,
         descripcion: descripcion,
         categoria: categoria,
-        etiquetas_usadas: $("#etiquetasUsadasInput").value.trim(),
-        url_imagenes_portada: urlPortada
+        etiquetas_usadas: etiquetasCategoria,
+        url_imagenes_portada: $("#urlPortadaInput").value.trim()
       }]);
     
     if (error) throw error;
     
+    // Marcar contenido como usado
+    contenidoSeleccionado._usado = true;
+    contenidoUsado.add(contenidoSeleccionado._id);
+    
     log("✅ Publicación guardada correctamente");
     
-    // Limpiar formulario
+    // Limpiar solo el link
     $("#marketplaceLinkInput").value = "";
     
-    // Actualizar contadores
+    // Actualizar contadores y UI
     await cargarHistorialHoy();
     await cargarCuentasFacebook();
+    mostrarEstadisticasContenido();
     
-    // Avanzar a siguiente fila automáticamente
-    if (csvData.length > 0) {
-      filaActual = (filaActual + 1) % csvData.length;
-      $("#selectorFila").value = filaActual;
-      actualizarContenidoFila();
-      log(`🔄 Avanzando a fila ${filaActual + 1}`);
+    // Seleccionar nuevo contenido automáticamente
+    const nuevoContenido = seleccionarContenidoAutomatico();
+    if (!nuevoContenido) {
+      log("ℹ️ Ya usaste todo el contenido disponible para hoy");
     }
     
   } catch (e) {
@@ -499,23 +680,31 @@ async function guardarPublicacion() {
 }
 
 function descargarTodasImagenes() {
-  if (!csvData[filaActual]) {
-    log("❌ No hay contenido cargado");
+  if (!contenidoSeleccionado) {
+    log("❌ No hay contenido seleccionado");
     return;
   }
   
-  const fila = csvData[filaActual];
+  const fila = contenidoSeleccionado;
   const urls = [];
   
   // Agregar imágenes fijas
   for (let i = 1; i <= 4; i++) {
     const url = fila[`url_img_fijas_${i}`];
-    if (url) urls.push({ url, name: `imagen_fija_${i}.jpg` });
+    if (url) {
+      const nombre = fila.titulo ? 
+        `imagen_${i}_${fila.titulo.replace(/[^a-z0-9]/gi, '_').substring(0, 20)}.jpg` :
+        `imagen_${i}.jpg`;
+      urls.push({ url, name: nombre });
+    }
   }
   
   // Agregar portada
   if (fila.url_imagenes_portadas) {
-    urls.push({ url: fila.url_imagenes_portadas, name: "portada.jpg" });
+    const nombrePortada = fila.titulo ?
+      `portada_${fila.titulo.replace(/[^a-z0-9]/gi, '_').substring(0, 20)}.jpg` :
+      `portada.jpg`;
+    urls.push({ url: fila.url_imagenes_portadas, name: nombrePortada });
   }
   
   if (urls.length === 0) {
@@ -560,24 +749,28 @@ function setupEventListeners() {
     showCopiedFeedback($("#btnCopiarEtiquetas"));
   });
   
-  // Cambiar fila
-  $("#btnActualizarFila")?.addEventListener("click", () => {
-    filaActual = parseInt($("#selectorFila").value) || 0;
-    actualizarContenidoFila();
-    log(`🔄 Contenido actualizado a fila ${filaActual + 1}`);
-  });
-  
   // Descargar imágenes
   $("#btnDescargarTodasImagenes")?.addEventListener("click", descargarTodasImagenes);
+  
+  // Cambiar contenido
+  $("#btnCambiarContenido")?.addEventListener("click", () => {
+    const nuevo = seleccionarContenidoAutomatico();
+    if (nuevo) {
+      log("🔄 Contenido cambiado manualmente");
+    }
+  });
   
   // Guardar publicación
   $("#btnGuardarPublicacion")?.addEventListener("click", guardarPublicacion);
   
-  // Limpiar formulario
+  // Limpiar formulario (solo el link)
   $("#btnLimpiarFormulario")?.addEventListener("click", () => {
     $("#marketplaceLinkInput").value = "";
-    log("🧹 Formulario limpiado");
+    log("🧹 Link limpiado");
   });
+  
+  // Limpiar logs
+  $("#btnLimpiarLogs")?.addEventListener("click", clearLogs);
 }
 
 // Inicialización
@@ -609,11 +802,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   await cargarAsignacionCategoria();
   await cargarCuentasFacebook();
   await cargarHistorialHoy();
-  
-  // 6) Si hay categoría asignada, cargar CSV
-  if (categoriaAsignada) {
-    await cargarCSVDeCategoria();
-  }
   
   log("✅ Sistema de diario listo");
 });
