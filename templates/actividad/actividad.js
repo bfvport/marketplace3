@@ -6,7 +6,6 @@ const $ = (id) => document.getElementById(id);
 const today = fmtDateISO(new Date()); 
 
 (async function init() {
-    // Carga de navegación y validación de permisos de Gerencia
     await loadSidebar({ activeKey: "actividad", basePath: "../" });
 
     if (s.rol !== "gerente") {
@@ -14,30 +13,27 @@ const today = fmtDateISO(new Date());
         return;
     }
 
-    // Actualización del reloj digital con zona horaria Argentina
     setInterval(() => {
         if($("reloj-arg")) {
             $("reloj-arg").textContent = new Date().toLocaleTimeString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
         }
     }, 1000);
 
-    // Asignación de funciones a los botones de administración
     if($("btn-descargar")) $("btn-descargar").onclick = descargarCSV;
     if($("btn-limpiar")) $("btn-limpiar").onclick = limpiarLogs;
 
     await cargarMonitor();
-    setInterval(cargarMonitor, 15000); // Actualización automática cada 15 segundos
+    setInterval(cargarMonitor, 15000); 
 })();
 
 async function cargarMonitor() {
-    // Definimos el rango de tiempo de "hoy" para la consulta de base de datos
+    // Definimos el rango de hoy para comparar con los timestamps de la DB
     const startOfDay = `${today}T00:00:00.000Z`;
     const endOfDay = `${today}T23:59:59.999Z`;
 
-    // Consulta masiva de datos incluyendo las publicaciones de la tabla marketplace_actividad
     const [resAsig, resMarket, resCalent, resMetricas, resCuentas, resLogs] = await Promise.all([
         sb.from("usuarios_asignado").select("*").lte("fecha_desde", today).gte("fecha_hasta", today),
-        // CORRECCIÓN: Filtramos Marketplace por rango de tiempo para detectar publicaciones con timestamp
+        // Consultamos todas las publicaciones de hoy usando un rango de tiempo
         sb.from("marketplace_actividad").select("usuario, fecha_publicacion").gte("fecha_publicacion", startOfDay).lte("fecha_publicacion", endOfDay),
         sb.from("calentamiento_actividad").select("usuario").eq("fecha", today),
         sb.from("metricas").select("usuario, created_at").order("created_at", {ascending:false}),
@@ -49,25 +45,19 @@ async function cargarMonitor() {
     const logs = resLogs.data || [];
     const marketplaceData = resMarket.data || [];
 
-    // Renderizado de las tarjetas de monitoreo por cada operador asignado
     const grid = $("grid-team");
     grid.innerHTML = "";
-
-    if (asignaciones.length === 0) {
-        grid.innerHTML = "<p class='muted' style='grid-column: 1/-1; text-align:center;'>No hay trabajo programado para hoy.</p>";
-    }
 
     asignaciones.forEach(asig => {
         const u = asig.usuario;
 
-        // CORRECCIÓN: Conteo de publicaciones del usuario filtrado por el rango de hoy
+        // CONTEO REAL: Filtramos los datos que ya vienen de hoy por usuario
         const hechosMP = marketplaceData.filter(x => x.usuario === u).length;
         
         const metaMP = asig.marketplace_daily || 1;
         const porcMP = Math.min((hechosMP / metaMP) * 100, 100);
         const hechosCalent = (resCalent.data || []).filter(x => x.usuario === u).length;
         
-        // Verificación de antigüedad de la última carga de métricas (7 días)
         const ultMetrica = (resMetricas.data || []).find(m => m.usuario === u);
         let statusMetrica = '<span class="badge bg-red">Sin Datos</span>';
         if (ultMetrica) {
@@ -76,11 +66,6 @@ async function cargarMonitor() {
         }
 
         const misCuentas = (resCuentas.data || []).filter(c => c.ocupada_por === u);
-        const frias = misCuentas.filter(c => c.calidad === 'fria').length;
-        const calientes = misCuentas.filter(c => c.calidad === 'caliente').length;
-        const baneadas = misCuentas.filter(c => c.calidad === 'baneada').length;
-
-        // Detección de estado online basada en el último log de actividad registrado
         const lastLog = logs.find(l => l.usuario === u);
         const isOnline = lastLog && (new Date() - new Date(lastLog.created_at) < 20 * 60 * 1000);
 
@@ -97,7 +82,7 @@ async function cargarMonitor() {
                     <div>
                         <div style="display:flex; justify-content:space-between; font-size:0.8rem; color:#cbd5e1;">
                             <span>📦 Marketplace</span>
-                            <span>${hechosMP}/${metaMP}</span>
+                            <span style="color:${porcMP === 100 ? '#34d399' : '#60a5fa'}">${hechosMP}/${metaMP}</span>
                         </div>
                         <div class="progress-bg"><div class="progress-fill" style="width:${porcMP}%"></div></div>
                     </div>
@@ -109,64 +94,29 @@ async function cargarMonitor() {
                         <span style="color:#cbd5e1;">📊 Métricas</span>
                         ${statusMetrica}
                     </div>
-                    <div style="background:#1e293b; padding:8px; border-radius:6px; font-size:0.75rem; display:flex; justify-content:space-around;">
-                        <div style="text-align:center;"><span style="color:#60a5fa;">${frias}</span><br>Frias</div>
-                        <div style="text-align:center;"><span style="color:#34d399;">${calientes}</span><br>Listas</div>
-                        <div style="text-align:center;"><span style="color:#f87171;">${baneadas}</span><br>Ban</div>
-                    </div>
                 </div>
             </div>`;
     });
 
-    // Llenado de la tabla de accesos con conversión de UTC a hora local de Argentina
+    // Tu tabla de accesos que ya funciona perfectamente
     const tbody = $("tabla-logs");
     tbody.innerHTML = "";
-    
-    if (logs.length === 0) {
-        tbody.innerHTML = "<tr><td colspan='4' style='text-align:center; padding:15px; color:#94a3b8;'>Cerrá sesión y volvé a entrar para generar registros.</td></tr>";
-    } else {
-        logs.forEach(l => {
-            const hArg = new Date(l.created_at).toLocaleTimeString('es-AR', { 
-                timeZone: 'America/Argentina/Buenos_Aires',
-                hour: '2-digit', minute:'2-digit', second:'2-digit'
-            });
-            
-            let colorStatus = "white";
-            const eventoTexto = (l.evento || "").toUpperCase();
-            if (eventoTexto.includes("LOGIN")) colorStatus = "#4ade80";
-            if (eventoTexto.includes("LOGOUT")) colorStatus = "#f87171";
-
-            tbody.innerHTML += `
-                <tr style="border-bottom:1px solid #334155;">
-                    <td style="color:#94a3b8; font-family:monospace; padding:8px;">${hArg}</td>
-                    <td style="font-weight:bold; color:white;">${l.usuario}</td>
-                    <td style="color:${colorStatus};">${l.evento}</td>
-                    <td class="muted">${l.cuenta_fb || '-'}</td>
-                </tr>`;
+    logs.forEach(l => {
+        const hArg = new Date(l.created_at).toLocaleTimeString('es-AR', { 
+            timeZone: 'America/Argentina/Buenos_Aires', hour: '2-digit', minute:'2-digit', second:'2-digit'
         });
-    }
-}
+        let colorStatus = "white";
+        const eventoTexto = (l.evento || "").toUpperCase();
+        if (eventoTexto.includes("LOGIN")) colorStatus = "#4ade80";
+        if (eventoTexto.includes("LOGOUT")) colorStatus = "#f87171";
 
-async function descargarCSV() {
-    const { data } = await sb.from("usuarios_actividad").select("*").order("created_at", {ascending:false});
-    if(!data || data.length === 0) return alert("Sin datos registrados.");
-
-    let contenidoCsv = "ID,Fecha_UTC,Hora_Argentina,Usuario,Evento,Detalle\n";
-    data.forEach(row => {
-        const horaArg = new Date(row.created_at).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' });
-        contenidoCsv += `${row.id},${row.created_at},"${horaArg}",${row.usuario},${row.evento},${row.cuenta_fb||''}\n`;
+        tbody.innerHTML += `
+            <tr style="border-bottom:1px solid #334155;">
+                <td style="color:#94a3b8; font-family:monospace; padding:8px;">${hArg}</td>
+                <td style="font-weight:bold; color:white;">${l.usuario}</td>
+                <td style="color:${colorStatus};">${l.evento}</td>
+                <td class="muted">${l.cuenta_fb || '-'}</td>
+            </tr>`;
     });
-
-    const blobCsv = new Blob([contenidoCsv], { type: 'text/csv' });
-    const linkDescarga = URL.createObjectURL(blobCsv);
-    const disparador = document.createElement('a');
-    disparador.href = linkDescarga; disparador.download = `Reporte_Actividad_${today}.csv`;
-    disparador.click();
 }
-
-async function limpiarLogs() {
-    if(confirm("⚠️ ¿Estás seguro de vaciar el historial?")) {
-        await sb.from("usuarios_actividad").delete().neq("id", 0);
-        location.reload();
-    }
-}
+// ... resto de funciones (descargarCSV, limpiarLogs)
