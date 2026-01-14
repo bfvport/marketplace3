@@ -8,7 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../../assets/js/supabase.js"></script>
     <style>
-        /* Estilos del modal y overlay */
+        /* Contenedor del modal con efecto blur */
         .modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);
@@ -19,14 +19,13 @@
             width: 90%; max-width: 400px; border: 1px solid #334155;
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
         }
-        /* Estilos de formulario dentro del modal */
         label { display: block; margin-bottom: 6px; color: #94a3b8; font-size: 0.85rem; font-weight: 600; }
         input, select { 
             width: 100%; padding: 10px; margin-bottom: 20px; 
             background: #0f172a; border: 1px solid #334155; color: white; border-radius: 6px;
             box-sizing: border-box;
         }
-        /* Estilos de botones de acción en la tabla */
+        /* Botones de acción rápidos */
         .action-btn { cursor: pointer; padding: 6px 12px; border-radius: 6px; border: none; font-weight: bold; transition: 0.2s; }
         .btn-edit { background: #f59e0b; color: #000; margin-right: 8px; }
         .btn-del { background: #ef4444; color: #fff; }
