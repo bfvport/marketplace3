@@ -21,27 +21,15 @@
     .pill-info { background: rgba(59, 130, 246, 0.15); color: #93c5fd; }
     .pill-success { background: rgba(34, 197, 94, 0.15); color: #86efac; }
     .pill-warning { background: rgba(234, 179, 8, 0.15); color: #fde047; }
-    .pill-danger { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
     .counter { font-size: 24px; font-weight: bold; text-align: center; margin: 10px 0; }
     .counter-label { font-size: 12px; opacity: 0.8; }
     .image-preview { display: inline-block; margin: 5px; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; }
     .image-preview img { width: 80px; height: 80px; object-fit: cover; }
-    .image-preview.used { opacity: 0.5; border-color: #ef4444 !important; }
-    .image-preview.used img { filter: grayscale(100%); }
     .card-section { margin-bottom: 20px; }
     .row-inputs { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
-    .row-inputs input, .row-inputs textarea { flex: 1; }
-    .row-inputs textarea { min-height: 80px; resize: vertical; }
+    .row-inputs input { flex: 1; }
     .copied-feedback { color: #4ade80; font-size: 11px; margin-left: 5px; }
     .required::after { content: " *"; color: #ef4444; }
-    .btn.active { background: rgba(34, 197, 94, 0.2) !important; border-color: #22c55e !important; }
-    .content-border { border-left: 4px solid #3b82f6; padding-left: 10px; transition: all 0.3s ease; }
-    .content-border.used { border-left-color: #ef4444; opacity: 0.6; }
-    .content-border.selected { border-left-color: #22c55e; }
-    .stats-container { display: flex; gap: 15px; margin-top: 10px; flex-wrap: wrap; }
-    .stats-item { background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; }
-    .content-used-badge { display: inline-block; background: #ef4444; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 8px; }
-    .content-available-badge { display: inline-block; background: #22c55e; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 8px; }
   </style>
 </head>
 
@@ -70,33 +58,20 @@
             <span id="contadorPublicaciones">0</span>/<span id="metaPublicaciones">0</span>
           </div>
           <div class="counter-label">Publicaciones realizadas / Meta diaria</div>
-          <div class="stats-container">
-            <div class="stats-item">
-              <span class="muted small">Cuentas:</span>
-              <strong id="contadorCuentas">0</strong>
-            </div>
-            <div class="stats-item">
-              <span class="muted small">Completadas:</span>
-              <strong id="contadorCompletadas">0</strong>
-            </div>
-          </div>
         </div>
       </div>
 
       <!-- Cuentas de Facebook asignadas -->
       <section class="card card-section">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div style="font-weight:800;">📱 Cuentas de Facebook Asignadas</div>
-          <div class="muted small" id="cuentasInfo">Cargando cuentas...</div>
-        </div>
-        <div class="muted small">Seleccioná una cuenta para comenzar a publicar</div>
+        <div style="font-weight:800;">📱 Cuentas de Facebook Asignadas</div>
+        <div class="muted small">Estas son las cuentas que tenés asignadas para publicar hoy</div>
         
         <table class="table" id="tablaCuentas">
           <thead>
             <tr>
               <th style="width:250px;">Email de la cuenta</th>
               <th style="width:150px;">Estado</th>
-              <th style="width:120px;">Publicadas hoy</th>
+              <th style="width:100px;">Publicadas hoy</th>
               <th style="width:150px;">Acciones</th>
             </tr>
           </thead>
@@ -108,28 +83,29 @@
 
       <!-- Contenido del CSV para publicar -->
       <section class="card card-section">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div style="font-weight:800;">📄 Contenido para Publicar</div>
-          <div class="muted small" id="csvInfo">Seleccioná una cuenta para comenzar</div>
-        </div>
+        <div style="font-weight:800;">📄 Contenido para Publicar</div>
+        <div class="muted small" id="csvInfo">Seleccioná una cuenta para cargar contenido</div>
         
-        <div class="stats-container" id="estadisticasContenido" style="display: none;">
-          <!-- Las estadísticas se cargarán aquí -->
-        </div>
-        
-        <div id="contenidoContainer" style="display: none; margin-top: 15px;">
-          <!-- Contenido actual con estado visual -->
-          <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+        <div id="contenidoContainer" style="display: none;">
+          <!-- Selector de fila del CSV -->
+          <div class="row-inputs">
+            <label style="min-width: 100px;">Fila del CSV:</label>
+            <select id="selectorFila" style="flex: 1;"></select>
+            <button class="btn2" id="btnActualizarFila">Actualizar contenido</button>
+          </div>
+          
+          <!-- Contenido actual -->
+          <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-top: 15px;">
             <div>
               <label class="required">Título</label>
               <div class="row-inputs">
-                <input type="text" id="tituloInput" readonly class="content-border" style="background: rgba(255,255,255,0.06);">
+                <input type="text" id="tituloInput" readonly style="background: rgba(255,255,255,0.06);">
                 <button class="btn2" id="btnCopiarTitulo">Copiar</button>
               </div>
               
               <label class="required">Descripción</label>
-              <div class="row-inputs" style="align-items: flex-start;">
-                <textarea id="descripcionInput" readonly class="content-border" style="background: rgba(255,255,255,0.06); height: 120px;"></textarea>
+              <div class="row-inputs">
+                <textarea id="descripcionInput" readonly style="height: 100px; background: rgba(255,255,255,0.06); resize: vertical;"></textarea>
                 <button class="btn2" id="btnCopiarDescripcion">Copiar</button>
               </div>
               
@@ -139,7 +115,7 @@
                 <button class="btn2" id="btnCopiarCategoria">Copiar</button>
               </div>
               
-              <label class="required">Etiquetas (desde categoría)</label>
+              <label class="required">Etiquetas</label>
               <div class="row-inputs">
                 <input type="text" id="etiquetasInput" readonly style="background: rgba(255,255,255,0.06);">
                 <button class="btn2" id="btnCopiarEtiquetas">Copiar</button>
@@ -148,21 +124,18 @@
             
             <div>
               <label>Imágenes Fijas (1-4)</label>
-              <div id="imagenesFijasContainer" style="margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; min-height: 100px;">
+              <div id="imagenesFijasContainer" style="margin-bottom: 15px;">
                 <!-- Las imágenes se cargarán aquí -->
               </div>
               
               <label class="required">Imagen de Portada</label>
-              <div id="portadaContainer" style="margin-bottom: 15px; min-height: 100px;">
+              <div id="portadaContainer">
                 <!-- La portada se cargará aquí -->
               </div>
               
-              <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
+              <div style="margin-top: 15px;">
                 <button class="btn2" id="btnDescargarTodasImagenes">⬇️ Descargar todas las imágenes</button>
-                <button class="btn2" id="btnCambiarContenido">🔄 Cambiar contenido</button>
-              </div>
-              <div class="muted small" style="margin-top: 5px;">
-                Descarga las 5 imágenes (4 fijas + 1 portada) | Cambia a otro contenido disponible
+                <div class="muted small">Descarga las 5 imágenes (4 fijas + 1 portada)</div>
               </div>
             </div>
           </div>
@@ -172,41 +145,36 @@
       <!-- Formulario para guardar publicación -->
       <section class="card card-section">
         <div style="font-weight:800;">💾 Guardar Publicación</div>
-        <div class="muted small" style="margin-bottom: 15px;">
-          Completá el link de Marketplace y guardá la publicación
-        </div>
         
-        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
           <div>
             <label class="required">Cuenta Facebook usada</label>
             <input type="text" id="cuentaUsadaInput" readonly style="background: rgba(255,255,255,0.06);">
             
             <label class="required">Título usado</label>
-            <input type="text" id="tituloUsadoInput" readonly style="background: rgba(255,255,255,0.06);">
+            <input type="text" id="tituloUsadoInput">
             
             <label class="required">Descripción usada</label>
-            <textarea id="descripcionUsadaInput" readonly style="background: rgba(255,255,255,0.06); height: 100px;"></textarea>
+            <textarea id="descripcionUsadaInput" style="height: 80px; resize: vertical;"></textarea>
           </div>
           
           <div>
             <label class="required">Categoría usada</label>
-            <input type="text" id="categoriaUsadaInput" readonly style="background: rgba(255,255,255,0.06);">
+            <input type="text" id="categoriaUsadaInput">
             
             <label>Etiquetas usadas</label>
-            <input type="text" id="etiquetasUsadasInput" readonly style="background: rgba(255,255,255,0.06);">
+            <input type="text" id="etiquetasUsadasInput" placeholder="Separadas por comas">
             
             <label class="required">URL Imagen Portada</label>
-            <input type="text" id="urlPortadaInput" readonly style="background: rgba(255,255,255,0.06);">
+            <input type="text" id="urlPortadaInput">
             
             <label class="required">🔗 Link de Marketplace *</label>
             <input type="text" id="marketplaceLinkInput" placeholder="https://www.facebook.com/marketplace/item/...">
-            <div class="muted small" style="color: #f59e0b; margin-top: 5px;">
-              Este campo es <strong>OBLIGATORIO</strong> para guardar la publicación
-            </div>
+            <div class="muted small">Este campo es obligatorio para guardar</div>
             
-            <div style="margin-top: 20px; display: flex; gap: 10px;">
+            <div style="margin-top: 15px;">
               <button class="btn" id="btnGuardarPublicacion">💾 Guardar Publicación</button>
-              <button class="btn2" id="btnLimpiarLink">Limpiar Link</button>
+              <button class="btn2" id="btnLimpiarFormulario">Limpiar</button>
             </div>
           </div>
         </div>
@@ -214,33 +182,26 @@
 
       <!-- Historial de publicaciones de hoy -->
       <section class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-          <div style="font-weight:800;">📋 Historial de Publicaciones de Hoy</div>
-          <div class="muted small" id="historialInfo"></div>
-        </div>
+        <div style="font-weight:800;">📋 Historial de Publicaciones de Hoy</div>
         
         <table class="table" id="tablaHistorial">
           <thead>
             <tr>
-              <th style="width:150px;">Hora</th>
+              <th style="width:180px;">Fecha</th>
               <th style="width:200px;">Cuenta Facebook</th>
-              <th>Título</th>
-              <th style="width:200px;">Link Marketplace</th>
-              <th style="width:100px;">Acciones</th>
+              <th>Link Marketplace</th>
+              <th style="width:150px;">Acciones</th>
             </tr>
           </thead>
           <tbody>
-            <tr><td colspan="5" class="muted">Cargando historial...</td></tr>
+            <tr><td colspan="4" class="muted">Cargando historial...</td></tr>
           </tbody>
         </table>
       </section>
 
       <!-- Logs -->
-      <div style="margin-top: 20px;">
-        <div style="font-weight:700; margin-bottom:8px; display: flex; justify-content: space-between; align-items: center;">
-          <span>🖥️ Logs del Sistema</span>
-          <button class="btn2" id="btnLimpiarLogs" style="font-size: 11px;">Limpiar logs</button>
-        </div>
+      <div style="margin-top: 12px;">
+        <div style="font-weight:700; margin-bottom:6px;">🖥️ Logs del Sistema</div>
         <div class="log" id="log"></div>
       </div>
     </main>
