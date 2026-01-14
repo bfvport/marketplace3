@@ -15,18 +15,20 @@
             
             <div id="alerta-carga" style="background: rgba(239,68,68,0.2); border: 1px solid #ef4444; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: none;">
                 <h3 style="margin:0; color:#f87171;">⚠️ ¡Atención!</h3>
-                <p style="margin:5px 0;">Hace más de 7 días que no cargas métricas para algunas cuentas.</p>
+                <p id="texto-alerta" style="margin:5px 0;">Hace más de 7 días que no cargas métricas.</p>
             </div>
 
             <div class="grid" style="grid-template-columns: 1fr 2fr; gap: 20px;">
                 
                 <section class="card" style="height: fit-content;">
                     <h3>📝 Cargar Reporte Semanal</h3>
+                    <p class="muted" style="font-size:0.8rem; margin-bottom:15px;">Seleccioná la cuenta y cargá los clicks de los últimos 7 días.</p>
+
                     <label>Cuenta de Facebook</label>
                     <select id="sel-cuenta" style="width:100%; padding:10px; margin-bottom:15px; background:#0f172a; color:white; border:1px solid #334155; border-radius:6px;"></select>
 
                     <label>Clicks (Últimos 7 días)</label>
-                    <input type="number" id="inp-clicks" placeholder="0" style="width:100%; padding:10px; margin-bottom:15px; background:#0f172a; color:white; border:1px solid #334155; border-radius:6px;">
+                    <input type="number" id="inp-clicks" placeholder="Ej: 150" style="width:100%; padding:10px; margin-bottom:15px; background:#0f172a; color:white; border:1px solid #334155; border-radius:6px;">
 
                     <button id="btn-guardar" class="btn" style="width:100%;">💾 Guardar Métrica</button>
                 </section>
@@ -37,8 +39,8 @@
                         <thead>
                             <tr style="color:#94a3b8; border-bottom:1px solid rgba(255,255,255,0.1);">
                                 <th style="text-align:left; padding:8px;">Fecha</th>
-                                <th style="text-align:left; padding:8px;">Cuenta</th>
-                                <th style="text-align:left; padding:8px;">Clicks</th>
+                                <th style="text-align:left; padding:8px;">Cuenta (Mail)</th>
+                                <th style="text-align:left; padding:8px;">Clicks 7D</th>
                                 <th style="text-align:left; padding:8px;">Usuario</th>
                             </tr>
                         </thead>

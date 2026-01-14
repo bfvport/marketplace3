@@ -2,59 +2,83 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Actividad | Panel Gerencial</title>
+    <title>Super Actividad | Gerencia</title>
     <link rel="stylesheet" href="../../assets/css/app.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="../../assets/js/supabase.js"></script>
-        <style>
-        .progress-container { width: 100%; background: #0f172a; border-radius: 8px; height: 12px; margin: 10px 0; overflow: hidden; border: 1px solid #334155; }
-        .progress-bar { height: 100%; background: #3b82f6; transition: width 0.4s ease; }
-        .grid-supervision { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
-        .card-operador { background: #1e293b; padding: 15px; border-radius: 12px; border: 1px solid #334155; }
-        .copy-btn { background: #334155; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 0.75rem; font-weight: bold; }
-        .label-fb { color: #60a5fa; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; display: block; margin-bottom: 5px; }
-        .hidden { display: none !important; }
+    <style>
+        /* Panel de Control */
+        .controls-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: #1e293b; padding: 15px; border-radius: 10px; border: 1px solid #334155; }
+        
+        /* Grid de Operadores */
+        .super-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        
+        /* Tarjeta de Operador "Todo en Uno" */
+        .op-card { background: #0f172a; border: 1px solid #334155; border-radius: 12px; padding: 0; overflow: hidden; position: relative; transition: transform 0.2s; }
+        .op-card:hover { border-color: #60a5fa; }
+        
+        .op-header { padding: 15px; background: #1e293b; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #334155; }
+        .op-body { padding: 15px; display: flex; flex-direction: column; gap: 10px; }
+        
+        /* Indicadores */
+        .stat-row { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 5px; }
+        .badge { padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: bold; }
+        .bg-green { background: #065f46; color: #34d399; }
+        .bg-red { background: #7f1d1d; color: #f87171; }
+        .bg-yellow { background: #78350f; color: #fbbf24; }
+        .bg-blue { background: #1e3a8a; color: #60a5fa; }
+
+        /* Barra de progreso */
+        .progress-bg { width: 100%; background: #334155; height: 6px; border-radius: 3px; margin-top: 5px; }
+        .progress-fill { height: 100%; background: #3b82f6; border-radius: 3px; }
+
+        /* Semáforo de Conexión */
+        .status-dot { width: 12px; height: 12px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+        .online { background: #10b981; box-shadow: 0 0 8px #10b981; }
+        .offline { background: #ef4444; }
     </style>
 </head>
 <body>
     <div class="layout">
         <div id="sidebar-host"></div>
         <main class="content">
-            <h1>📈 Panel de Actividad Gerencial</h1>
-            <div class="muted">Seguimiento en tiempo real y flujo diario.</div>
-
-            <section class="card" style="margin-top: 20px; border-left: 5px solid #60a5fa;">
-                <h3 style="margin-top:0;">📊 Estado y Rendimiento de Operadores</h3>
-                <div id="flujo-actividad">
-                    <p class="muted">Cargando datos de rendimiento...</p>
+            
+            <div class="controls-header">
+                <div>
+                    <h1 style="margin:0; font-size:1.5rem;">👁️ Visión Global del Equipo</h1>
+                    <p class="muted" style="margin:5px 0 0 0;">Supervisión 360° de tareas, cuentas y actividad.</p>
                 </div>
-            </section>
-    
-                <div id="view-gerente" class="hidden">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
-                    <h1>📊 Monitoreo de Operaciones</h1>
-                    <span id="last-sync" class="muted">Sincronizado: --:--</span>
+                <div style="display:flex; gap:10px;">
+                    <button id="btn-descargar" class="btn2" style="background:#0284c7;">📥 Excel (CSV)</button>
+                    <button id="btn-limpiar" class="btn-danger" style="background:#dc2626;">🗑️ Vaciar Logs</button>
                 </div>
-                <div id="grid-supervision" class="grid-supervision"></div>
             </div>
 
-    
+            <p style="text-align:right; font-size:0.8rem; color:#94a3b8; margin-bottom:10px;">
+                Hora Argentina: <span id="reloj-arg">--:--</span>
+            </p>
 
-            <section class="card" style="margin-top: 20px; border-left: 5px solid #fbbf24;">
-                <h3 style="margin-top:0;">🕒 Registro de Asistencia y Movimientos (Hoy)</h3>
-                <table class="table" style="width: 100%; text-align: left; border-collapse: collapse;">
-                    <thead>
-                        <tr style="color: #94a3b8; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                            <th style="padding:10px;">Hora</th>
-                            <th style="padding:10px;">Usuario</th>
-                            <th style="padding:10px;">Acción / Movimiento</th>
-                        </tr>
-                    </thead>
-                    <tbody id="asistencia-logs">
-                        </tbody>
-                </table>
+            <div id="grid-team" class="super-grid">
+                <div style="padding:20px; text-align:center; color:#94a3b8;">Cargando datos del equipo...</div>
+            </div>
+
+            <section class="card">
+                <h3>🔐 Registro de Accesos (Tiempo Real)</h3>
+                <div style="max-height: 500px; overflow-y: auto;">
+                    <table class="table" style="width:100%; text-align:left;">
+                        <thead style="position:sticky; top:0; background:#1e293b; z-index:10;">
+                            <tr>
+                                <th>Hora (ARG)</th>
+                                <th>Usuario</th>
+                                <th>Evento</th>
+                                <th>Detalle</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabla-logs"></tbody>
+                    </table>
+                </div>
             </section>
+
         </main>
     </div>
     <script type="module" src="./actividad.js"></script>

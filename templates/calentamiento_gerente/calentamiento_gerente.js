@@ -1,78 +1,119 @@
-import { requireSession, loadSidebar, fmtDateISO } from "../../assets/js/app.js";
+import { requireSession, loadSidebar } from "../../assets/js/app.js";
 
 const s = requireSession();
 const sb = window.supabaseClient;
 const $ = (id) => document.getElementById(id);
-const today = fmtDateISO(new Date());
 
+// Inicialización
 (async function init() {
-    await loadSidebar({ activeKey: "calentamiento", basePath: "../" });
+    await loadSidebar({ activeKey: "calentamiento_gerente", basePath: "../" });
 
-    if (s.rol === "gerente") {
-        $("view-gerente").classList.remove("hidden");
-        await initGerente();
-    } else {
-        $("view-operador").classList.remove("hidden");
-        await initOperador();
+    // 1. Verificar Seguridad (Solo Gerentes)
+    if (s.rol !== "gerente") {
+        document.body.innerHTML = `
+            <div style="text-align:center; padding:50px; color:white;">
+                <h1 style="color:#ef4444;">⛔ Acceso Denegado</h1>
+                <p>Esta configuración es exclusiva para Gerencia.</p>
+                <a href="../dashboard/dashboard.html" style="color:#3b82f6;">Volver</a>
+            </div>`;
+        return;
     }
+
+    await cargarConfiguracion();
+    await cargarCuentas();
+
+    $("btn-save").onclick = guardarConfiguracion;
 })();
 
-// --- LÓGICA DEL GERENTE ---
-async function initGerente() {
-    const { data: config } = await sb.from("configuracion_calentamiento").select("*").single();
-    if (config) {
-        $("cfg-min").value = config.rango_min;
-        $("cfg-max").value = config.rango_max;
-        $("cfg-drive").value = config.link_drive;
+// --- LÓGICA DE CONFIGURACIÓN ---
+async function cargarConfiguracion() {
+    // Buscamos la fila con ID 1 (la configuración global)
+    const { data: config, error } = await sb.from("configuracion_calentamiento").select("*").single();
+    
+    if (error && error.code !== 'PGRST116') {
+        console.error("Error cargando config:", error);
+        return;
     }
 
-    const { data: cuentas } = await sb.from("cuentas_facebook").select("*");
-    
-    $("count-baneadas").textContent = cuentas.filter(c => c.calidad === "inactiva").length;
-    $("count-frias").textContent = cuentas.filter(c => c.calidad === "fria" || c.calidad === "nueva").length;
-    $("count-calientes").textContent = cuentas.filter(c => c.calidad === "caliente").length;
+    if (config) {
+        $("cfg-historias").value = config.meta_historias || 0;
+        $("cfg-muro").value = config.meta_muro || 0;
+        $("cfg-reels").value = config.meta_reels || 0;
+        $("cfg-grupos").value = config.meta_grupos || 0;
+        $("cfg-drive").value = config.link_drive || "";
+    }
+}
 
-    const tabla = $("tabla-gerente");
-    cuentas.forEach(c => {
-        let dia = c.fecha_inicio_calentamiento ? Math.ceil(Math.abs(new Date() - new Date(c.fecha_inicio_calentamiento)) / 86400000) : "---";
-        tabla.innerHTML += `<tr><td>${c.email}</td><td>${dia}</td><td style="color:#f59e0b">${c.calidad}</td><td>${c.ocupada_por || '---'}</td></tr>`;
-    });
-
-    $("btn-save-cfg").onclick = async () => {
-        await sb.from("configuracion_calentamiento").upsert({
-            id: 1, rango_min: parseInt($("cfg-min").value), rango_max: parseInt($("cfg-max").value), link_drive: $("cfg-drive").value
-        });
-        alert("Estrategia Guardada");
+async function guardarConfiguracion() {
+    const payload = {
+        meta_historias: parseInt($("cfg-historias").value) || 0,
+        meta_muro: parseInt($("cfg-muro").value) || 0,
+        meta_reels: parseInt($("cfg-reels").value) || 0,
+        meta_grupos: parseInt($("cfg-grupos").value) || 0,
+        link_drive: $("cfg-drive").value,
+        updated_at: new Date()
     };
+
+    // Upsert (Actualiza si existe ID 1, crea si no)
+    const { error } = await sb.from("configuracion_calentamiento").upsert({ id: 1, ...payload });
+
+    if (error) {
+        alert("❌ Error al guardar: " + error.message);
+    } else {
+        alert("✅ Estrategia actualizada correctamente. Los operadores verán los nuevos objetivos.");
+    }
 }
 
-// --- LÓGICA DEL OPERADOR ---
-async function initOperador() {
-    const { data: cfg } = await sb.from("configuracion_calentamiento").select("*").single();
-    const { data: cuentas } = await sb.from("cuentas_facebook").select("*").eq("ocupada_por", s.usuario).neq("calidad", "caliente");
+// --- LÓGICA DE GESTIÓN DE CUENTAS ---
+async function cargarCuentas() {
+    const { data: cuentas } = await sb.from("cuentas_facebook").select("*").order("calidad");
+    
+    // Contadores para KPIs
+    const baneadas = cuentas.filter(c => c.calidad === 'baneada' || c.estado === 'inactiva').length;
+    const frias = cuentas.filter(c => c.calidad === 'fria' || c.calidad === 'nueva').length;
+    const calientes = cuentas.filter(c => c.calidad === 'caliente').length;
 
-    $("link-recursos").href = cfg?.link_drive || "#";
-    const lista = $("lista-misiones");
+    $("stat-baneadas").textContent = baneadas;
+    $("stat-frias").textContent = frias;
+    $("stat-calientes").textContent = calientes;
+
+    // Renderizar Tabla
+    const tbody = $("tabla-cuentas");
+    tbody.innerHTML = "";
 
     cuentas.forEach(c => {
-        if (!c.fecha_inicio_calentamiento) {
-            sb.from("cuentas_facebook").update({ fecha_inicio_calentamiento: today }).eq("id", c.id).then();
-        }
-        
-        const dia = Math.ceil(Math.abs(new Date() - new Date(c.fecha_inicio_calentamiento || today)) / 86400000) || 1;
-        const cant = Math.floor(Math.random() * (cfg.rango_max - cfg.rango_min + 1)) + cfg.rango_min;
-        
-        let mision = dia <= 15 ? `${cant} Historias/Reels/Muro (Aleatorio)` : `1 Publicación Marketplace (Cargar Link)`;
-        
-        lista.innerHTML += `
-            <div class="mision-card">
-                <div style="display:flex; justify-content:space-between;">
-                    <strong>Día ${dia} de 30</strong>
-                    <small>${c.email}</small>
-                </div>
-                <h3 style="margin:10px 0;">${mision}</h3>
-                ${dia > 15 ? `<input type="text" id="link-${c.id}" placeholder="Pega el link de marketplace aquí" style="margin-bottom:10px;">` : ''}
-                <button class="btn" style="width:100%;" onclick="alert('Misión Guardada')">✅ Marcar como Hecho</button>
-            </div>`;
+        let colorEstado = "#94a3b8";
+        if (c.calidad === 'caliente') colorEstado = "#10b981";
+        if (c.calidad === 'fria') colorEstado = "#3b82f6";
+        if (c.calidad === 'baneada') colorEstado = "#ef4444";
+
+        tbody.innerHTML += `
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+                <td>${c.email}</td>
+                <td><span class="muted">${c.ocupada_por || 'Libre'}</span></td>
+                <td style="color:${colorEstado}; font-weight:bold; text-transform:uppercase;">${c.calidad}</td>
+                <td>
+                    ${c.calidad !== 'baneada' ? 
+                        `<button class="btn-danger" style="padding:4px 8px; font-size:0.7rem;" onclick="reportarBan('${c.id}')">☠️ Ban</button>` : 
+                        `<span class="muted">Inactiva</span>`
+                    }
+                </td>
+            </tr>
+        `;
     });
 }
+
+// Función expuesta globalmente para el botón de la tabla
+window.reportarBan = async (id) => {
+    if (confirm("¿Confirmás que esta cuenta ha sido BANEADA permanentemente?")) {
+        const { error } = await sb.from("cuentas_facebook").update({ 
+            calidad: 'baneada', 
+            estado: 'inactiva' // La marcamos inactiva para que no se pueda asignar
+        }).eq("id", id);
+
+        if (!error) {
+            alert("Cuenta marcada como baneada.");
+            cargarCuentas(); // Recargar tabla
+        }
+    }
+};
