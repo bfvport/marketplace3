@@ -17,6 +17,20 @@
                 <p class="muted">Resumen de estado para hoy: <span id="fecha-actual" style="color:#fff;"></span></p>
             </div>
 
+            <!-- ✅ Aviso de Gerencia (operadores lo ven / gerente lo edita) -->
+            <section class="card" id="aviso-box" style="border-left: 5px solid #3b82f6; background: rgba(59,130,246,0.10); margin-bottom: 18px;">
+                <h3 style="margin-top:0;">📣 Aviso de Gerencia</h3>
+                <pre id="aviso-text" style="white-space:pre-wrap; margin:0; color:#e2e8f0; font-family:inherit;"></pre>
+
+                <!-- Solo visible para gerente desde JS -->
+                <div id="aviso-form" style="display:none; margin-top: 12px;">
+                    <textarea id="aviso-input" rows="4" class="input" style="width:100%; resize:vertical;" placeholder="Escribí un mensaje para el equipo..."></textarea>
+                    <div style="display:flex; gap:10px; margin-top:10px; justify-content:flex-end;">
+                        <button id="aviso-save" class="btn2" style="background:#2563eb;">💾 Publicar aviso</button>
+                    </div>
+                </div>
+            </section>
+
             <div id="alerta-container" style="display: flex; flex-direction: column; gap: 15px;">
                 <div style="text-align:center; color:#64748b;">Analizando tareas pendientes...</div>
             </div>
