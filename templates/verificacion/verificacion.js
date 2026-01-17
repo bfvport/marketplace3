@@ -1,153 +1,180 @@
-import { requireSession, loadSidebar, fmtDateISO } from "../../assets/js/app.js";
+const supabase = window.supabaseClient;
 
-const sb = window.supabaseClient;
-const s = requireSession();
+const tabla = document.getElementById("tabla-links");
+const filtroFecha = document.getElementById("filtro-fecha");
+const filtroUsuario = document.getElementById("filtro-usuario");
+const filtroTipo = document.getElementById("filtro-tipo");
+const btnFiltrar = document.getElementById("btn-filtrar");
 
-// ✅ Seguridad: si no es gerente, afuera
-if (!s || s.rol !== "gerente") {
-  window.location.href = "../publicaciones/publicaciones.html";
-  throw new Error("Acceso solo gerente");
-}
+document.addEventListener("DOMContentLoaded", () => {
+  cargarFiltros();
+  cargarLinks();
+  btnFiltrar?.addEventListener("click", cargarLinks);
+});
 
-const host = document.getElementById("host");
-const fFecha = document.getElementById("f-fecha");
-const fOperador = document.getElementById("f-operador");
-const fTipo = document.getElementById("f-tipo");
-const btnAplicar = document.getElementById("btn-aplicar");
-
-const btnPrev = document.getElementById("btn-prev");
-const btnNext = document.getElementById("btn-next");
-const lblPage = document.getElementById("lbl-page");
-
-const PAGE_SIZE = 120;
-let page = 0;
-
-init();
-
-async function init() {
-  await loadSidebar({ activeKey: "verificacion", basePath: "../" });
-
-  // default hoy
-  fFecha.value = fmtDateISO(new Date());
-
-  await cargarOperadores();
-
-  btnAplicar.addEventListener("click", () => { page = 0; cargar(); });
-  btnPrev.addEventListener("click", () => { if (page > 0) { page--; cargar(); } });
-  btnNext.addEventListener("click", () => { page++; cargar(); });
-
-  cargar();
-}
-
-async function cargarOperadores() {
-  const { data, error } = await sb
-    .from("usuarios")
-    .select("usuario, rol")
-    .order("usuario", { ascending: true });
-
-  if (error) {
-    host.innerHTML = `<div class="card"><div class="muted">Error cargando operadores</div></div>`;
-    return;
+async function cargarFiltros() {
+  // Usuarios
+  const { data: usuarios } = await supabase.from("usuarios").select("id, usuario").order("usuario");
+  if (usuarios && filtroUsuario) {
+    usuarios.forEach(u => {
+      const op = document.createElement("option");
+      op.value = u.usuario;
+      op.textContent = u.usuario;
+      filtroUsuario.appendChild(op);
+    });
   }
 
-  const ops = (data || []).filter(u => u.rol === "operador");
-  fOperador.innerHTML =
-    `<option value="">Todos los operadores</option>` +
-    ops.map(o => `<option value="${o.usuario}">${o.usuario}</option>`).join("");
+  // Tipos (RRSS + Marketplace)
+  if (filtroTipo) {
+    const tipos = [
+      { value: "", label: "Todos los tipos" },
+      { value: "historia", label: "Historias" },
+      { value: "reels", label: "Reels" },
+      { value: "muro", label: "Muro" },
+      { value: "grupo", label: "Grupos" },
+      { value: "marketplace", label: "Marketplace" },
+    ];
+
+    // Si ya tiene opciones en HTML no duplicamos
+    if (filtroTipo.options.length <= 1) {
+      filtroTipo.innerHTML = "";
+      tipos.forEach(t => {
+        const op = document.createElement("option");
+        op.value = t.value;
+        op.textContent = t.label;
+        filtroTipo.appendChild(op);
+      });
+    }
+  }
 }
 
-async function cargar() {
-  host.innerHTML = `<div class="card"><div class="muted">Cargando...</div></div>`;
-  lblPage.textContent = `Página ${page + 1}`;
+async function cargarLinks() {
+  if (!tabla) return;
 
-  let q = sb
+  tabla.innerHTML = `<tr><td colspan="6">Cargando...</td></tr>`;
+
+  const fecha = filtroFecha?.value || "";
+  const usuario = filtroUsuario?.value || "";
+  const tipo = filtroTipo?.value || "";
+
+  // 1) Traer RRSS
+  let qRRSS = supabase
     .from("publicaciones_rrss")
-    .select("id, created_at, fecha, usuario, cuenta_id, tipo, link, cuentas_facebook(email)")
-    .eq("fecha", fFecha.value)
-    .order("created_at", { ascending: false })
-    .range(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE - 1);
+    .select("id, fecha, created_at, usuario, tipo, link, cuenta_id")
+    .order("created_at", { ascending: false });
 
-  if (fOperador.value) q = q.eq("usuario", fOperador.value);
-  if (fTipo.value) q = q.eq("tipo", fTipo.value);
+  if (fecha) qRRSS = qRRSS.eq("fecha", fecha);
+  if (usuario) qRRSS = qRRSS.eq("usuario", usuario);
+  if (tipo && tipo !== "marketplace") qRRSS = qRRSS.eq("tipo", tipo);
 
-  const { data, error } = await q;
+  // 2) Traer Marketplace (tabla distinta)
+  // En tu schema se ve "marketplace_actividad" con campos tipo:
+  // usuario, fecha_publicacion, marketplace_link_..., facebook_account_..., created_at, etc.
+  let qMP = supabase
+    .from("marketplace_actividad")
+    .select(`
+      id,
+      created_at,
+      usuario,
+      fecha_publicacion,
+      marketplace_link_publicacion,
+      facebook_account_uuid,
+      cuenta_fb,
+      titulo
+    `)
+    .order("created_at", { ascending: false });
 
-  if (error) {
-    host.innerHTML = `<div class="card"><div class="muted">Error: ${error.message}</div></div>`;
+  // filtros sobre marketplace
+  if (fecha) qMP = qMP.eq("fecha_publicacion", fecha);
+  if (usuario) qMP = qMP.eq("usuario", usuario);
+  // si eligieron un tipo RRSS, NO traemos marketplace
+  if (tipo && tipo !== "marketplace") {
+    // devolvemos vacío a propósito
+    qMP = qMP.limit(0);
+  }
+
+  // 3) Ejecutar en paralelo
+  const [{ data: rrss, error: e1 }, { data: mp, error: e2 }] = await Promise.all([qRRSS, qMP]);
+
+  if (e1) console.error("RRSS error:", e1);
+  if (e2) console.error("Marketplace error:", e2);
+
+  const rrssSafe = Array.isArray(rrss) ? rrss : [];
+  const mpSafe = Array.isArray(mp) ? mp : [];
+
+  // 4) Normalizar Marketplace al mismo formato
+  const mpNorm = mpSafe.map(x => ({
+    origen: "marketplace",
+    id: x.id,
+    created_at: x.created_at || null,
+    fecha: x.fecha_publicacion || null,
+    usuario: x.usuario || "-",
+    tipo: "marketplace",
+    link: x.marketplace_link_publicacion || "-",
+    cuenta_id: x.facebook_account_uuid ?? x.cuenta_fb ?? null,
+    extra: x.titulo ? `Título: ${x.titulo}` : ""
+  }));
+
+  const rrssNorm = rrssSafe.map(x => ({
+    origen: "rrss",
+    id: x.id,
+    created_at: x.created_at || null,
+    fecha: x.fecha || null,
+    usuario: x.usuario || "-",
+    tipo: x.tipo || "-",
+    link: x.link || "-",
+    cuenta_id: x.cuenta_id ?? null,
+    extra: ""
+  }));
+
+  // 5) Unir + ordenar por created_at
+  const all = [...rrssNorm, ...mpNorm].sort((a, b) => {
+    const da = a.created_at ? new Date(a.created_at).getTime() : 0;
+    const db = b.created_at ? new Date(b.created_at).getTime() : 0;
+    return db - da;
+  });
+
+  if (!all.length) {
+    tabla.innerHTML = `<tr><td colspan="6">Sin resultados.</td></tr>`;
     return;
   }
-  if (!data || !data.length) {
-    host.innerHTML = `<div class="card"><div class="muted">Sin resultados.</div></div>`;
-    return;
-  }
 
-  // Agrupar: operador -> cuenta -> tipo
-  const grouped = {};
-  for (const r of data) {
-    const op = r.usuario || "-";
-    const cuenta = r.cuentas_facebook?.email || `#${r.cuenta_id}`;
-    const tipo = r.tipo || "-";
+  // 6) Mapear cuenta_id -> nombre/email si coincide con cuentas_facebook.id
+  const { data: cuentas } = await supabase
+    .from("cuentas_facebook")
+    .select("id, nombre, email");
 
-    grouped[op] ??= {};
-    grouped[op][cuenta] ??= {};
-    grouped[op][cuenta][tipo] ??= [];
-    grouped[op][cuenta][tipo].push(r);
-  }
+  const mapCuentas = new Map((cuentas || []).map(c => [String(c.id), c.nombre || c.email || String(c.id)]));
 
-  host.innerHTML = renderGrouped(grouped);
-}
+  // 7) Render tabla
+  tabla.innerHTML = "";
+  all.forEach(l => {
+    const cuentaLabel = l.cuenta_id != null ? (mapCuentas.get(String(l.cuenta_id)) || String(l.cuenta_id)) : "-";
+    const tr = document.createElement("tr");
 
-function renderGrouped(grouped) {
-  const ops = Object.keys(grouped).sort();
-  return ops.map(op => {
-    const cuentas = grouped[op];
-    const cuentasKeys = Object.keys(cuentas).sort();
-
-    const opCount = cuentasKeys.reduce((acc, ck) => {
-      const tipos = cuentas[ck];
-      return acc + Object.keys(tipos).reduce((a2, tk) => a2 + tipos[tk].length, 0);
-    }, 0);
-
-    return `
-      <details open>
-        <summary>${op} <span class="chip">links: ${opCount}</span></summary>
-        <div class="sub">Cuentas usadas</div>
-        ${cuentasKeys.map(ck => renderCuenta(ck, cuentas[ck])).join("")}
-      </details>
+    tr.innerHTML = `
+      <td>${l.fecha || "-"}</td>
+      <td>${l.usuario}</td>
+      <td>${cuentaLabel}</td>
+      <td>${l.tipo}</td>
+      <td style="max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+        ${l.link && l.link !== "-" ? l.link : "-"}
+        ${l.extra ? `<div style="opacity:.7; font-size:12px; margin-top:4px;">${escapeHtml(l.extra)}</div>` : ""}
+      </td>
+      <td>
+        ${l.link && l.link !== "-" ? `<a class="btn-link" href="${l.link}" target="_blank" rel="noopener">Abrir</a>` : "-"}
+      </td>
     `;
-  }).join("");
+    tabla.appendChild(tr);
+  });
 }
 
-function renderCuenta(cuentaLabel, tiposObj) {
-  const tipos = Object.keys(tiposObj).sort();
-  const total = tipos.reduce((acc, t) => acc + tiposObj[t].length, 0);
-
-  return `
-    <details style="margin-top:10px;">
-      <summary>${cuentaLabel} <span class="chip">links: ${total}</span></summary>
-      ${tipos.map(t => renderTipo(t, tiposObj[t])).join("")}
-    </details>
-  `;
-}
-
-function renderTipo(tipo, rows) {
-  const nice = { historias: "Historias", reels: "Reels", muro: "Muro", grupos: "Grupos" }[tipo] || tipo;
-
-  return `
-    <details style="margin-top:10px;">
-      <summary>${nice} <span class="chip">links: ${rows.length}</span></summary>
-      <div class="list">
-        ${rows.slice(0, 50).map(r => {
-          const hhmm = new Date(r.created_at).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
-          return `
-            <div class="row">
-              <div class="cap">${hhmm} — ${r.link}</div>
-              <a class="btn-open" href="${r.link}" target="_blank" rel="noopener">Abrir</a>
-            </div>
-          `;
-        }).join("")}
-        ${rows.length > 50 ? `<div class="muted">Mostrando 50. Usá filtros o paginado para ver más.</div>` : ""}
-      </div>
-    </details>
-  `;
+// Mini escape para no romper la tabla con textos
+function escapeHtml(str){
+  return String(str ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
 }

@@ -537,3 +537,138 @@ body.sb-collapsed .sb-toggle span{
 .sidebar .sb-shell{
   overflow: visible;
 }
+/* ===== SIDEBAR SCROLL + FOOTER COMODO ===== */
+
+.sidebar{
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* zona del usuario no se achica */
+.sidebar .sb-user{
+  flex: 0 0 auto;
+}
+
+/* nav scrolleable */
+.sidebar .nav{
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 6px; /* para que no tape scrollbar */
+}
+
+/* scrollbar más prolijo (Chrome/Edge) */
+.sidebar .nav::-webkit-scrollbar{
+  width: 8px;
+}
+.sidebar .nav::-webkit-scrollbar-thumb{
+  background: rgba(255,255,255,.12);
+  border-radius: 8px;
+}
+.sidebar .nav::-webkit-scrollbar-thumb:hover{
+  background: rgba(255,255,255,.18);
+}
+
+/* footer pegado abajo (siempre clickeable) */
+.sidebar .sb-footer{
+  flex: 0 0 auto;
+  position: sticky;
+  bottom: 0;
+  padding-top: 10px;
+  background: linear-gradient(to top, rgba(5,10,25,.95), rgba(5,10,25,0));
+  backdrop-filter: blur(6px);
+}
+
+/* botón salir más accesible */
+.sidebar .sb-footer .btn2{
+  width: 100%;
+  margin: 8px 0 6px;
+}
+/* ===== FIX TEXTOS LARGOS (Diario) ===== */
+
+/* cards del diario: no permitir overflow */
+.card, .panel, .box, .stat-card{
+  overflow: hidden;
+}
+
+/* textos largos: que corten o bajen */
+.card p, .card div, .panel p, .panel div{
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* si tenés un bloque de etiquetas (tags) que querés que NO se haga infinito */
+.tags, .etiquetas, .assigned-tags{
+  max-height: 70px;          /* ajustá si querés */
+  overflow: auto;
+  padding-right: 6px;
+}
+/* =========================
+   SIDEBAR: SCROLL + FOOTER
+   ========================= */
+
+.sidebar{
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: visible; /* para que no se corte la flecha */
+}
+
+/* bloque usuario fijo */
+.sidebar .sb-user{
+  flex: 0 0 auto;
+}
+
+/* ✅ el menu ahora scrollea con la ruedita */
+.sidebar .nav{
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-bottom: 16px; /* para que el ultimo item no quede pegado al footer */
+}
+
+/* scrollbar prolijo (Chrome/Edge) */
+.sidebar .nav::-webkit-scrollbar{ width: 8px; }
+.sidebar .nav::-webkit-scrollbar-thumb{
+  background: rgba(255,255,255,.14);
+  border-radius: 8px;
+}
+.sidebar .nav::-webkit-scrollbar-thumb:hover{
+  background: rgba(255,255,255,.22);
+}
+
+/* ✅ footer siempre visible y clickeable */
+.sidebar .sb-footer{
+  flex: 0 0 auto;
+  position: sticky;
+  bottom: 0;
+  padding: 12px 12px 14px;
+  background: linear-gradient(to top, rgba(6,12,26,.98), rgba(6,12,26,.65), rgba(6,12,26,0));
+  backdrop-filter: blur(8px);
+}
+
+/* boton salir más cómodo */
+.sidebar .sb-footer .btn2{
+  width: 100%;
+  margin: 0;
+}
+
+/* =========================
+   MODO COLAPSADO: footer ok
+   ========================= */
+
+body.sb-collapsed .sidebar .sb-footer{
+  padding: 8px;
+}
+
+body.sb-collapsed .sidebar .sb-footer .btn2{
+  font-size: 0;           /* oculta texto */
+  height: 40px;
+  border-radius: 12px;
+  position: relative;
+}
+body.sb-collapsed .sidebar .sb-footer .btn2::before{
+  content: "⎋";
+  font-size: 18px;
+}
