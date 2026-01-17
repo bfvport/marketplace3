@@ -1,6 +1,6 @@
 const SESSION_KEY = "mp_session_v1";
 
-// --- GESTIÓN DE SESIÓN ---
+// --- SESIÓN ---
 export function setSession(session){ localStorage.setItem(SESSION_KEY, JSON.stringify(session)); }
 export function getSession(){
   try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); }
@@ -8,12 +8,11 @@ export function getSession(){
 }
 export function clearSession(){ localStorage.removeItem(SESSION_KEY); }
 
-// --- SEGURIDAD: REQUERIR LOGIN ---
+// --- SEGURIDAD ---
 export function requireSession(){
   const s = getSession();
   if (!s || !s.usuario || !s.rol){
-    // Ajustá la ruta si tu login está en otra carpeta
-    window.location.href = "/templates/login/login.html"; 
+    window.location.href = "/templates/login/login.html";
     return null;
   }
   return s;
@@ -28,67 +27,9 @@ export function escapeHtml(str){
     .replaceAll('"',"&quot;")
     .replaceAll("'","&#039;");
 }
-
-export function fmtDateISO(d = new Date()){
-  const pad = (n) => String(n).padStart(2,"0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-}
 export function nowISO(){ return new Date().toISOString(); }
 
-// --- CARGA DEL SIDEBAR Y LÓGICA DE NAVEGACIÓN ---
-export async function loadSidebar({ activeKey, basePath }){
-  const host = document.getElementById("sidebar-host");
-  if (!host) return;
-
-  const res = await fetch(`${basePath}sidebar.html`, { cache:"no-store" });
-  host.innerHTML = await res.text();
-  initSidebarToggle();
-
-  const s = getSession();
-
-  // Marcar enlace activo
-  const activeEl = host.querySelector(`[data-nav="${activeKey}"]`);
-  if (activeEl) activeEl.classList.add("active");
-
-  // Mostrar usuario y rol
-  const uEl = host.querySelector("#sb-usuario");
-  const rEl = host.querySelector("#sb-rol");
-  if (uEl && s?.usuario) uEl.textContent = s.usuario;
-  if (rEl && s?.rol) rEl.textContent = s.rol;
-
-  // 🛡️ Oculta opciones de gerente si el rol es operador
-  if (s?.rol !== "gerente"){
-    host.querySelectorAll("[data-only='gerente']").forEach(el => el.style.display="none");
-  }
-
-  // 🚪 CIERRE DE SESIÓN CON REGISTRO (LOGOUT) - ¡CORREGIDO!
-  const btn = host.querySelector("#btn-logout");
-  if (btn){
-    btn.addEventListener("click", async () => {
-      console.log("Cerrando sesión...");
-
-      // 1. REGISTRAR LA SALIDA EN SUPABASE ANTES DE IRSE
-      if (s && window.supabaseClient) {
-        try {
-          // Usamos 'evento' y 'cuenta_fb' que son las columnas que creamos en la DB
-          await window.supabaseClient.from("usuarios_actividad").insert([{
-            usuario: s.usuario,
-            evento: "🔴 LOGOUT (Salió)", 
-            cuenta_fb: "Sistema" 
-          }]);
-        } catch (error) {
-          console.error("No se pudo registrar la salida:", error);
-        }
-      }
-
-      // 2. BORRAR SESIÓN Y REDIRIGIR
-      clearSession();
-      window.location.replace(`${basePath}login/login.html`);
-    });
-  }
-}
-
-// --- LÓGICA DE CUENTAS FACEBOOK (NO TOCAR) ---
+// --- CUENTAS FB (NO TOCAR) ---
 export async function takeFacebookAccountFor(usuario){
   const sb = window.supabaseClient;
 
@@ -114,72 +55,11 @@ export async function takeFacebookAccountFor(usuario){
   return { ok:true, account: acc };
 }
 
-function initSidebarToggle(){
-  const btn = document.getElementById("sb-toggle");
-  if(!btn) return;
-
-  const saved = localStorage.getItem("sb_collapsed") === "1";
-  document.body.classList.toggle("sb-collapsed", saved);
-
-  btn.addEventListener("click", () => {
-    const isCollapsed = document.body.classList.toggle("sb-collapsed");
-    localStorage.setItem("sb_collapsed", isCollapsed ? "1" : "0");
-  });
-}
-function initSidebarToggle(){
-  const btn = document.getElementById("sb-toggle");
-  if(!btn) return;
-
-  const saved = localStorage.getItem("sb_collapsed") === "1";
-  document.body.classList.toggle("sb-collapsed", saved);
-
-  const icon = btn.querySelector("span");
-  if (icon) icon.textContent = saved ? "▶" : "◀";
-
-  btn.addEventListener("click", () => {
-    const isCollapsed = document.body.classList.toggle("sb-collapsed");
-    localStorage.setItem("sb_collapsed", isCollapsed ? "1" : "0");
-    if (icon) icon.textContent = isCollapsed ? "▶" : "◀";
-  });
-}
 // =========================
-// SIDEBAR GLOBAL (sin ui.js)
+// SIDEBAR UNIVERSAL ÚNICO
 // =========================
 
-export async function loadSidebarUniversal() {
-  const s = getSession?.() || null;
-
-  // si no hay session, no rompe (pero si querés, redirigí)
-  if (!s || !s.usuario || !s.rol) return;
-
-  // asegurar host
-  let host = document.getElementById("sidebar-host");
-  if (!host) {
-    host = document.createElement("div");
-    host.id = "sidebar-host";
-    document.body.prepend(host);
-  }
-
-  // traer sidebar.html (ruta absoluta, estable)
-  const res = await fetch("/templates/sidebar.html", { cache: "no-store" });
-  if (!res.ok) {
-    console.error("No se pudo cargar /templates/sidebar.html", res.status);
-    return;
-  }
-  host.innerHTML = await res.text();
-
-  // pintar usuario y rol
-  const uEl = host.querySelector("#sb-usuario");
-  const rEl = host.querySelector("#sb-rol");
-  if (uEl) uEl.textContent = s.usuario;
-  if (rEl) rEl.textContent = s.rol;
-
-  // ocultar cosas de gerente si es operador
-  if (s.rol !== "gerente") {
-    host.querySelectorAll("[data-only='gerente']").forEach(el => el.style.display = "none");
-  }
-
-  // marcar item activo según la URL
+function sidebarMarkActive(host){
   const path = location.pathname;
   host.querySelectorAll(".nav a[data-nav]").forEach(a => {
     a.classList.remove("active");
@@ -187,13 +67,85 @@ export async function loadSidebarUniversal() {
     const folder = href.split("/").filter(Boolean).slice(-2, -1)[0]; // dashboard, diario, etc
     if (folder && path.includes(`/${folder}/`)) a.classList.add("active");
   });
+}
+
+function sidebarApplyRole(host, s){
+  // usuario / rol
+  const uEl = host.querySelector("#sb-usuario");
+  const rEl = host.querySelector("#sb-rol");
+  if (uEl) uEl.textContent = s.usuario;
+  if (rEl) rEl.textContent = s.rol;
+
+  // gerente-only
+  if (s.rol !== "gerente"){
+    host.querySelectorAll("[data-only='gerente']").forEach(el => el.style.display = "none");
+  } else {
+    host.querySelectorAll("[data-only='gerente']").forEach(el => el.style.display = "");
+  }
+}
+
+function sidebarInitToggle(){
+  const btn = document.getElementById("sb-toggle");
+  const icon = document.getElementById("sb-toggle-icon");
+  if (!btn) return;
+
+  const saved = localStorage.getItem("sb_collapsed") === "1";
+  document.body.classList.toggle("sb-collapsed", saved);
+  if (icon) icon.textContent = saved ? "▶" : "◀";
+
+  // evitar doble listener si se ejecuta más de una vez
+  if (btn.dataset.bound === "1") return;
+  btn.dataset.bound = "1";
+
+  btn.addEventListener("click", () => {
+    const isCollapsed = document.body.classList.toggle("sb-collapsed");
+    localStorage.setItem("sb_collapsed", isCollapsed ? "1" : "0");
+    if (icon) icon.textContent = isCollapsed ? "▶" : "◀";
+  });
+}
+
+async function sidebarLoadHTML(){
+  // asegurar host
+  let host = document.getElementById("sidebar-host");
+  if (!host){
+    host = document.createElement("div");
+    host.id = "sidebar-host";
+    document.body.prepend(host);
+  }
+
+  // si ya está cargado, no recargar
+  if (host.dataset.loaded === "1") return host;
+
+  const res = await fetch("/templates/sidebar.html", { cache:"no-store" });
+  if (!res.ok){
+    console.error("No se pudo cargar /templates/sidebar.html", res.status);
+    return host;
+  }
+  host.innerHTML = await res.text();
+  host.dataset.loaded = "1";
+  return host;
+}
+
+export async function bootSidebar(){
+  // evita que se ejecute 2 veces en la misma página
+  if (window.__mp_sidebar_booted) return;
+  window.__mp_sidebar_booted = true;
+
+  const s = getSession();
+  if (!s || !s.usuario || !s.rol) return;
+
+  const host = await sidebarLoadHTML();
+  sidebarApplyRole(host, s);
+  sidebarMarkActive(host);
+  sidebarInitToggle();
 
   // logout
   const btn = host.querySelector("#btn-logout");
-  if (btn) {
+  if (btn && btn.dataset.bound !== "1"){
+    btn.dataset.bound = "1";
     btn.addEventListener("click", async () => {
       try {
-        if (s && window.supabaseClient) {
+        if (window.supabaseClient){
           await window.supabaseClient.from("usuarios_actividad").insert([{
             usuario: s.usuario,
             evento: "🔴 LOGOUT (Salió)",
@@ -203,18 +155,13 @@ export async function loadSidebarUniversal() {
       } catch (e) {
         console.warn("Logout log falló:", e);
       }
-      clearSession?.();
+      clearSession();
       location.replace("/templates/login/login.html");
     });
   }
-
-  // toggle colapsar / expandir
-  initSidebarToggle(); // usa tu función (la de sb-toggle)
 }
 
-// Auto-run en todas las páginas que cargan app.js
+// auto-run
 document.addEventListener("DOMContentLoaded", () => {
-  // si tu app.js ya tiene un DOMContentLoaded, no dupliques:
-  // en ese caso llamá a loadSidebarUniversal() dentro del tuyo.
-  loadSidebarUniversal();
+  bootSidebar();
 });
