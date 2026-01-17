@@ -126,3 +126,11 @@ function initSidebarToggle(){
     localStorage.setItem("sb_collapsed", isCollapsed ? "1" : "0");
   });
 }
+// ✅ Auto-init del toggle del sidebar (por si alguna página no usa loadSidebar)
+window.addEventListener("DOMContentLoaded", () => {
+  // si el sidebar ya está inyectado y existe el botón, inicializamos
+  const btn = document.getElementById("sb-toggle");
+  if (btn) {
+    initSidebarToggle();
+  }
+});
