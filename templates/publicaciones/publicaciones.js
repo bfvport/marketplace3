@@ -1,155 +1,179 @@
-import { requireSession, loadSidebar, fmtDateISO } from "../../assets/js/app.js";
+import { requireSession, loadSidebar, fmtDateISO, escapeHtml, getSession } from "../../assets/js/app.js";
 
 const sb = window.supabaseClient;
 const s = requireSession();
+if (!s) throw new Error("Sin sesión");
+
 const today = fmtDateISO(new Date());
+const $ = (id) => document.getElementById(id);
 
-// ✅ Sidebar (si esto no corre, NO aparece navegación)
-await loadSidebar(s, "publicaciones");
+// ✅ Tu app.js espera loadSidebar({ activeKey, basePath })
+await loadSidebar({ activeKey: "publicaciones", basePath: "../" });
 
-// ✅ Solo operador y gerente
-if (!s || (s.rol !== "operador" && s.rol !== "gerente")) {
-  document.body.innerHTML = "<h1 style='padding:30px'>Acceso denegado</h1>";
-  throw new Error("Acceso denegado");
-}
+$("pill-rol").textContent = `Rol: ${s?.rol || "-"}`;
+$("pill-hoy").textContent = `Hoy: ${today}`;
 
-// 🔒 Gerente entra modo lectura (no guarda)
-const READ_ONLY = s.rol === "gerente";
+// Drive en otra pestaña
+const DRIVE_LINK = "https://drive.google.com/drive/folders/1WEKYsaptpUnGCKOszZOKEAovzL5ld7j7?usp=sharing";
+$("btn-drive").href = DRIVE_LINK;
 
-// 🔗 Drive (abre en otra pestaña)
-const DRIVE_LINK =
-  "https://drive.google.com/drive/folders/1WEKYsaptpUnGCKOszZOKEAovzL5ld7j7?usp=sharing";
-
-const TIPOS = [
-  { id: "historia", nombre: "Historias", reqKey: "req_historias" },
-  { id: "reel", nombre: "Reels", reqKey: "req_reels" },
-  { id: "muro", nombre: "Muro", reqKey: "req_muro" },
-  { id: "grupo", nombre: "Grupos", reqKey: "req_grupos" },
-];
-
-// ✅ Auto refresh (no hace falta botón “Actualizar”)
-const REFRESH_MS = 8000;
+// Auto refresh (gerente ve cambios sin F5)
+const AUTO_MS = 5000;
 let timer = null;
 
-const cont = document.getElementById("cards-recursos");
+const TIPOS = [
+  { key: "historias", titulo: "Historias", colReq: "req_historias" },
+  { key: "reels",     titulo: "Reels",     colReq: "req_reels" },
+  { key: "muro",      titulo: "Muro",      colReq: "req_muro" },
+  { key: "grupos",    titulo: "Grupos",    colReq: "req_grupos" },
+];
 
-document.getElementById("btn-drive").href = DRIVE_LINK;
-document.getElementById("pill-rol").textContent = `Rol: ${s.rol}`;
-document.getElementById("pill-hoy").textContent = `Hoy: ${today}`;
+const IS_GERENTE = s.rol === "gerente";
+let usuarioObjetivo = s.usuario;
 
 init();
 
-/* =========================
-   INIT
-========================= */
-async function init() {
-  if (s.rol === "gerente") {
-    await initSelectorGerente();
-    document.getElementById("box-gerente").style.display = "inline-flex";
+async function init(){
+  if (IS_GERENTE){
+    $("ver-operador-wrap").style.display = "inline-flex";
+    await cargarOperadores();
+    $("sel-operador").addEventListener("change", async () => {
+      usuarioObjetivo = $("sel-operador").value;
+      await renderAll();
+    });
   }
 
-  await renderAll(getUsuarioObjetivoActual(), { soft: false });
+  await renderAll();
 
-  // Auto refresh
-  startAutoRefresh();
+  timer = setInterval(renderAll, AUTO_MS);
 
-  // Pausar si la pestaña no está visible
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) stopAutoRefresh();
-    else {
-      startAutoRefresh();
-      renderAll(getUsuarioObjetivoActual(), { soft: true });
+    if (document.hidden){
+      if (timer) clearInterval(timer);
+      timer = null;
+    } else {
+      if (!timer) timer = setInterval(renderAll, AUTO_MS);
+      renderAll();
     }
   });
 }
 
-function startAutoRefresh() {
-  stopAutoRefresh();
-  timer = setInterval(() => {
-    renderAll(getUsuarioObjetivoActual(), { soft: true });
-  }, REFRESH_MS);
-}
-
-function stopAutoRefresh() {
-  if (timer) clearInterval(timer);
-  timer = null;
-}
-
-function getUsuarioObjetivoActual() {
-  if (s.rol !== "gerente") return s.usuario;
-  return document.getElementById("sel-operador")?.value || s.usuario;
-}
-
-/* =========================
-   GERENTE: selector de operador
-========================= */
-async function initSelectorGerente() {
-  const sel = document.getElementById("sel-operador");
-
-  // Tomamos operadores de usuarios_asignado (ya existe en tu sistema)
+async function cargarOperadores(){
   const { data, error } = await sb
-    .from("usuarios_asignado")
-    .select("usuario")
+    .from("usuarios")
+    .select("usuario, rol")
     .order("usuario", { ascending: true });
 
-  if (error) {
-    console.error(error);
-    sel.innerHTML = `<option value="${s.usuario}">${s.usuario}</option>`;
+  if (error) throw error;
+
+  const ops = (data || []).filter(x => x.rol === "operador").map(x => x.usuario);
+  $("sel-operador").innerHTML = ops.map(u => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join("");
+
+  if (!ops.includes(usuarioObjetivo)) usuarioObjetivo = ops[0] || usuarioObjetivo;
+  $("sel-operador").value = usuarioObjetivo;
+}
+
+async function renderAll(){
+  const cont = $("cards-recursos");
+  cont.innerHTML = "";
+
+  const [cuentas, planHoy, linksHoy] = await Promise.all([
+    cargarCuentas(usuarioObjetivo),
+    cargarPlanHoy(usuarioObjetivo),
+    cargarLinksHoy(usuarioObjetivo),
+  ]);
+
+  for (const t of TIPOS){
+    const meta = sumCol(planHoy, t.colReq); // meta del calentamiento
+    const cargados = (linksHoy[t.key] || []).length; // evidencia (links)
+    const pendientes = Math.max(0, meta - cargados);
+
+    cont.innerHTML += cardHTML(t, usuarioObjetivo, cuentas, meta, cargados, pendientes);
+    renderLinksList(t.key, linksHoy[t.key] || []);
+
+    if (!IS_GERENTE){
+      const btn = document.getElementById(`btn-save-${t.key}`);
+      if (btn) btn.onclick = () => guardarLink(t.key);
+    }
+  }
+}
+
+function cardHTML(t, usuario, cuentas, meta, cargados, pendientes){
+  const badgePend = pendientes === 0
+    ? `<span class="badge badge-ok">OK</span>`
+    : `<span class="badge badge-warn">Pend. ${pendientes}</span>`;
+
+  const badgeCont = `<span class="badge">${cargados}/${meta}</span>`;
+
+  const disabled = IS_GERENTE ? "disabled" : "";
+
+  const cuentasOptions = cuentas.length
+    ? cuentas.map(c => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.email)}</option>`).join("")
+    : `<option value="">(Sin cuentas asignadas)</option>`;
+
+  return `
+    <div class="card" id="card-${t.key}">
+      <div class="card-head">
+        <div>
+          <h3 class="card-title">${t.titulo}</h3>
+          <div class="card-muted">Operador: <b>${escapeHtml(usuario)}</b>${IS_GERENTE ? " (lectura)" : ""}</div>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          ${badgePend}
+          ${badgeCont}
+        </div>
+      </div>
+
+      <div class="row">
+        <select id="sel-${t.key}" ${disabled}>
+          <option value="">Seleccionar cuenta</option>
+          ${cuentasOptions}
+        </select>
+        <input id="inp-${t.key}" type="url" placeholder="Pegá el link acá..." ${disabled} />
+      </div>
+
+      <button class="btn-save" id="btn-save-${t.key}" ${disabled}>
+        Guardar link
+      </button>
+
+      <div class="links" id="links-${t.key}">
+        <div class="muted">Cargando...</div>
+      </div>
+    </div>
+  `;
+}
+
+function renderLinksList(tipoKey, items){
+  const box = document.getElementById(`links-${tipoKey}`);
+  if (!box) return;
+
+  if (!items.length){
+    box.innerHTML = `<div class="muted">Todavía no hay links cargados hoy.</div>`;
     return;
   }
 
-  const unique = [...new Set((data || []).map(x => x.usuario).filter(Boolean))];
-
-  sel.innerHTML = unique.length
-    ? unique.map(u => `<option value="${u}">${u}</option>`).join("")
-    : `<option value="${s.usuario}">${s.usuario}</option>`;
-
-  sel.addEventListener("change", () => {
-    renderAll(getUsuarioObjetivoActual(), { soft: false });
-  });
+  box.innerHTML = items.map(x => `
+    <div class="link-item">
+      <span title="${escapeHtml(x.cuenta_fb)}">${escapeHtml(x.cuenta_fb)}</span>
+      <a href="${escapeHtml(x.link)}" target="_blank" rel="noopener noreferrer">Ver</a>
+    </div>
+  `).join("");
 }
 
-/* =========================
-   Render principal
-========================= */
-async function renderAll(usuario, opts = {}) {
-  try {
-    const [cuentas, plan, linksHoy] = await Promise.all([
-      cargarCuentas(usuario),
-      cargarPlanHoy(usuario),
-      cargarLinksHoy(usuario),
-    ]);
-
-    renderCards(usuario, cuentas, plan, linksHoy, opts.soft === true);
-  } catch (e) {
-    console.error(e);
-    cont.innerHTML = `
-      <div class="card" style="grid-column: span 12;">
-        <h3 class="card-title">Error cargando Recursos</h3>
-        <p class="muted small">Revisá consola (F12). Puede ser tabla/permiso/RLS.</p>
-      </div>
-    `;
-  }
-}
-
-/* =========================
-   DATA
-========================= */
-async function cargarCuentas(usuario) {
+async function cargarCuentas(usuario){
   const { data, error } = await sb
     .from("cuentas_facebook")
     .select("email")
-    .eq("ocupada_por", usuario)
-    .order("email", { ascending: true });
+    .eq("ocupada_por", usuario);
 
   if (error) throw error;
   return data || [];
 }
 
-async function cargarPlanHoy(usuario) {
+async function cargarPlanHoy(usuario){
   const { data, error } = await sb
     .from("calentamiento_plan")
-    .select("*")
+    .select("req_historias, req_reels, req_muro, req_grupos")
     .eq("usuario", usuario)
     .eq("fecha", today);
 
@@ -157,182 +181,55 @@ async function cargarPlanHoy(usuario) {
   return data || [];
 }
 
-async function cargarLinksHoy(usuario) {
-  // ✅ Tabla RRSS nueva: publicaciones_rrss
+async function cargarLinksHoy(usuario){
+  const out = { historias:[], reels:[], muro:[], grupos:[] };
+
   const { data, error } = await sb
     .from("publicaciones_rrss")
-    .select("*")
+    .select("tipo, cuenta_fb, link, created_at")
     .eq("usuario", usuario)
     .eq("fecha", today)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending:false });
 
-  if (error) throw error;
-  return data || [];
-}
-
-/* =========================
-   HELPERS
-========================= */
-function calcularMeta(tipoId, planes) {
-  const t = TIPOS.find(x => x.id === tipoId);
-  if (!t) return 0;
-  let total = 0;
-  for (const p of (planes || [])) total += Number(p[t.reqKey] || 0);
-  return total;
-}
-
-function buildStatus(done, meta) {
-  if (meta <= 0) return { cls: "warn", text: "Sin plan" };
-  if (done >= meta) return { cls: "ok", text: "Cumplido" };
-  return { cls: "info", text: `Pend. ${meta - done}` };
-}
-
-function safeHtml(v) {
-  return String(v || "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
-}
-
-/* =========================
-   Render Cards
-========================= */
-function renderCards(usuario, cuentas, plan, linksHoy, soft) {
-  const byTipo = new Map();
-  for (const t of TIPOS) byTipo.set(t.id, []);
-  for (const l of (linksHoy || [])) if (byTipo.has(l.tipo)) byTipo.get(l.tipo).push(l);
-
-  // Guardar estado (no perder lo que el operador está escribiendo)
-  const prevState = new Map();
-  if (soft) {
-    for (const t of TIPOS) {
-      prevState.set(t.id, {
-        sel: document.getElementById(`sel-${t.id}`)?.value || "",
-        inp: document.getElementById(`inp-${t.id}`)?.value || "",
-      });
-    }
+  if (error){
+    console.error("Falta tabla publicaciones_rrss o error:", error);
+    return out;
   }
 
-  cont.innerHTML = "";
-
-  for (const t of TIPOS) {
-    const meta = calcularMeta(t.id, plan);
-    const arr = byTipo.get(t.id) || [];
-    const done = arr.length;
-
-    const st = buildStatus(done, meta);
-    const pct = meta > 0 ? Math.min(100, Math.round((done / meta) * 100)) : 0;
-
-    cont.innerHTML += `
-      <section class="card" data-tipo="${t.id}">
-        <div class="card-top">
-          <div>
-            <h3 class="card-title">${t.nombre}</h3>
-            <div class="muted small">Operador: <b>${safeHtml(usuario)}</b>${READ_ONLY ? " <span class='muted'>(lectura)</span>" : ""}</div>
-          </div>
-
-          <div class="kpis">
-            <span class="badge ${st.cls}">${st.text}</span>
-            <span class="badge">${done}/${meta}</span>
-          </div>
-        </div>
-
-        <div class="progress"><div style="width:${pct}%"></div></div>
-
-        <div class="row">
-          <select id="sel-${t.id}" ${READ_ONLY ? "disabled" : ""}>
-            <option value="">Seleccionar cuenta</option>
-            ${(cuentas || []).map(c => `<option value="${safeHtml(c.email)}">${safeHtml(c.email)}</option>`).join("")}
-          </select>
-
-          <input id="inp-${t.id}" type="url" placeholder="Pegá el link acá..." ${READ_ONLY ? "disabled" : ""} />
-        </div>
-
-        <div class="row" style="margin-top:10px;">
-          <button class="btn" ${READ_ONLY ? "disabled" : ""} onclick="guardarLink('${t.id}')">Guardar link</button>
-        </div>
-
-        <div class="links" id="box-${t.id}">
-          ${renderListaLinks(arr, "")}
-        </div>
-      </section>
-    `;
+  for (const r of (data || [])){
+    const k = String(r.tipo || "").toLowerCase();
+    if (out[k]) out[k].push(r);
   }
-
-  // Enganchar filtros por cuenta (y restauro estado en refresh suave)
-  for (const t of TIPOS) {
-    const sel = document.getElementById(`sel-${t.id}`);
-    const inp = document.getElementById(`inp-${t.id}`);
-
-    if (soft) {
-      const st = prevState.get(t.id);
-      if (st) {
-        sel.value = st.sel;
-        inp.value = st.inp;
-
-        if (st.sel) {
-          const arr = byTipo.get(t.id) || [];
-          document.getElementById(`box-${t.id}`).innerHTML = renderListaLinks(arr, st.sel);
-        }
-      }
-    } else {
-      sel?.addEventListener("change", () => {
-        const cuenta = sel.value || "";
-        const arr = byTipo.get(t.id) || [];
-        document.getElementById(`box-${t.id}`).innerHTML = renderListaLinks(arr, cuenta);
-      });
-    }
-  }
+  return out;
 }
 
-function renderListaLinks(arr, cuentaFiltro) {
-  const list = cuentaFiltro ? arr.filter(x => x.cuenta_fb === cuentaFiltro) : arr;
-
-  if (!list.length) {
-    return `<p class="muted small">Todavía no hay links cargados hoy${cuentaFiltro ? " para esta cuenta" : ""}.</p>`;
-  }
-
-  return list.slice(0, 40).map(l => `
-    <div class="link-item">
-      <div class="left">
-        <span><b>${safeHtml(l.cuenta_fb)}</b></span>
-        <span class="muted small">${new Date(l.created_at).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</span>
-      </div>
-      <a href="${safeHtml(l.link)}" target="_blank" rel="noopener noreferrer">Ver</a>
-    </div>
-  `).join("");
+function sumCol(rows, col){
+  return (rows || []).reduce((acc, r) => acc + Number(r?.[col] || 0), 0);
 }
 
-/* =========================
-   Guardar Link
-========================= */
-window.guardarLink = async function(tipo) {
-  if (READ_ONLY) return;
-
-  const usuario = getUsuarioObjetivoActual();
-  const sel = document.getElementById(`sel-${tipo}`);
-  const inp = document.getElementById(`inp-${tipo}`);
-
+async function guardarLink(tipoKey){
+  const sel = document.getElementById(`sel-${tipoKey}`);
+  const inp = document.getElementById(`inp-${tipoKey}`);
   const cuenta = sel?.value || "";
   const link = (inp?.value || "").trim();
 
   if (!cuenta) return alert("Seleccioná una cuenta");
   if (!link.startsWith("http")) return alert("Pegá un link válido (http/https)");
 
-  const { error } = await sb.from("publicaciones_rrss").insert({
-    usuario,
+  const { error } = await sb.from("publicaciones_rrss").insert([{
+    usuario: usuarioObjetivo,
     cuenta_fb: cuenta,
-    tipo,
+    tipo: tipoKey,
     link,
-    fecha: today,
-  });
+    fecha: today
+  }]);
 
-  if (error) {
+  if (error){
     console.error(error);
-    alert("Error guardando link. Revisá consola (F12).");
+    alert("No se pudo guardar. Mirá consola.");
     return;
   }
 
   inp.value = "";
-  await renderAll(usuario, { soft: true });
-};
+  await renderAll();
+}
