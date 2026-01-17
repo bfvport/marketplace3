@@ -142,3 +142,79 @@ function initSidebarToggle(){
     if (icon) icon.textContent = isCollapsed ? "▶" : "◀";
   });
 }
+// =========================
+// SIDEBAR GLOBAL (sin ui.js)
+// =========================
+
+export async function loadSidebarUniversal() {
+  const s = getSession?.() || null;
+
+  // si no hay session, no rompe (pero si querés, redirigí)
+  if (!s || !s.usuario || !s.rol) return;
+
+  // asegurar host
+  let host = document.getElementById("sidebar-host");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "sidebar-host";
+    document.body.prepend(host);
+  }
+
+  // traer sidebar.html (ruta absoluta, estable)
+  const res = await fetch("/templates/sidebar.html", { cache: "no-store" });
+  if (!res.ok) {
+    console.error("No se pudo cargar /templates/sidebar.html", res.status);
+    return;
+  }
+  host.innerHTML = await res.text();
+
+  // pintar usuario y rol
+  const uEl = host.querySelector("#sb-usuario");
+  const rEl = host.querySelector("#sb-rol");
+  if (uEl) uEl.textContent = s.usuario;
+  if (rEl) rEl.textContent = s.rol;
+
+  // ocultar cosas de gerente si es operador
+  if (s.rol !== "gerente") {
+    host.querySelectorAll("[data-only='gerente']").forEach(el => el.style.display = "none");
+  }
+
+  // marcar item activo según la URL
+  const path = location.pathname;
+  host.querySelectorAll(".nav a[data-nav]").forEach(a => {
+    a.classList.remove("active");
+    const href = a.getAttribute("href") || "";
+    const folder = href.split("/").filter(Boolean).slice(-2, -1)[0]; // dashboard, diario, etc
+    if (folder && path.includes(`/${folder}/`)) a.classList.add("active");
+  });
+
+  // logout
+  const btn = host.querySelector("#btn-logout");
+  if (btn) {
+    btn.addEventListener("click", async () => {
+      try {
+        if (s && window.supabaseClient) {
+          await window.supabaseClient.from("usuarios_actividad").insert([{
+            usuario: s.usuario,
+            evento: "🔴 LOGOUT (Salió)",
+            cuenta_fb: "Sistema"
+          }]);
+        }
+      } catch (e) {
+        console.warn("Logout log falló:", e);
+      }
+      clearSession?.();
+      location.replace("/templates/login/login.html");
+    });
+  }
+
+  // toggle colapsar / expandir
+  initSidebarToggle(); // usa tu función (la de sb-toggle)
+}
+
+// Auto-run en todas las páginas que cargan app.js
+document.addEventListener("DOMContentLoaded", () => {
+  // si tu app.js ya tiene un DOMContentLoaded, no dupliques:
+  // en ese caso llamá a loadSidebarUniversal() dentro del tuyo.
+  loadSidebarUniversal();
+});
