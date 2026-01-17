@@ -42,6 +42,7 @@ export async function loadSidebar({ activeKey, basePath }){
 
   const res = await fetch(`${basePath}sidebar.html`, { cache:"no-store" });
   host.innerHTML = await res.text();
+  initSidebarToggle();
 
   const s = getSession();
 
@@ -111,4 +112,17 @@ export async function takeFacebookAccountFor(usuario){
   if (e2) throw new Error(e2.message);
 
   return { ok:true, account: acc };
+}
+
+function initSidebarToggle(){
+  const btn = document.getElementById("sb-toggle");
+  if(!btn) return;
+
+  const saved = localStorage.getItem("sb_collapsed") === "1";
+  document.body.classList.toggle("sb-collapsed", saved);
+
+  btn.addEventListener("click", () => {
+    const isCollapsed = document.body.classList.toggle("sb-collapsed");
+    localStorage.setItem("sb_collapsed", isCollapsed ? "1" : "0");
+  });
 }
