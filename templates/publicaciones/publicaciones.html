@@ -1,29 +1,179 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
   <title>Centro de Recursos | Marketplace Manager</title>
 
-  <link rel="stylesheet" href="../../assets/css/app.css">
+  <link rel="stylesheet" href="../../assets/css/app.css" />
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../assets/js/supabase.js"></script>
+
+  <!-- Estilos extra para que se vea PRO sin tocar tu app.css -->
+  <style>
+    .page-header {
+      display:flex; justify-content:space-between; align-items:flex-start;
+      gap:16px; margin-bottom:16px;
+      padding:16px; border-radius:14px;
+      background: rgba(30,41,59,.55);
+      border: 1px solid rgba(255,255,255,.08);
+      backdrop-filter: blur(10px);
+    }
+    .page-header h1 { margin:0; font-size:1.4rem; }
+    .page-header p { margin:4px 0 0; color:#94a3b8; }
+
+    .header-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end;}
+    .pill {
+      font-size:.78rem; color:#cbd5e1;
+      padding:6px 10px; border-radius:999px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(2,6,23,.35);
+      display:inline-flex; align-items:center; gap:8px;
+    }
+
+    .grid-recursos {
+      display:grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap:14px;
+    }
+    .card {
+      grid-column: span 6;
+      background: rgba(15,23,42,.6);
+      border: 1px solid rgba(255,255,255,.09);
+      border-radius:16px;
+      padding:14px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+    }
+    @media (max-width: 1100px){ .card{ grid-column: span 12; } }
+
+    .card-top {
+      display:flex; justify-content:space-between; align-items:flex-start; gap:12px;
+      margin-bottom:10px;
+    }
+    .card-title {
+      font-weight:800; letter-spacing:.2px;
+      font-size:1.05rem; margin:0;
+      color:#e2e8f0;
+    }
+    .muted { color:#94a3b8; }
+    .small { font-size:.82rem; }
+
+    .kpis { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .badge {
+      padding:5px 10px; border-radius:999px;
+      font-size:.75rem; border:1px solid rgba(255,255,255,.10);
+      background: rgba(2,6,23,.25);
+      color:#cbd5e1;
+    }
+    .badge.ok { border-color: rgba(16,185,129,.35); color:#a7f3d0; background: rgba(16,185,129,.10); }
+    .badge.warn{ border-color: rgba(245,158,11,.35); color:#fde68a; background: rgba(245,158,11,.10); }
+    .badge.info{ border-color: rgba(59,130,246,.35); color:#bfdbfe; background: rgba(59,130,246,.10); }
+
+    .progress {
+      height:10px; border-radius:999px; overflow:hidden;
+      background: rgba(255,255,255,.06);
+      border:1px solid rgba(255,255,255,.08);
+      margin:10px 0 12px;
+    }
+    .progress > div {
+      height:100%;
+      background: linear-gradient(90deg, rgba(59,130,246,.95), rgba(16,185,129,.95));
+      width:0%;
+      transition: width .25s ease;
+    }
+
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    .row > * { flex: 1 1 210px; }
+
+    select, input[type="url"]{
+      width:100%;
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(2,6,23,.35);
+      color:#e2e8f0;
+      outline:none;
+    }
+    input::placeholder{ color:#64748b; }
+
+    .btn {
+      padding:10px 12px;
+      border-radius:12px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(59,130,246,.18);
+      color:#e2e8f0;
+      cursor:pointer;
+      font-weight:700;
+      transition: transform .06s ease, background .2s ease;
+      width:100%;
+    }
+    .btn:active{ transform: translateY(1px); }
+    .btn.secondary{ background: rgba(2,6,23,.25); }
+    .btn:disabled { opacity:.55; cursor:not-allowed; }
+
+    .links {
+      margin-top:12px;
+      border-top:1px solid rgba(255,255,255,.08);
+      padding-top:10px;
+      max-height:190px;
+      overflow:auto;
+    }
+    .link-item{
+      display:flex; justify-content:space-between; gap:10px;
+      padding:8px 10px;
+      border-radius:12px;
+      background: rgba(2,6,23,.22);
+      border:1px solid rgba(255,255,255,.06);
+      margin-bottom:8px;
+      align-items:center;
+    }
+    .link-item .left{
+      display:flex; flex-direction:column;
+      min-width:0;
+    }
+    .link-item .left span{
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .link-item a{
+      color:#bfdbfe; text-decoration:none;
+      border:1px solid rgba(59,130,246,.35);
+      padding:6px 10px; border-radius:999px;
+      background: rgba(59,130,246,.12);
+      font-size:.78rem;
+    }
+  </style>
 </head>
 
 <body>
-<div id="layout">
+  <div id="layout">
+    <aside id="sidebar"></aside>
 
-  <aside id="sidebar"></aside>
+    <main class="main">
+      <div class="page-header">
+        <div>
+          <h1>Centro de Recursos</h1>
+          <p>Descargá material y cargá los links (Historias / Reels / Muro / Grupos) por cuenta.</p>
+        </div>
 
-  <main class="main">
-    <h1>Centro de Recursos</h1>
-    <p class="muted">Descargá contenido y cargá los links de lo que vas publicando.</p>
+        <div class="header-actions">
+          <span class="pill" id="pill-rol">Rol: -</span>
+          <span class="pill" id="pill-hoy">Hoy: -</span>
 
-    <div id="cards-recursos" class="grid-recursos"></div>
-  </main>
+          <!-- Solo se usa si entra gerente -->
+          <span class="pill" id="box-gerente" style="display:none;">
+            Ver operador:
+            <select id="sel-operador" style="padding:6px 8px; border-radius:10px;"></select>
+          </span>
 
-</div>
+          <a class="btn secondary" id="btn-drive" target="_blank" rel="noopener noreferrer">Abrir Drive</a>
+        </div>
+      </div>
 
-<script type="module" src="./publicaciones.js"></script>
+      <div id="cards-recursos" class="grid-recursos"></div>
+    </main>
+  </div>
+
+  <script type="module" src="./publicaciones.js"></script>
 </body>
 </html>
