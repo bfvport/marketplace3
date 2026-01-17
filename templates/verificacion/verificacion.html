@@ -2,74 +2,222 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Verificación | Marketplace Manager</title>
 
-  <!-- CSS global -->
+  <!-- Estilos globales -->
   <link rel="stylesheet" href="../../assets/css/app.css" />
 
   <!-- Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../assets/js/supabase.js"></script>
+
+  <style>
+    /* ============================
+       VERIFICACION: LAYOUT PRO
+       (sidebar a la izquierda + main a la derecha)
+    ============================ */
+
+    /* Usa el layout base (flex) como actividad.html */
+    .layout { display: flex; min-height: 100vh; }
+
+    /* IMPORTANTE: el host del sidebar debe ocupar su ancho,
+       pero NO empujar el main abajo. */
+    #sidebar-host { flex: 0 0 auto; }
+
+    /* Main a la derecha */
+    main.content {
+      flex: 1 1 auto;
+      min-width: 0; /* clave para que no se rompa el ancho con tablas */
+    }
+
+    /* Anula cualquier hack viejo de margin-left */
+    .veri-wrap { margin-left: 0 !important; }
+
+    /* ============================
+       UI VERIFICACION
+    ============================ */
+    .veri-wrap{
+      padding: 18px 22px;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .veri-title{
+      font-size: 28px;
+      font-weight: 800;
+      margin: 0 0 6px 0;
+    }
+
+    .veri-sub{
+      margin: 0 0 16px 0;
+      color: rgba(226,232,240,0.75);
+      font-size: 13px;
+    }
+
+    .veri-card{
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 16px;
+      padding: 14px;
+    }
+
+    /* Filtros arriba, bien prolijos */
+    .veri-filters{
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 1fr auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    /* Tabla con scroll interno */
+    .veri-table-wrap{
+      margin-top: 14px;
+      max-height: 58vh; /* scroll interno */
+      overflow: auto;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.20);
+    }
+
+    table.veri-table{
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 920px; /* si hay muchas columnas, aparece scroll horizontal */
+    }
+
+    .veri-table th,
+    .veri-table td{
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      font-size: 13px;
+      color: #e2e8f0;
+      white-space: nowrap;
+    }
+
+    /* Header sticky dentro del scroll */
+    .veri-table thead th{
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: rgba(2,6,23,.92);
+      backdrop-filter: blur(6px);
+    }
+
+    .nowrap{ white-space: nowrap; }
+
+    /* Botón estilo app */
+    #btn-aplicar{
+      height: 42px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(99,102,241,0.5);
+      background: rgba(99,102,241,0.18);
+      color: #e2e8f0;
+      cursor: pointer;
+    }
+    #btn-aplicar:hover{
+      background: rgba(99,102,241,0.26);
+    }
+
+    /* Tags (si las usás en JS) */
+    .tag{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.06);
+      font-size: 12px;
+    }
+    .tag.mp{
+      border-color: rgba(251,146,60,0.35);
+      background: rgba(251,146,60,0.10);
+    }
+
+    .link-btn{
+      color: #60a5fa;
+      text-decoration: none;
+      font-weight: 700;
+    }
+    .link-btn:hover{ text-decoration: underline; }
+
+    /* Responsive: en pantallas chicas, filtros a 1 columna */
+    @media (max-width: 900px){
+      .veri-filters{
+        grid-template-columns: 1fr;
+      }
+      #btn-aplicar{ width: 100%; }
+      table.veri-table{ min-width: 800px; }
+    }
+  </style>
 </head>
 
 <body>
-  <!-- Sidebar se inyecta acá -->
-  <div id="sidebar-host"></div>
+  <div class="layout">
+    <!-- Sidebar (se inyecta por loadSidebar en verificacion.js) -->
+    <div id="sidebar-host"></div>
 
-  <main class="veri-wrap">
-    <header class="veri-head">
-      <h1>🔎 Verificación</h1>
-      <p class="muted">Solo gerente. Acá se ven links de RRSS + Marketplace.</p>
-    </header>
+    <!-- Contenido -->
+    <main class="content">
+      <div class="veri-wrap">
+        <div class="veri-title">🔎 Verificación</div>
+        <div class="veri-sub">Solo gerente. Acá se ven links de RRSS + Marketplace.</div>
 
-    <section class="veri-card">
-      <div class="veri-filters">
-        <div class="field">
-          <label for="f-fecha">Fecha</label>
-          <input id="f-fecha" type="date" />
-        </div>
+        <section class="veri-card">
+          <div class="veri-filters">
+            <div>
+              <label for="f-fecha">Fecha</label>
+              <input id="f-fecha" type="date"/>
+            </div>
 
-        <div class="field">
-          <label for="f-operador">Operador</label>
-          <select id="f-operador">
-            <option value="">Todos los operadores</option>
-          </select>
-        </div>
+            <div>
+              <label for="f-operador">Operador</label>
+              <select id="f-operador">
+                <option value="">Todos los operadores</option>
+              </select>
+            </div>
 
-        <div class="field">
-          <label for="f-tipo">Tipo</label>
-          <select id="f-tipo">
-            <option value="">Todos los tipos</option>
-            <option value="rrss">RRSS</option>
-            <option value="marketplace">Marketplace</option>
-          </select>
-        </div>
+            <div>
+              <label for="f-tipo">Tipo</label>
+              <select id="f-tipo">
+                <option value="">Todos los tipos</option>
+                <option value="historias">Historias</option>
+                <option value="muro">Muro</option>
+                <option value="reels">Reels</option>
+                <option value="grupos">Grupos</option>
+                <option value="marketplace">Marketplace</option>
+              </select>
+            </div>
 
-        <button class="btn-primary" id="btn-aplicar" type="button">Aplicar</button>
+            <button id="btn-aplicar" type="button">Aplicar</button>
+          </div>
+
+          <div class="veri-table-wrap">
+            <table class="veri-table">
+              <thead>
+                <tr>
+                  <th class="nowrap">Fecha</th>
+                  <th>Usuario</th>
+                  <th>Cuenta</th>
+                  <th class="nowrap">Tipo</th>
+                  <th class="nowrap">Link</th>
+                  <th class="nowrap">Fuente</th>
+                </tr>
+              </thead>
+              <tbody id="veri-tbody">
+                <tr><td colspan="6" class="muted">Cargando…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
       </div>
+    </main>
+  </div>
 
-      <div class="veri-table-scroll">
-        <table class="veri-table">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Usuario</th>
-              <th>Cuenta</th>
-              <th>Tipo</th>
-              <th>Link</th>
-              <th>Fuente</th>
-            </tr>
-          </thead>
-          <tbody id="results-body">
-            <tr><td colspan="6" class="muted">Cargando…</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-  </main>
-
-  <!-- JS de la pantalla -->
+  <!-- Lógica de la pantalla -->
   <script type="module" src="./verificacion.js"></script>
 </body>
 </html>
