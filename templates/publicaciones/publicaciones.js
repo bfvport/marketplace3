@@ -4,22 +4,22 @@ const sb = window.supabaseClient;
 const s = requireSession();
 const today = fmtDateISO(new Date());
 
+// ✅ Sidebar (si esto no corre, NO aparece navegación)
 await loadSidebar(s, "publicaciones");
 
-// ✅ Permitir operador y gerente
+// ✅ Solo operador y gerente
 if (!s || (s.rol !== "operador" && s.rol !== "gerente")) {
   document.body.innerHTML = "<h1 style='padding:30px'>Acceso denegado</h1>";
   throw new Error("Acceso denegado");
 }
 
-// 🔒 Si es gerente: modo lectura (no guarda)
+// 🔒 Gerente entra modo lectura (no guarda)
 const READ_ONLY = s.rol === "gerente";
 
-// 🔗 Drive central (abre en otra pestaña)
+// 🔗 Drive (abre en otra pestaña)
 const DRIVE_LINK =
   "https://drive.google.com/drive/folders/1WEKYsaptpUnGCKOszZOKEAovzL5ld7j7?usp=sharing";
 
-// Tipos RRSS
 const TIPOS = [
   { id: "historia", nombre: "Historias", reqKey: "req_historias" },
   { id: "reel", nombre: "Reels", reqKey: "req_reels" },
@@ -27,7 +27,7 @@ const TIPOS = [
   { id: "grupo", nombre: "Grupos", reqKey: "req_grupos" },
 ];
 
-// Auto refresh suave (para que se note “en vivo” sin reventar la DB)
+// ✅ Auto refresh (no hace falta botón “Actualizar”)
 const REFRESH_MS = 8000;
 let timer = null;
 
@@ -43,36 +43,36 @@ init();
    INIT
 ========================= */
 async function init() {
-  // Si entra gerente, habilitamos selector de operador (pro y útil)
-  let usuarioObjetivo = s.usuario;
-
   if (s.rol === "gerente") {
     await initSelectorGerente();
-    usuarioObjetivo = document.getElementById("sel-operador").value || s.usuario;
+    document.getElementById("box-gerente").style.display = "inline-flex";
   }
 
-  await renderAll(usuarioObjetivo);
+  await renderAll(getUsuarioObjetivoActual(), { soft: false });
 
-  // Auto-refresh
-  if (timer) clearInterval(timer);
-  timer = setInterval(async () => {
-    const u = getUsuarioObjetivoActual();
-    await renderAll(u, { soft: true });
-  }, REFRESH_MS);
+  // Auto refresh
+  startAutoRefresh();
 
-  // Pausa si pestaña no visible
+  // Pausar si la pestaña no está visible
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
-      if (timer) clearInterval(timer);
-      timer = null;
-    } else {
-      if (!timer) timer = setInterval(async () => {
-        const u = getUsuarioObjetivoActual();
-        await renderAll(u, { soft: true });
-      }, REFRESH_MS);
+    if (document.hidden) stopAutoRefresh();
+    else {
+      startAutoRefresh();
       renderAll(getUsuarioObjetivoActual(), { soft: true });
     }
   });
+}
+
+function startAutoRefresh() {
+  stopAutoRefresh();
+  timer = setInterval(() => {
+    renderAll(getUsuarioObjetivoActual(), { soft: true });
+  }, REFRESH_MS);
+}
+
+function stopAutoRefresh() {
+  if (timer) clearInterval(timer);
+  timer = null;
 }
 
 function getUsuarioObjetivoActual() {
@@ -81,16 +81,12 @@ function getUsuarioObjetivoActual() {
 }
 
 /* =========================
-   GERENTE: SELECTOR OPERADOR
+   GERENTE: selector de operador
 ========================= */
 async function initSelectorGerente() {
-  const box = document.getElementById("box-gerente");
   const sel = document.getElementById("sel-operador");
 
-  box.style.display = "inline-flex";
-
-  // Traemos usuarios asignados (operadores)
-  // Si tu sistema usa otra tabla para usuarios, lo adaptamos después.
+  // Tomamos operadores de usuarios_asignado (ya existe en tu sistema)
   const { data, error } = await sb
     .from("usuarios_asignado")
     .select("usuario")
@@ -98,7 +94,6 @@ async function initSelectorGerente() {
 
   if (error) {
     console.error(error);
-    // si falla, igual dejamos al gerente ver su propio usuario
     sel.innerHTML = `<option value="${s.usuario}">${s.usuario}</option>`;
     return;
   }
@@ -109,33 +104,31 @@ async function initSelectorGerente() {
     ? unique.map(u => `<option value="${u}">${u}</option>`).join("")
     : `<option value="${s.usuario}">${s.usuario}</option>`;
 
-  sel.addEventListener("change", async () => {
-    await renderAll(getUsuarioObjetivoActual());
+  sel.addEventListener("change", () => {
+    renderAll(getUsuarioObjetivoActual(), { soft: false });
   });
 }
 
 /* =========================
-   RENDER PRINCIPAL
+   Render principal
 ========================= */
 async function renderAll(usuario, opts = {}) {
   try {
-    // 1) Cuentas asignadas al operador (ocupada_por)
-    const cuentas = await cargarCuentas(usuario);
+    const [cuentas, plan, linksHoy] = await Promise.all([
+      cargarCuentas(usuario),
+      cargarPlanHoy(usuario),
+      cargarLinksHoy(usuario),
+    ]);
 
-    // 2) Plan de calentamiento (para objetivos)
-    const plan = await cargarPlanHoy(usuario);
-
-    // 3) Links RRSS del día (para contadores/listas)
-    const linksHoy = await cargarLinksHoy(usuario);
-
-    // Render cards
     renderCards(usuario, cuentas, plan, linksHoy, opts.soft === true);
   } catch (e) {
     console.error(e);
-    cont.innerHTML = `<div class="card" style="grid-column: span 12;">
-      <h3 class="card-title">Error</h3>
-      <p class="muted small">No se pudo cargar el Centro de Recursos. Revisá consola (F12).</p>
-    </div>`;
+    cont.innerHTML = `
+      <div class="card" style="grid-column: span 12;">
+        <h3 class="card-title">Error cargando Recursos</h3>
+        <p class="muted small">Revisá consola (F12). Puede ser tabla/permiso/RLS.</p>
+      </div>
+    `;
   }
 }
 
@@ -165,8 +158,7 @@ async function cargarPlanHoy(usuario) {
 }
 
 async function cargarLinksHoy(usuario) {
-  // Tabla nueva que definimos para RRSS:
-  // publicaciones_rrss (historia/reel/muro/grupo)
+  // ✅ Tabla RRSS nueva: publicaciones_rrss
   const { data, error } = await sb
     .from("publicaciones_rrss")
     .select("*")
@@ -184,7 +176,6 @@ async function cargarLinksHoy(usuario) {
 function calcularMeta(tipoId, planes) {
   const t = TIPOS.find(x => x.id === tipoId);
   if (!t) return 0;
-
   let total = 0;
   for (const p of (planes || [])) total += Number(p[t.reqKey] || 0);
   return total;
@@ -196,29 +187,29 @@ function buildStatus(done, meta) {
   return { cls: "info", text: `Pend. ${meta - done}` };
 }
 
-function safeHtml(s) {
-  return String(s || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+function safeHtml(v) {
+  return String(v || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
 }
 
 /* =========================
-   RENDER CARDS
+   Render Cards
 ========================= */
 function renderCards(usuario, cuentas, plan, linksHoy, soft) {
-  // Agrupar links por tipo y por cuenta
-  const byTipo = new Map(); // tipo => array links
+  const byTipo = new Map();
   for (const t of TIPOS) byTipo.set(t.id, []);
-  for (const l of (linksHoy || [])) {
-    if (byTipo.has(l.tipo)) byTipo.get(l.tipo).push(l);
-  }
+  for (const l of (linksHoy || [])) if (byTipo.has(l.tipo)) byTipo.get(l.tipo).push(l);
 
-  // No reventar scroll/inputs en refresh suave:
-  // si soft, guardamos valores actuales de selects/inputs
+  // Guardar estado (no perder lo que el operador está escribiendo)
   const prevState = new Map();
   if (soft) {
     for (const t of TIPOS) {
-      const sel = document.getElementById(`sel-${t.id}`);
-      const inp = document.getElementById(`inp-${t.id}`);
-      prevState.set(t.id, { sel: sel?.value || "", inp: inp?.value || "" });
+      prevState.set(t.id, {
+        sel: document.getElementById(`sel-${t.id}`)?.value || "",
+        inp: document.getElementById(`inp-${t.id}`)?.value || "",
+      });
     }
   }
 
@@ -237,7 +228,7 @@ function renderCards(usuario, cuentas, plan, linksHoy, soft) {
         <div class="card-top">
           <div>
             <h3 class="card-title">${t.nombre}</h3>
-            <div class="muted small">Operador: <b>${safeHtml(usuario)}</b></div>
+            <div class="muted small">Operador: <b>${safeHtml(usuario)}</b>${READ_ONLY ? " <span class='muted'>(lectura)</span>" : ""}</div>
           </div>
 
           <div class="kpis">
@@ -246,7 +237,7 @@ function renderCards(usuario, cuentas, plan, linksHoy, soft) {
           </div>
         </div>
 
-        <div class="progress"><div id="prog-${t.id}" style="width:${pct}%"></div></div>
+        <div class="progress"><div style="width:${pct}%"></div></div>
 
         <div class="row">
           <select id="sel-${t.id}" ${READ_ONLY ? "disabled" : ""}>
@@ -259,7 +250,6 @@ function renderCards(usuario, cuentas, plan, linksHoy, soft) {
 
         <div class="row" style="margin-top:10px;">
           <button class="btn" ${READ_ONLY ? "disabled" : ""} onclick="guardarLink('${t.id}')">Guardar link</button>
-          <button class="btn secondary" onclick="refrescarTipo('${t.id}')">Actualizar</button>
         </div>
 
         <div class="links" id="box-${t.id}">
@@ -269,26 +259,23 @@ function renderCards(usuario, cuentas, plan, linksHoy, soft) {
     `;
   }
 
-  // Restauro selects/inputs si fue refresh suave
-  if (soft) {
-    for (const t of TIPOS) {
-      const st = prevState.get(t.id);
-      if (!st) continue;
-      const sel = document.getElementById(`sel-${t.id}`);
-      const inp = document.getElementById(`inp-${t.id}`);
-      if (sel) sel.value = st.sel;
-      if (inp) inp.value = st.inp;
+  // Enganchar filtros por cuenta (y restauro estado en refresh suave)
+  for (const t of TIPOS) {
+    const sel = document.getElementById(`sel-${t.id}`);
+    const inp = document.getElementById(`inp-${t.id}`);
 
-      // Si hay cuenta seleccionada, filtramos la lista a esa cuenta
-      if (st.sel) {
-        const arr = byTipo.get(t.id) || [];
-        document.getElementById(`box-${t.id}`).innerHTML = renderListaLinks(arr, st.sel);
+    if (soft) {
+      const st = prevState.get(t.id);
+      if (st) {
+        sel.value = st.sel;
+        inp.value = st.inp;
+
+        if (st.sel) {
+          const arr = byTipo.get(t.id) || [];
+          document.getElementById(`box-${t.id}`).innerHTML = renderListaLinks(arr, st.sel);
+        }
       }
-    }
-  } else {
-    // Primera carga: enganchar change para filtrar lista por cuenta
-    for (const t of TIPOS) {
-      const sel = document.getElementById(`sel-${t.id}`);
+    } else {
       sel?.addEventListener("change", () => {
         const cuenta = sel.value || "";
         const arr = byTipo.get(t.id) || [];
@@ -299,13 +286,13 @@ function renderCards(usuario, cuentas, plan, linksHoy, soft) {
 }
 
 function renderListaLinks(arr, cuentaFiltro) {
-  const list = (cuentaFiltro ? arr.filter(x => x.cuenta_fb === cuentaFiltro) : arr);
+  const list = cuentaFiltro ? arr.filter(x => x.cuenta_fb === cuentaFiltro) : arr;
 
   if (!list.length) {
     return `<p class="muted small">Todavía no hay links cargados hoy${cuentaFiltro ? " para esta cuenta" : ""}.</p>`;
   }
 
-  return list.slice(0, 30).map(l => `
+  return list.slice(0, 40).map(l => `
     <div class="link-item">
       <div class="left">
         <span><b>${safeHtml(l.cuenta_fb)}</b></span>
@@ -317,13 +304,8 @@ function renderListaLinks(arr, cuentaFiltro) {
 }
 
 /* =========================
-   ACTIONS
+   Guardar Link
 ========================= */
-window.refrescarTipo = async function(tipo) {
-  // refresca todo (simple y seguro)
-  await renderAll(getUsuarioObjetivoActual());
-};
-
 window.guardarLink = async function(tipo) {
   if (READ_ONLY) return;
 
@@ -337,7 +319,6 @@ window.guardarLink = async function(tipo) {
   if (!cuenta) return alert("Seleccioná una cuenta");
   if (!link.startsWith("http")) return alert("Pegá un link válido (http/https)");
 
-  // Insert en tabla nueva RRSS
   const { error } = await sb.from("publicaciones_rrss").insert({
     usuario,
     cuenta_fb: cuenta,
@@ -348,11 +329,10 @@ window.guardarLink = async function(tipo) {
 
   if (error) {
     console.error(error);
-    alert("Error guardando link. Mirá consola (F12).");
+    alert("Error guardando link. Revisá consola (F12).");
     return;
   }
 
-  // Limpio input y refresco
-  if (inp) inp.value = "";
+  inp.value = "";
   await renderAll(usuario, { soft: true });
 };
