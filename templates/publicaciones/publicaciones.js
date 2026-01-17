@@ -4,16 +4,7 @@ const sb = window.supabaseClient;
 const s = requireSession();
 const today = fmtDateISO(new Date());
 
-const DRIVE_LINK = "https://drive.google.com/drive/folders/1WEKYsaptpUnGCKOszZOKEAovzL5ld7j7?usp=sharing";
-
-const TIPOS = [
-  { id: "historia", nombre: "Historias" },
-  { id: "grupo", nombre: "Grupos" },
-  { id: "muro", nombre: "Muro" },
-  { id: "reel", nombre: "Reels" }
-];
-
-await loadSidebar(s, "recursos");
+await loadSidebar(s, "publicaciones");
 
 // 🔒 Solo operadores
 if (!s || s.rol !== "operador") {
@@ -21,28 +12,44 @@ if (!s || s.rol !== "operador") {
   throw new Error("Acceso denegado");
 }
 
+// 🔗 Drive central
+const DRIVE_LINK = "https://drive.google.com/drive/folders/1WEKYsaptpUnGCKOszZOKEAovzL5ld7j7?usp=sharing";
+
+// Tipos de recursos
+const TIPOS = [
+  { id: "historia", nombre: "Historias" },
+  { id: "reel", nombre: "Reels" },
+  { id: "muro", nombre: "Muro" },
+  { id: "grupo", nombre: "Grupos" }
+];
+
 const cont = document.getElementById("cards-recursos");
 
+init();
+
 /* =========================
-   CARGA PRINCIPAL
+   INIT
 ========================= */
 async function init() {
-  const cuentas = await getCuentas();
-  const plan = await getPlanHoy();
+  const cuentas = await cargarCuentas();
+  const plan = await cargarPlanHoy();
   renderCards(cuentas, plan);
 }
 
-async function getCuentas() {
+/* =========================
+   DATA BASE
+========================= */
+async function cargarCuentas() {
   const { data, error } = await sb
     .from("cuentas_facebook")
-    .select("id,email")
+    .select("email")
     .eq("ocupada_por", s.usuario);
 
   if (error) throw error;
   return data || [];
 }
 
-async function getPlanHoy() {
+async function cargarPlanHoy() {
   const { data, error } = await sb
     .from("calentamiento_plan")
     .select("*")
@@ -54,7 +61,7 @@ async function getPlanHoy() {
 }
 
 /* =========================
-   RENDER DE CARDS
+   RENDER
 ========================= */
 function renderCards(cuentas, planes) {
   cont.innerHTML = "";
@@ -76,11 +83,11 @@ function renderCards(cuentas, planes) {
           ${cuentas.map(c => `<option value="${c.email}">${c.email}</option>`).join("")}
         </select>
 
-        <input type="url" id="link-${t.id}" placeholder="Pegar link aquí..." />
+        <input id="link-${t.id}" type="url" placeholder="Pegá el link acá...">
 
         <button onclick="guardarLink('${t.id}')">Guardar link</button>
 
-        <div class="lista-links" id="lista-${t.id}">
+        <div id="lista-${t.id}" class="lista-links">
           <p class="muted">Cargando...</p>
         </div>
       </div>
@@ -98,8 +105,8 @@ function calcularMeta(tipo, planes) {
 
   planes.forEach(p => {
     if (tipo === "historia") total += p.req_historias || 0;
-    if (tipo === "muro") total += p.req_muro || 0;
     if (tipo === "reel") total += p.req_reels || 0;
+    if (tipo === "muro") total += p.req_muro || 0;
     if (tipo === "grupo") total += p.req_grupos || 0;
   });
 
@@ -113,10 +120,10 @@ window.guardarLink = async function(tipo) {
   const cuenta = document.getElementById(`cuenta-${tipo}`).value;
   const link = document.getElementById(`link-${tipo}`).value.trim();
 
-  if (!cuenta) return alert("Seleccioná una cuenta.");
-  if (!link.startsWith("http")) return alert("Pegá un link válido.");
+  if (!cuenta) return alert("Seleccioná una cuenta");
+  if (!link.startsWith("http")) return alert("Pegá un link válido");
 
-  const { error } = await sb.from("publicaciones_links").insert({
+  const { error } = await sb.from("publicaciones_rrss").insert({
     usuario: s.usuario,
     cuenta_fb: cuenta,
     tipo,
@@ -135,13 +142,13 @@ window.guardarLink = async function(tipo) {
 };
 
 /* =========================
-   CARGAR LINKS
+   CARGAR LINKS DEL DÍA
 ========================= */
 async function cargarLinks(tipo) {
   const box = document.getElementById(`lista-${tipo}`);
 
   const { data, error } = await sb
-    .from("publicaciones_links")
+    .from("publicaciones_rrss")
     .select("*")
     .eq("usuario", s.usuario)
     .eq("tipo", tipo)
@@ -154,7 +161,7 @@ async function cargarLinks(tipo) {
   }
 
   if (!data.length) {
-    box.innerHTML = "<p class='muted'>Todavía no se cargaron links.</p>";
+    box.innerHTML = "<p class='muted'>Todavía no cargaste links.</p>";
     return;
   }
 
@@ -165,5 +172,3 @@ async function cargarLinks(tipo) {
     </div>
   `).join("");
 }
-
-init();
