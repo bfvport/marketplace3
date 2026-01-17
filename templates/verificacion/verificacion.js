@@ -6,175 +6,116 @@ const filtroUsuario = document.getElementById("filtro-usuario");
 const filtroTipo = document.getElementById("filtro-tipo");
 const btnFiltrar = document.getElementById("btn-filtrar");
 
-document.addEventListener("DOMContentLoaded", () => {
-  cargarFiltros();
-  cargarLinks();
-  btnFiltrar?.addEventListener("click", cargarLinks);
+document.addEventListener("DOMContentLoaded", async () => {
+  await cargarOperadores();
+  await cargarLinks();
+  btnFiltrar.addEventListener("click", cargarLinks);
 });
 
-async function cargarFiltros() {
-  // Usuarios
-  const { data: usuarios } = await supabase.from("usuarios").select("id, usuario").order("usuario");
-  if (usuarios && filtroUsuario) {
-    usuarios.forEach(u => {
+async function cargarOperadores(){
+  const { data, error } = await supabase
+    .from("usuarios")
+    .select("usuario, rol")
+    .order("usuario", { ascending: true });
+
+  if (error) return console.error(error);
+
+  data
+    .filter(u => u.rol !== "gerente")
+    .forEach(u => {
       const op = document.createElement("option");
       op.value = u.usuario;
       op.textContent = u.usuario;
       filtroUsuario.appendChild(op);
     });
-  }
-
-  // Tipos (RRSS + Marketplace)
-  if (filtroTipo) {
-    const tipos = [
-      { value: "", label: "Todos los tipos" },
-      { value: "historia", label: "Historias" },
-      { value: "reels", label: "Reels" },
-      { value: "muro", label: "Muro" },
-      { value: "grupo", label: "Grupos" },
-      { value: "marketplace", label: "Marketplace" },
-    ];
-
-    // Si ya tiene opciones en HTML no duplicamos
-    if (filtroTipo.options.length <= 1) {
-      filtroTipo.innerHTML = "";
-      tipos.forEach(t => {
-        const op = document.createElement("option");
-        op.value = t.value;
-        op.textContent = t.label;
-        filtroTipo.appendChild(op);
-      });
-    }
-  }
 }
 
-async function cargarLinks() {
-  if (!tabla) return;
+async function cargarLinks(){
+  tabla.innerHTML = `<tr><td colspan="5" class="muted">Cargando...</td></tr>`;
 
-  tabla.innerHTML = `<tr><td colspan="6">Cargando...</td></tr>`;
+  const fecha = filtroFecha.value || null;
+  const usuario = filtroUsuario.value || null;
+  const tipo = filtroTipo.value || null;
 
-  const fecha = filtroFecha?.value || "";
-  const usuario = filtroUsuario?.value || "";
-  const tipo = filtroTipo?.value || "";
-
-  // 1) Traer RRSS
-  let qRRSS = supabase
+  // 1) RRSS
+  let q1 = supabase
     .from("publicaciones_rrss")
-    .select("id, fecha, created_at, usuario, tipo, link, cuenta_id")
+    .select(`id, fecha, usuario, tipo, link, cuentas_facebook(nombre)`)
     .order("created_at", { ascending: false });
 
-  if (fecha) qRRSS = qRRSS.eq("fecha", fecha);
-  if (usuario) qRRSS = qRRSS.eq("usuario", usuario);
-  if (tipo && tipo !== "marketplace") qRRSS = qRRSS.eq("tipo", tipo);
+  if (fecha) q1 = q1.eq("fecha", fecha);
+  if (usuario) q1 = q1.eq("usuario", usuario);
+  if (tipo && tipo !== "marketplace") q1 = q1.eq("tipo", tipo);
 
-  // 2) Traer Marketplace (tabla distinta)
-  // En tu schema se ve "marketplace_actividad" con campos tipo:
-  // usuario, fecha_publicacion, marketplace_link_..., facebook_account_..., created_at, etc.
-  let qMP = supabase
-    .from("marketplace_actividad")
-    .select(`
-      id,
-      created_at,
-      usuario,
-      fecha_publicacion,
-      marketplace_link_publicacion,
-      facebook_account_uuid,
-      cuenta_fb,
-      titulo
-    `)
-    .order("created_at", { ascending: false });
-
-  // filtros sobre marketplace
-  if (fecha) qMP = qMP.eq("fecha_publicacion", fecha);
-  if (usuario) qMP = qMP.eq("usuario", usuario);
-  // si eligieron un tipo RRSS, NO traemos marketplace
-  if (tipo && tipo !== "marketplace") {
-    // devolvemos vacío a propósito
-    qMP = qMP.limit(0);
-  }
-
-  // 3) Ejecutar en paralelo
-  const [{ data: rrss, error: e1 }, { data: mp, error: e2 }] = await Promise.all([qRRSS, qMP]);
-
-  if (e1) console.error("RRSS error:", e1);
-  if (e2) console.error("Marketplace error:", e2);
-
-  const rrssSafe = Array.isArray(rrss) ? rrss : [];
-  const mpSafe = Array.isArray(mp) ? mp : [];
-
-  // 4) Normalizar Marketplace al mismo formato
-  const mpNorm = mpSafe.map(x => ({
-    origen: "marketplace",
-    id: x.id,
-    created_at: x.created_at || null,
-    fecha: x.fecha_publicacion || null,
-    usuario: x.usuario || "-",
-    tipo: "marketplace",
-    link: x.marketplace_link_publicacion || "-",
-    cuenta_id: x.facebook_account_uuid ?? x.cuenta_fb ?? null,
-    extra: x.titulo ? `Título: ${x.titulo}` : ""
-  }));
-
-  const rrssNorm = rrssSafe.map(x => ({
-    origen: "rrss",
-    id: x.id,
-    created_at: x.created_at || null,
-    fecha: x.fecha || null,
-    usuario: x.usuario || "-",
-    tipo: x.tipo || "-",
-    link: x.link || "-",
-    cuenta_id: x.cuenta_id ?? null,
-    extra: ""
-  }));
-
-  // 5) Unir + ordenar por created_at
-  const all = [...rrssNorm, ...mpNorm].sort((a, b) => {
-    const da = a.created_at ? new Date(a.created_at).getTime() : 0;
-    const db = b.created_at ? new Date(b.created_at).getTime() : 0;
-    return db - da;
-  });
-
-  if (!all.length) {
-    tabla.innerHTML = `<tr><td colspan="6">Sin resultados.</td></tr>`;
+  const { data: rrss, error: e1 } = await q1;
+  if (e1) {
+    console.error(e1);
+    tabla.innerHTML = `<tr><td colspan="5">Error cargando RRSS</td></tr>`;
     return;
   }
 
-  // 6) Mapear cuenta_id -> nombre/email si coincide con cuentas_facebook.id
-  const { data: cuentas } = await supabase
-    .from("cuentas_facebook")
-    .select("id, nombre, email");
+  // 2) Marketplace (de calentamiento_actividad)
+  // Traemos la fila por fecha + usuario y levantamos cualquier campo "marketplace...link"
+  let marketplaceRows = [];
+  if (!tipo || tipo === "marketplace") {
+    let q2 = supabase
+      .from("calentamiento_actividad")
+      .select("*")
+      .order("created_at", { ascending: false });
 
-  const mapCuentas = new Map((cuentas || []).map(c => [String(c.id), c.nombre || c.email || String(c.id)]));
+    if (fecha) q2 = q2.eq("fecha", fecha);
+    if (usuario) q2 = q2.eq("usuario", usuario);
 
-  // 7) Render tabla
+    const { data: ca, error: e2 } = await q2;
+    if (e2) console.error(e2);
+
+    (ca || []).forEach(row => {
+      // detecta campos link de marketplace
+      Object.keys(row).forEach(k => {
+        const key = k.toLowerCase();
+        const val = row[k];
+        if (val && typeof val === "string" && key.includes("marketplace") && key.includes("link")) {
+          marketplaceRows.push({
+            fecha: row.fecha || fecha || "-",
+            usuario: row.usuario || "-",
+            cuenta: row.cuenta_fb || row.cuenta_id || "-",
+            tipo: "marketplace",
+            link: val
+          });
+        }
+      });
+    });
+  }
+
+  // unificamos
+  const unified = [
+    ...(rrss || []).map(l => ({
+      fecha: l.fecha || "-",
+      usuario: l.usuario || "-",
+      cuenta: l.cuentas_facebook?.nombre || "-",
+      tipo: l.tipo || "-",
+      link: l.link || ""
+    })),
+    ...marketplaceRows
+  ];
+
+  if (!unified.length){
+    tabla.innerHTML = `<tr><td colspan="5" class="muted">Sin resultados.</td></tr>`;
+    return;
+  }
+
   tabla.innerHTML = "";
-  all.forEach(l => {
-    const cuentaLabel = l.cuenta_id != null ? (mapCuentas.get(String(l.cuenta_id)) || String(l.cuenta_id)) : "-";
+  unified.forEach(l => {
     const tr = document.createElement("tr");
-
     tr.innerHTML = `
-      <td>${l.fecha || "-"}</td>
+      <td>${l.fecha}</td>
       <td>${l.usuario}</td>
-      <td>${cuentaLabel}</td>
+      <td>${l.cuenta}</td>
       <td>${l.tipo}</td>
-      <td style="max-width:420px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
-        ${l.link && l.link !== "-" ? l.link : "-"}
-        ${l.extra ? `<div style="opacity:.7; font-size:12px; margin-top:4px;">${escapeHtml(l.extra)}</div>` : ""}
-      </td>
       <td>
-        ${l.link && l.link !== "-" ? `<a class="btn-link" href="${l.link}" target="_blank" rel="noopener">Abrir</a>` : "-"}
+        ${l.link ? `<a class="btn-sm" href="${l.link}" target="_blank" rel="noopener">Abrir</a>` : "-"}
       </td>
     `;
     tabla.appendChild(tr);
   });
-}
-
-// Mini escape para no romper la tabla con textos
-function escapeHtml(str){
-  return String(str ?? "")
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
 }

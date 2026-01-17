@@ -2,81 +2,84 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Verificación | Marketplace Manager</title>
 
   <link rel="stylesheet" href="../../assets/css/app.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../assets/js/supabase.js"></script>
-
-  <style>
-    .wrap { padding:22px; }
-
-    .filters { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    select, input {
-      padding:10px 12px; border-radius:12px;
-      border:1px solid rgba(255,255,255,.18);
-      background:#0b1220; color:#e5e7eb;
-    }
-    option { background:#0b1220; color:#e5e7eb; }
-
-    .btn { padding:10px 14px; border-radius:12px; border:1px solid var(--border); background:rgba(255,255,255,.05); color:var(--text); cursor:pointer; font-weight:800; }
-    .btn:hover { background:rgba(255,255,255,.08); }
-
-    .grid { display:grid; grid-template-columns: 1fr; gap:12px; margin-top:12px; }
-    details { border:1px solid rgba(255,255,255,.12); border-radius:14px; background:rgba(255,255,255,.03); padding:10px 12px; }
-    summary { cursor:pointer; font-weight:900; list-style:none; }
-    summary::-webkit-details-marker { display:none; }
-
-    .sub { color:var(--muted); font-size:.9rem; margin-top:4px; }
-    .chip { border:1px solid rgba(255,255,255,.14); border-radius:999px; padding:6px 10px; font-size:.85rem; color:var(--muted); margin-left:8px; display:inline-block; }
-    .list { margin-top:10px; display:grid; gap:8px; }
-    .row { display:flex; justify-content:space-between; gap:10px; align-items:center; border-top:1px solid rgba(255,255,255,.08); padding-top:8px; }
-    .btn-open { padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.18); background:rgba(255,255,255,.05); color:var(--text); text-decoration:none; font-weight:800; }
-    .btn-open:hover { background:rgba(255,255,255,.09); }
-    .cap { max-width:520px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:.9rem; }
-    .pager { display:flex; gap:10px; align-items:center; margin-top:12px; }
-  </style>
 </head>
 
 <body>
-  <div class="layout">
-    <aside id="sidebar-host"></aside>
+  <!-- ✅ Sidebar -->
+  <div id="sidebar-host"></div>
 
-    <main class="main-content">
-      <div class="wrap">
-        <h1>🔎 Verificación</h1>
-        <p class="muted">Solo gerente. Operador no entra.</p>
+  <!-- ✅ Contenido -->
+  <main class="main-content">
+    <div class="container">
+      <h1 style="margin-top:10px;">🔎 Verificación</h1>
+      <p class="muted">Solo gerente. Operador no entra.</p>
 
-        <div class="card">
-          <div class="filters">
-            <input type="date" id="f-fecha" />
-            <select id="f-operador">
-              <option value="">Todos los operadores</option>
-            </select>
-            <select id="f-tipo">
-              <option value="">Todos los tipos</option>
-              <option value="historias">Historias</option>
-              <option value="reels">Reels</option>
-              <option value="muro">Muro</option>
-              <option value="grupos">Grupos</option>
-            </select>
+      <div class="card" style="padding:16px; margin-top:12px;">
+        <label class="muted">Fecha</label>
+        <input id="filtro-fecha" type="date" class="input" />
 
-            <button class="btn" id="btn-aplicar">Aplicar</button>
-          </div>
+        <label class="muted" style="margin-top:10px; display:block;">Operador</label>
+        <select id="filtro-usuario" class="input">
+          <option value="">Todos los operadores</option>
+        </select>
 
-          <div class="pager">
-            <button class="btn" id="btn-prev">◀</button>
-            <div class="muted" id="lbl-page">Página 1</div>
-            <button class="btn" id="btn-next">▶</button>
-          </div>
-        </div>
+        <label class="muted" style="margin-top:10px; display:block;">Tipo</label>
+        <select id="filtro-tipo" class="input">
+          <option value="">Todos los tipos</option>
+          <option value="historias">Historias</option>
+          <option value="reels">Reels</option>
+          <option value="muro">Muro</option>
+          <option value="grupos">Grupos</option>
+          <option value="marketplace">Marketplace</option>
+        </select>
 
-        <div id="host" class="grid"></div>
+        <button id="btn-filtrar" class="btn" style="margin-top:12px;">Aplicar</button>
       </div>
-    </main>
-  </div>
 
-  <script type="module" src="./verificacion.js"></script>
+      <div class="card" style="margin-top:12px; overflow:auto;">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Usuario</th>
+              <th>Cuenta</th>
+              <th>Tipo</th>
+              <th>Link</th>
+            </tr>
+          </thead>
+          <tbody id="tabla-links">
+            <tr><td colspan="5" class="muted">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- ✅ IMPORTANTE: app.js como módulo -->
+  <script type="module">
+    import { requireSession, loadSidebar, fmtDateISO } from "../../assets/js/app.js";
+
+    const s = requireSession();
+    if (!s) throw new Error("Sin sesión");
+
+    // ✅ seguridad: solo gerente
+    if (s.rol !== "gerente"){
+      window.location.replace("../dashboard/dashboard.html");
+    }
+
+    await loadSidebar({ activeKey: "verificacion", basePath: "../" });
+
+    // set fecha por defecto hoy
+    const f = document.getElementById("filtro-fecha");
+    if (f) f.value = fmtDateISO(new Date());
+  </script>
+
+  <script src="verificacion.js"></script>
 </body>
 </html>

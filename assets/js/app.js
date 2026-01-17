@@ -126,3 +126,19 @@ function initSidebarToggle(){
     localStorage.setItem("sb_collapsed", isCollapsed ? "1" : "0");
   });
 }
+function initSidebarToggle(){
+  const btn = document.getElementById("sb-toggle");
+  if(!btn) return;
+
+  const saved = localStorage.getItem("sb_collapsed") === "1";
+  document.body.classList.toggle("sb-collapsed", saved);
+
+  const icon = btn.querySelector("span");
+  if (icon) icon.textContent = saved ? "▶" : "◀";
+
+  btn.addEventListener("click", () => {
+    const isCollapsed = document.body.classList.toggle("sb-collapsed");
+    localStorage.setItem("sb_collapsed", isCollapsed ? "1" : "0");
+    if (icon) icon.textContent = isCollapsed ? "▶" : "◀";
+  });
+}
