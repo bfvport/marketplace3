@@ -1,97 +1,55 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Verificación | Marketplace Manager</title>
+<main class="page vf-page">
+  <header class="vf-head">
+    <h1 class="vf-title">🔎 Verificación</h1>
+    <p class="vf-sub">Solo gerente. Acá se ven links de RRSS + Marketplace.</p>
+  </header>
 
-  <link rel="stylesheet" href="../../assets/css/app.css" />
-</head>
+  <section class="vf-card">
+    <div class="vf-filters">
+      <div class="vf-field">
+        <label for="vf-fecha">Fecha</label>
+        <input id="vf-fecha" type="date" />
+      </div>
 
-<body>
-  <!-- Sidebar -->
-  <div id="sidebar-host"></div>
+      <div class="vf-field">
+        <label for="vf-operador">Operador</label>
+        <select id="vf-operador">
+          <option value="">Todos los operadores</option>
+        </select>
+      </div>
 
-  <!-- Contenido -->
-  <main class="main-content">
-    <div class="container">
-      <header class="page-head">
-        <h1>🔎 Verificación</h1>
-        <p class="muted">Solo gerente. Acá se ven links de RRSS + Marketplace.</p>
-      </header>
+      <div class="vf-field">
+        <label for="vf-tipo">Tipo</label>
+        <select id="vf-tipo">
+          <option value="">Todos los tipos</option>
+        </select>
+      </div>
 
-      <section class="card card-pad">
-        <div class="grid-filtros">
-          <div class="field">
-            <label for="filtro-fecha">Fecha</label>
-            <input type="date" id="filtro-fecha" />
-          </div>
-
-          <div class="field">
-            <label for="filtro-usuario">Operador</label>
-            <select id="filtro-usuario">
-              <option value="">Todos los operadores</option>
-            </select>
-          </div>
-
-          <div class="field">
-            <label for="filtro-tipo">Tipo</label>
-            <select id="filtro-tipo">
-              <option value="">Todos los tipos</option>
-              <option value="historias">Historias</option>
-              <option value="muro">Muro</option>
-              <option value="reels">Reels</option>
-              <option value="grupos">Grupos</option>
-              <option value="marketplace">Marketplace</option>
-            </select>
-          </div>
-
-          <div class="field field-btn">
-            <button class="btn" id="btn-filtrar" type="button">Aplicar</button>
-          </div>
-        </div>
-      </section>
-
-      <section class="card card-pad" style="margin-top:14px;">
-        <div class="tabla-wrap">
-          <table class="tabla" aria-label="Tabla de verificación">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>Usuario</th>
-                <th>Cuenta</th>
-                <th>Tipo</th>
-                <th>Link</th>
-                <th>Fuente</th>
-              </tr>
-            </thead>
-            <tbody id="tabla-links">
-              <tr><td colspan="6">Cargando...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <button class="btn vf-apply" id="vf-aplicar">Aplicar</button>
     </div>
-  </main>
 
-  <!-- Supabase -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../../assets/js/supabase.js"></script>
+    <div class="vf-table-wrap">
+      <table class="vf-table">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Usuario</th>
+            <th>Cuenta</th>
+            <th>Tipo</th>
+            <th>Link</th>
+            <th class="vf-right">Fuente</th>
+          </tr>
+        </thead>
+        <tbody id="vf-tbody">
+          <tr><td colspan="6" class="vf-empty">Cargando…</td></tr>
+        </tbody>
+      </table>
+    </div>
 
-  <!-- Sidebar + Seguridad -->
-  <script type="module">
-    import { requireSession, loadSidebar } from "../../assets/js/app.js";
-
-    const s = requireSession();
-    if (!s) { /* requireSession ya redirige */ }
-    else if (s.rol !== "gerente") {
-      window.location.replace("../dashboard/dashboard.html");
-    } else {
-      loadSidebar({ activeKey: "verificacion", basePath: "../" });
-    }
-  </script>
-
-  <!-- Lógica -->
-  <script type="module" src="./verificacion.js"></script>
-</body>
-</html>
+    <div class="vf-foot">
+      <button class="btn2" id="vf-prev">◀</button>
+      <span id="vf-page">Página 1</span>
+      <button class="btn2" id="vf-next">▶</button>
+    </div>
+  </section>
+</main>
