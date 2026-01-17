@@ -1085,3 +1085,17 @@ body.sb-collapsed .veri-wrap{ margin-left: 86px; }
     grid-template-columns: 1fr;
   }
 }
+.historial-scroll {
+  max-height: 55vh;      /* altura máxima del historial */
+  overflow-y: auto;     /* activa la ruedita */
+  overflow-x: hidden;
+  border-radius: 10px;
+}
+
+/* Opcional PRO: deja el encabezado fijo */
+.historial-scroll thead th {
+  position: sticky;
+  top: 0;
+  background: #020617;
+  z-index: 10;
+}
