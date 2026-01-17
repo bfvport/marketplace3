@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Verificación de Links | Panel</title>
+  <link rel="stylesheet" href="../../assets/css/app.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+</head>
+<body>
+
+  <div id="sidebar-container"></div>
+
+  <main class="main-content">
+    <h1>🔎 Verificación de links</h1>
+    <p class="muted">Control de publicaciones en redes (historias, reels, muro, grupos)</p>
+
+    <!-- FILTROS -->
+    <div class="card">
+      <div class="filters">
+        <input type="date" id="filtro-fecha">
+        <select id="filtro-usuario">
+          <option value="">Todos los operadores</option>
+        </select>
+
+        <select id="filtro-cuenta">
+          <option value="">Todas las cuentas</option>
+        </select>
+
+        <select id="filtro-tipo">
+          <option value="">Todos los tipos</option>
+          <option value="historia">Historias</option>
+          <option value="reel">Reels</option>
+          <option value="muro">Muro</option>
+          <option value="grupo">Grupos</option>
+        </select>
+
+        <button id="btn-filtrar">Filtrar</button>
+      </div>
+    </div>
+
+    <!-- RESULTADOS -->
+    <div class="card">
+      <table class="tabla">
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Operador</th>
+            <th>Cuenta</th>
+            <th>Tipo</th>
+            <th>Link</th>
+          </tr>
+        </thead>
+        <tbody id="tabla-links"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <script src="verificacion.js"></script>
+  <script>
+    fetch("../sidebar.html")
+      .then(r => r.text())
+      .then(html => document.getElementById("sidebar-container").innerHTML = html);
+  </script>
+
+</body>
+</html>
