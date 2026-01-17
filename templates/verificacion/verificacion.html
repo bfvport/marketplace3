@@ -13,30 +13,14 @@
   <script src="../../assets/js/supabase.js"></script>
 
   <style>
-    /* ============================
-       VERIFICACION: LAYOUT PRO
-       (sidebar a la izquierda + main a la derecha)
-    ============================ */
-
-    /* Usa el layout base (flex) como actividad.html */
     .layout { display: flex; min-height: 100vh; }
-
-    /* IMPORTANTE: el host del sidebar debe ocupar su ancho,
-       pero NO empujar el main abajo. */
     #sidebar-host { flex: 0 0 auto; }
 
-    /* Main a la derecha */
     main.content {
       flex: 1 1 auto;
-      min-width: 0; /* clave para que no se rompa el ancho con tablas */
+      min-width: 0;
     }
 
-    /* Anula cualquier hack viejo de margin-left */
-    .veri-wrap { margin-left: 0 !important; }
-
-    /* ============================
-       UI VERIFICACION
-    ============================ */
     .veri-wrap{
       padding: 18px 22px;
       max-width: 1200px;
@@ -44,17 +28,8 @@
       margin: 0 auto;
     }
 
-    .veri-title{
-      font-size: 28px;
-      font-weight: 800;
-      margin: 0 0 6px 0;
-    }
-
-    .veri-sub{
-      margin: 0 0 16px 0;
-      color: rgba(226,232,240,0.75);
-      font-size: 13px;
-    }
+    .veri-title{ font-size: 28px; font-weight: 800; margin: 0 0 6px 0; }
+    .veri-sub{ margin: 0 0 16px 0; color: rgba(226,232,240,0.75); font-size: 13px; }
 
     .veri-card{
       background: rgba(255,255,255,0.06);
@@ -63,7 +38,6 @@
       padding: 14px;
     }
 
-    /* Filtros arriba, bien prolijos */
     .veri-filters{
       display: grid;
       grid-template-columns: 1.1fr 1fr 1fr auto;
@@ -71,10 +45,9 @@
       align-items: end;
     }
 
-    /* Tabla con scroll interno */
     .veri-table-wrap{
       margin-top: 14px;
-      max-height: 58vh; /* scroll interno */
+      max-height: 58vh;
       overflow: auto;
       border-radius: 12px;
       border: 1px solid rgba(255,255,255,0.08);
@@ -84,7 +57,7 @@
     table.veri-table{
       width: 100%;
       border-collapse: collapse;
-      min-width: 920px; /* si hay muchas columnas, aparece scroll horizontal */
+      min-width: 920px;
     }
 
     .veri-table th,
@@ -96,7 +69,6 @@
       white-space: nowrap;
     }
 
-    /* Header sticky dentro del scroll */
     .veri-table thead th{
       position: sticky;
       top: 0;
@@ -105,9 +77,6 @@
       backdrop-filter: blur(6px);
     }
 
-    .nowrap{ white-space: nowrap; }
-
-    /* Botón estilo app */
     #btn-aplicar{
       height: 42px;
       padding: 10px 14px;
@@ -117,38 +86,17 @@
       color: #e2e8f0;
       cursor: pointer;
     }
-    #btn-aplicar:hover{
-      background: rgba(99,102,241,0.26);
-    }
-
-    /* Tags (si las usás en JS) */
-    .tag{
-      display:inline-flex;
-      align-items:center;
-      gap:6px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.06);
-      font-size: 12px;
-    }
-    .tag.mp{
-      border-color: rgba(251,146,60,0.35);
-      background: rgba(251,146,60,0.10);
-    }
+    #btn-aplicar:hover{ background: rgba(99,102,241,0.26); }
 
     .link-btn{
       color: #60a5fa;
       text-decoration: none;
-      font-weight: 700;
+      font-weight: 800;
     }
     .link-btn:hover{ text-decoration: underline; }
 
-    /* Responsive: en pantallas chicas, filtros a 1 columna */
     @media (max-width: 900px){
-      .veri-filters{
-        grid-template-columns: 1fr;
-      }
+      .veri-filters{ grid-template-columns: 1fr; }
       #btn-aplicar{ width: 100%; }
       table.veri-table{ min-width: 800px; }
     }
@@ -157,10 +105,9 @@
 
 <body>
   <div class="layout">
-    <!-- Sidebar (se inyecta por loadSidebar en verificacion.js) -->
+    <!-- Sidebar -->
     <div id="sidebar-host"></div>
 
-    <!-- Contenido -->
     <main class="content">
       <div class="veri-wrap">
         <div class="veri-title">🔎 Verificación</div>
@@ -199,16 +146,18 @@
             <table class="veri-table">
               <thead>
                 <tr>
-                  <th class="nowrap">Fecha</th>
+                  <th>Fecha</th>
                   <th>Usuario</th>
                   <th>Cuenta</th>
-                  <th class="nowrap">Tipo</th>
-                  <th class="nowrap">Link</th>
-                  <th class="nowrap">Fuente</th>
+                  <th>Tipo</th>
+                  <th>Link</th>
+                  <th>Fuente</th>
                 </tr>
               </thead>
+
+              <!-- ✅ ESTE ID ES EL QUE USA EL JS -->
               <tbody id="veri-tbody">
-                <tr><td colspan="6" class="muted">Cargando…</td></tr>
+                <tr><td colspan="6">Cargando…</td></tr>
               </tbody>
             </table>
           </div>
@@ -217,7 +166,6 @@
     </main>
   </div>
 
-  <!-- Lógica de la pantalla -->
   <script type="module" src="./verificacion.js"></script>
 </body>
 </html>

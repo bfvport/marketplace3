@@ -2,15 +2,17 @@ import { requireSession, loadSidebar } from "../../assets/js/app.js";
 
 const sb = window.supabaseClient;
 
-// tablas (según tu esquema)
+// Tablas reales según tu DB
 const TABLE_RRSS = "publicaciones_rrss";
 const TABLE_MP   = "marketplace_actividad";
 
-const $fecha   = document.getElementById("f-fecha");
-const $operador= document.getElementById("f-operador");
-const $tipo    = document.getElementById("f-tipo");
-const $btn     = document.getElementById("btn-aplicar");
-const $tbody   = document.getElementById("results-body");
+const $fecha    = document.getElementById("f-fecha");
+const $operador = document.getElementById("f-operador");
+const $tipo     = document.getElementById("f-tipo");
+const $btn      = document.getElementById("btn-aplicar");
+
+// ✅ FIX: este ES el tbody del HTML
+const $tbody    = document.getElementById("veri-tbody");
 
 function toISODate(d){
   const pad = (n) => String(n).padStart(2,"0");
@@ -27,13 +29,13 @@ function esc(x){
 }
 
 function setMsg(msg){
-  $tbody.innerHTML = `<tr><td colspan="6" class="muted">${esc(msg)}</td></tr>`;
+  $tbody.innerHTML = `<tr><td colspan="6">${esc(msg)}</td></tr>`;
 }
 
 function rowHTML(r){
   const link = r.link
-    ? `<a href="${esc(r.link)}" target="_blank" rel="noopener">Abrir</a>`
-    : `<span class="muted">-</span>`;
+    ? `<a class="link-btn" href="${esc(r.link)}" target="_blank" rel="noopener">Abrir</a>`
+    : `<span style="opacity:.65">-</span>`;
 
   return `
     <tr>
@@ -48,7 +50,6 @@ function rowHTML(r){
 }
 
 async function loadOperators(){
-  // operadores desde tabla usuarios
   const { data, error } = await sb
     .from("usuarios")
     .select("usuario, rol")
@@ -62,17 +63,17 @@ async function loadOperators(){
   const ops = (data || []).filter(u => u.rol === "operador");
   const current = $operador.value;
 
-  $operador.innerHTML = `<option value="">Todos los operadores</option>` +
+  $operador.innerHTML =
+    `<option value="">Todos los operadores</option>` +
     ops.map(u => `<option value="${esc(u.usuario)}">${esc(u.usuario)}</option>`).join("");
 
   $operador.value = current || "";
 }
 
 async function fetchRRSS({ fecha, operador, tipo }){
-  if (tipo && tipo !== "rrss") return [];
+  // Si el filtro está en marketplace, no traemos RRSS
+  if (tipo === "marketplace") return [];
 
-  // columnas según tu tabla publicaciones_rrss:
-  // usuario, cuenta_fb, tipo, link, fecha
   let q = sb
     .from(TABLE_RRSS)
     .select("usuario, cuenta_fb, tipo, link, fecha")
@@ -81,6 +82,9 @@ async function fetchRRSS({ fecha, operador, tipo }){
 
   if (fecha) q = q.eq("fecha", fecha);
   if (operador) q = q.eq("usuario", operador);
+
+  // Si eligió historias/muro/reels/grupos, filtramos por tipo
+  if (tipo && tipo !== "marketplace") q = q.eq("tipo", tipo);
 
   const { data, error } = await q;
   if (error){
@@ -93,16 +97,15 @@ async function fetchRRSS({ fecha, operador, tipo }){
     fecha: (x.fecha || "").slice(0,10),
     usuario: x.usuario,
     cuenta: x.cuenta_fb,
-    tipo: (x.tipo || "rrss").toString(),
+    tipo: (x.tipo || "").toString(),
     link: x.link
   }));
 }
 
 async function fetchMarketplace({ fecha, operador, tipo }){
+  // Si eligió un tipo distinto a marketplace, no traemos marketplace
   if (tipo && tipo !== "marketplace") return [];
 
-  // columnas según tu tabla marketplace_actividad:
-  // usuario, facebook_account_usada, fecha_publicacion, marketplace_link_publicacion
   let q = sb
     .from(TABLE_MP)
     .select("usuario, facebook_account_usada, fecha_publicacion, marketplace_link_publicacion, created_at")
@@ -111,7 +114,7 @@ async function fetchMarketplace({ fecha, operador, tipo }){
 
   if (operador) q = q.eq("usuario", operador);
 
-  // fecha_publicacion puede ser timestamp; filtramos por rango del día
+  // Filtrado por día (fecha_publicacion es timestamp)
   if (fecha){
     const start = `${fecha}T00:00:00`;
     const end   = `${fecha}T23:59:59`;
@@ -146,8 +149,9 @@ async function render(){
     fetchMarketplace({ fecha, operador, tipo })
   ]);
 
-  const rows = [...rrss, ...mp]
-    .sort((a,b) => (b.fecha || "").localeCompare(a.fecha || ""));
+  const rows = [...rrss, ...mp].sort((a, b) =>
+    (b.fecha || "").localeCompare(a.fecha || "")
+  );
 
   if (!rows.length){
     return setMsg("Sin resultados para esos filtros.");
