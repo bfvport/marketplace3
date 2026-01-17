@@ -1,58 +1,25 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Mis Publicaciones | Marketplace Manager</title>
-    <link rel="stylesheet" href="../../assets/css/app.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="../../assets/js/supabase.js"></script>
-    <style>
-        .resource-card {
-            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
-            padding: 20px; border-radius: 12px; text-align: center;
-        }
-        .count-badge { font-size: 2rem; font-weight: 800; color: white; display: block; margin: 10px 0; }
-        .btn-download { width: 100%; padding: 10px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
-        .loader { color: #60a5fa; font-weight: bold; display: none; margin-bottom: 15px; }
-    </style>
+  <meta charset="UTF-8" />
+  <title>Centro de Recursos | Marketplace Manager</title>
+  <link rel="stylesheet" href="../../assets/css/app.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
 </head>
+
 <body>
-    <div class="layout">
-        <div id="sidebar-host"></div>
-        <main class="content">
-            <h1 style="margin-bottom: 5px;">📥 Centro de Recursos</h1>
-            <div id="subtitle" class="muted" style="margin-bottom: 25px;">Cargando asignación...</div>
-            
-            <div id="loader-main" class="loader">⏳ Obteniendo recursos del servidor...</div>
+  <div id="layout">
+    <aside id="sidebar"></aside>
 
-            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
-                
-                <div class="resource-card" style="border-top: 4px solid #ec4899;">
-                    <h3>📖 Historias</h3>
-                    <div class="muted">Objetivo Diario</div>
-                    <span id="goal-historia" class="count-badge">0</span>
-                    <button class="btn-download" style="background: #ec4899; color: white;" onclick="descargar('historia')">📥 Descargar Pack</button>
-                </div>
+    <main class="main">
+      <h1>📦 Centro de Recursos</h1>
+      <p class="muted">Descargá contenido y cargá los links de lo que vas publicando.</p>
 
-                <div class="resource-card" style="border-top: 4px solid #3b82f6;">
-                    <h3>👥 Grupos</h3>
-                    <div class="muted">Objetivo Diario</div>
-                    <span id="goal-grupos" class="count-badge">0</span>
-                    <button class="btn-download" style="background: #3b82f6; color: white;" onclick="descargar('grupo')">📥 Descargar Pack</button>
-                    <textarea id="txt-grupo" readonly style="width:100%; margin-top:10px; background:#0f172a; color:#ccc; border:none; border-radius:4px; padding:5px; height:60px;" placeholder="Texto para grupos..."></textarea>
-                </div>
+      <div id="cards-recursos" class="grid-recursos"></div>
+    </main>
+  </div>
 
-                <div class="resource-card" style="border-top: 4px solid #f59e0b;">
-                    <h3>🏠 Muro</h3>
-                    <div class="muted">Objetivo Diario</div>
-                    <span id="goal-muro" class="count-badge">0</span>
-                    <button class="btn-download" style="background: #f59e0b; color: black;" onclick="descargar('muro')">📥 Descargar Pack</button>
-                    <textarea id="txt-muro" readonly style="width:100%; margin-top:10px; background:#0f172a; color:#ccc; border:none; border-radius:4px; padding:5px; height:60px;" placeholder="Texto para muro..."></textarea>
-                </div>
-
-            </div>
-        </main>
-    </div>
-    <script type="module" src="./publicaciones.js"></script>
+  <script type="module" src="./recursos.js"></script>
 </body>
 </html>
