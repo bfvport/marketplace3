@@ -2,117 +2,66 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Verificación | Marketplace Manager</title>
 
-  <!-- Estilos globales -->
+  <!-- CSS global -->
   <link rel="stylesheet" href="../../assets/css/app.css" />
 
   <!-- Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../assets/js/supabase.js"></script>
-
-  <!-- Estilos SOLO de esta pantalla -->
-  <style>
-    /* ===== FIX LAYOUT: arriba + scroll tabla ===== */
-
-/* el body ocupa pantalla y arranca arriba */
-html, body{
-  height: 100%;
-}
-
-/* el wrapper arranca arriba, no al medio */
-.veri-wrap{
-  padding: 18px 22px;
-  max-width: 1200px;
-  margin: 0 auto;
-  min-height: calc(100vh - 20px);
-}
-
-/* tarjeta más “arriba” */
-.veri-card{
-  margin-top: 12px;
-}
-
-/* tabla con scroll interno */
-.veri-table-wrap{
-  margin-top: 12px;
-  max-height: 55vh;      /* <- ajustá si querés más/menos alto */
-  overflow: auto;        /* <- scroll interno */
-}
-
-/* header sticky dentro del scroll */
-.veri-table thead th{
-  position: sticky;
-  top: 0;
-  background: rgba(2,6,23,.92);
-  z-index: 2;
-}
-
-/* mejora: si hay muchas columnas, que no rompa */
-.veri-table{
-  min-width: 900px;
-}
-.veri-filters{
-  display:grid;
-  grid-template-columns: 1.1fr .9fr .9fr auto;
-  gap: 12px;
-  align-items:end;
-}
-
-  </style>
 </head>
 
 <body>
-  <!-- IMPORTANTE: este host es el que usa el sidebar loader -->
+  <!-- Sidebar se inyecta acá -->
   <div id="sidebar-host"></div>
 
   <main class="veri-wrap">
-    <div class="veri-title">🔎 Verificación</div>
-    <div class="veri-sub">Solo gerente. Acá se ven links de RRSS + Marketplace.</div>
+    <header class="veri-head">
+      <h1>🔎 Verificación</h1>
+      <p class="muted">Solo gerente. Acá se ven links de RRSS + Marketplace.</p>
+    </header>
 
     <section class="veri-card">
       <div class="veri-filters">
-        <div>
+        <div class="field">
           <label for="f-fecha">Fecha</label>
-          <input id="f-fecha" type="date"/>
+          <input id="f-fecha" type="date" />
         </div>
 
-        <div>
+        <div class="field">
           <label for="f-operador">Operador</label>
           <select id="f-operador">
             <option value="">Todos los operadores</option>
           </select>
         </div>
 
-        <div>
+        <div class="field">
           <label for="f-tipo">Tipo</label>
           <select id="f-tipo">
             <option value="">Todos los tipos</option>
-            <option value="historias">Historias</option>
-            <option value="muro">Muro</option>
-            <option value="reels">Reels</option>
-            <option value="grupos">Grupos</option>
+            <option value="rrss">RRSS</option>
             <option value="marketplace">Marketplace</option>
           </select>
         </div>
 
-        <button id="btn-aplicar">Aplicar</button>
+        <button class="btn-primary" id="btn-aplicar" type="button">Aplicar</button>
       </div>
 
-      <div class="veri-table-wrap" style="margin-top:14px;">
+      <div class="veri-table-scroll">
         <table class="veri-table">
           <thead>
             <tr>
-              <th class="nowrap">Fecha</th>
+              <th>Fecha</th>
               <th>Usuario</th>
               <th>Cuenta</th>
-              <th class="nowrap">Tipo</th>
-              <th class="nowrap">Link</th>
-              <th class="nowrap">Fuente</th>
+              <th>Tipo</th>
+              <th>Link</th>
+              <th>Fuente</th>
             </tr>
           </thead>
-          <tbody id="veri-tbody">
+          <tbody id="results-body">
             <tr><td colspan="6" class="muted">Cargando…</td></tr>
           </tbody>
         </table>
@@ -120,7 +69,7 @@ html, body{
     </section>
   </main>
 
-  <!-- Lógica de la pantalla -->
+  <!-- JS de la pantalla -->
   <script type="module" src="./verificacion.js"></script>
 </body>
 </html>
