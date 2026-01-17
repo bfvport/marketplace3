@@ -10,7 +10,7 @@ const btnPrev = document.getElementById("btn-prev");
 const btnNext = document.getElementById("btn-next");
 const lblPage = document.getElementById("lbl-page");
 
-const PAGE_SIZE = 120; // links por página (ajustable)
+const PAGE_SIZE = 120;
 let page = 0;
 
 // ✅ Guard: operador no entra
@@ -18,19 +18,16 @@ function getSessionSafe(){
   try { return JSON.parse(localStorage.getItem("mp_session_v1") || "null"); }
   catch { return null; }
 }
-
 const sess = getSessionSafe();
 if (!sess || sess.rol !== "gerente"){
   alert("Acceso solo gerente.");
-  window.location.href = "./publicaciones.html";
+  window.location.href = "../publicaciones/publicaciones.html";
 }
 
 init();
 
 async function init(){
-  // fecha default: hoy
-  const now = new Date();
-  const iso = now.toISOString().slice(0,10);
+  const iso = new Date().toISOString().slice(0,10);
   fFecha.value = iso;
 
   await cargarOperadores();
@@ -47,7 +44,8 @@ async function cargarOperadores(){
   if (error) return;
 
   const ops = (data || []).filter(u => u.rol === "operador");
-  fOperador.innerHTML = `<option value="">Todos los operadores</option>` +
+  fOperador.innerHTML =
+    `<option value="">Todos los operadores</option>` +
     ops.map(o => `<option value="${o.usuario}">${o.usuario}</option>`).join("");
 }
 
@@ -71,12 +69,11 @@ async function cargar(){
     host.innerHTML = `<div class="card"><div class="muted">Error: ${error.message}</div></div>`;
     return;
   }
-  if (!data || !data.length){
+  if (!data?.length){
     host.innerHTML = `<div class="card"><div class="muted">Sin resultados.</div></div>`;
     return;
   }
 
-  // Agrupar: operador -> cuenta(email) -> tipo -> links
   const grouped = {};
   for (const r of data){
     const op = r.usuario || "-";
@@ -106,8 +103,7 @@ function renderGrouped(grouped){
     return `
       <details open>
         <summary>${op} <span class="chip">links: ${opCount}</span></summary>
-        <div class="sub">Cuentas asignadas / usadas hoy</div>
-
+        <div class="sub">Cuentas usadas hoy</div>
         ${cuentasKeys.map(ck => renderCuenta(ck, cuentas[ck])).join("")}
       </details>
     `;
@@ -121,19 +117,13 @@ function renderCuenta(cuentaLabel, tiposObj){
   return `
     <details style="margin-top:10px;">
       <summary>${cuentaLabel} <span class="chip">links: ${total}</span></summary>
-
       ${tipos.map(t => renderTipo(t, tiposObj[t])).join("")}
     </details>
   `;
 }
 
 function renderTipo(tipo, rows){
-  const nice = {
-    historias:"Historias",
-    reels:"Reels",
-    muro:"Muro",
-    grupos:"Grupos"
-  }[tipo] || tipo;
+  const nice = { historias:"Historias", reels:"Reels", muro:"Muro", grupos:"Grupos" }[tipo] || tipo;
 
   return `
     <details style="margin-top:10px;">
@@ -143,9 +133,7 @@ function renderTipo(tipo, rows){
           const hhmm = new Date(r.created_at).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
           return `
             <div class="row">
-              <div>
-                <div class="cap">${hhmm} — ${r.link}</div>
-              </div>
+              <div class="cap">${hhmm} — ${r.link}</div>
               <a class="btn-open" href="${r.link}" target="_blank" rel="noopener">Abrir</a>
             </div>
           `;

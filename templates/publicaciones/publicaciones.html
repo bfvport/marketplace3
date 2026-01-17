@@ -5,9 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Centro de Recursos | Marketplace Manager</title>
 
-  <link rel="stylesheet" href="././assets/css/app.css" />
+  <!-- ✅ RUTAS CORRECTAS -->
+  <link rel="stylesheet" href="../../assets/css/app.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="././assets/js/supabase.js"></script>
+  <script src="../../assets/js/supabase.js"></script>
 
   <style>
     .layout { display:flex; min-height:100vh; }
@@ -35,7 +36,7 @@
 
     .row { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
 
-    /* ✅ SELECT MÁS OSCURO + OPCIONES LEGIBLES */
+    /* ✅ SELECT LEGIBLE */
     select, input {
       width:100%;
       padding:10px 12px;
@@ -69,7 +70,7 @@
       display:none;
     }
 
-    /* ✅ TABLITAS DEL DÍA (debajo de cards) */
+    /* ✅ TABLITAS DEL DÍA */
     .day-section { margin-top:16px; }
     .day-grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
     @media (max-width: 1100px){ .day-grid { grid-template-columns: 1fr; } }
@@ -119,10 +120,8 @@
         </div>
       </div>
 
-      <!-- Cards de carga -->
       <div id="cards-recursos" class="grid-recursos"></div>
 
-      <!-- ✅ Tablitas del día (solo HOY) -->
       <div class="day-section">
         <h2 style="margin:18px 0 10px;">📅 Links cargados hoy</h2>
         <div class="day-grid">

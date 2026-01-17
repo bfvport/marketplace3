@@ -1,4 +1,4 @@
-import { requireSession, loadSidebar, fmtDateISO } from "././assets/js/app.js";
+import { requireSession, loadSidebar, fmtDateISO } from "../../assets/js/app.js";
 
 const sb = window.supabaseClient;
 const s = requireSession();
@@ -15,11 +15,10 @@ const TYPES = [
 
 const $ = (id) => document.getElementById(id);
 
-let selectedUsuario = null; // gerente puede cambiar operador
+let selectedUsuario = null;
 let cuentas = [];
 let metas = { historias:0, reels:0, muro:0, grupos:0 };
 let linksHoy = [];
-
 let rtChannel = null;
 
 function showError(msg){
@@ -34,13 +33,12 @@ function clearError(){
   box.style.display = "none";
   box.textContent = "";
 }
-
 function isValidUrl(u){
   try { new URL(u); return true; } catch { return false; }
 }
 
 async function init(){
-  await loadSidebar({ activeKey: "publicaciones", basePath: "./" });
+  await loadSidebar({ activeKey: "publicaciones", basePath: "../" });
 
   $("pill-hoy").textContent = `Hoy: ${today}`;
   $("pill-rol").textContent = `Rol: ${s.rol || "-"}`;
@@ -53,7 +51,7 @@ async function init(){
 
     $("sel-operador").addEventListener("change", async () => {
       selectedUsuario = $("sel-operador").value;
-      await refreshAll({ rerender:true });
+      await refreshAll(true);
       attachRealtime();
     });
   } else {
@@ -61,11 +59,11 @@ async function init(){
   }
 
   $("btn-refresh").addEventListener("click", async () => {
-    await refreshAll({ rerender:false }); // refresca data sin rearmar todo
+    await refreshAll(false);
     refreshAllViews();
   });
 
-  await refreshAll({ rerender:true });
+  await refreshAll(true);
   attachRealtime();
 }
 
@@ -79,11 +77,10 @@ async function cargarOperadoresEnSelect(){
   if (ops.length) sel.value = ops[0].usuario;
 }
 
-async function refreshAll({ rerender }){
+async function refreshAll(rerender){
   clearError();
 
   try{
-    // cuentas del operador elegido
     const resCuentas = await sb
       .from("cuentas_facebook")
       .select("id, email, ocupada_por")
@@ -93,7 +90,6 @@ async function refreshAll({ rerender }){
     if (resCuentas.error) throw resCuentas.error;
     cuentas = resCuentas.data || [];
 
-    // metas
     const resPlan = await sb
       .from("calentamiento_plan")
       .select("req_historias, req_reels, req_muro, req_grupos")
@@ -110,7 +106,6 @@ async function refreshAll({ rerender }){
       metas.grupos    += Number(p.req_grupos || 0);
     }
 
-    // links hoy
     const resLinks = await sb
       .from("publicaciones_rrss")
       .select("id, created_at, fecha, usuario, cuenta_id, tipo, link")
@@ -122,8 +117,8 @@ async function refreshAll({ rerender }){
     linksHoy = resLinks.data || [];
 
     if (rerender) renderCards();
+    refreshAllViews();
 
-    refreshAllViews(); // ✅ actualiza contadores, listas y tablitas sin rearmar inputs
   }catch(e){
     console.error(e);
     showError(`Error cargando Recursos: ${e?.message || e}`);
@@ -179,9 +174,7 @@ function renderCards(forceEmpty=false){
   }).join("");
 
   for (const t of TYPES){
-    const btn = $(`btn-${t.key}`);
-    if (!btn) continue;
-    btn.addEventListener("click", () => guardarLink(t.key));
+    $(`btn-${t.key}`)?.addEventListener("click", () => guardarLink(t.key));
   }
 }
 
@@ -197,13 +190,9 @@ function updateTipoUI(tipo){
   const done = linksHoy.filter(x => x.tipo === tipo).length;
   const pend = Math.max(0, meta - done);
 
-  const elDone = $(`done-${tipo}`);
-  const elMeta = $(`meta-${tipo}`);
-  const elPend = $(`pend-${tipo}`);
-
-  if (elDone) elDone.textContent = done;
-  if (elMeta) elMeta.textContent = meta;
-  if (elPend) elPend.textContent = pend;
+  $(`done-${tipo}`) && ($(`done-${tipo}`).textContent = done);
+  $(`meta-${tipo}`) && ($(`meta-${tipo}`).textContent = meta);
+  $(`pend-${tipo}`) && ($(`pend-${tipo}`).textContent = pend);
 
   const list = $(`list-${tipo}`);
   if (!list) return;
@@ -234,10 +223,7 @@ function updateTipoTable(tipo){
   const body = $(`tbl-${tipo}`);
   if (!body) return;
 
-  const rows = linksHoy
-    .filter(x => x.tipo === tipo)
-    .slice(0, 60); // límite para que no sea eterna
-
+  const rows = linksHoy.filter(x => x.tipo === tipo).slice(0, 60);
   if (!rows.length){
     body.innerHTML = `<tr><td colspan="3" class="muted">Sin links hoy.</td></tr>`;
     return;
@@ -258,51 +244,26 @@ function updateTipoTable(tipo){
 async function guardarLink(tipo){
   clearError();
 
-  const sel = $(`sel-${tipo}`);
+  const cuentaId = Number($(`sel-${tipo}`)?.value || 0);
   const input = $(`in-${tipo}`);
-
-  const cuentaId = Number(sel?.value || 0);
   const link = (input?.value || "").trim();
 
-  if (!cuentaId){
-    showError("Seleccioná una cuenta antes de guardar.");
-    return;
-  }
-  if (!link || !isValidUrl(link)){
-    showError("Pegá un link válido (tiene que empezar con http/https).");
-    return;
-  }
-  if (s.rol === "gerente"){
-    showError("Modo gerente es solo lectura. Guardá links desde el operador.");
-    return;
-  }
+  if (!cuentaId) return showError("Seleccioná una cuenta antes de guardar.");
+  if (!link || !isValidUrl(link)) return showError("Pegá un link válido (http/https).");
+  if (s.rol === "gerente") return showError("Modo gerente es solo lectura.");
 
-  try{
-    const { data, error } = await sb
-      .from("publicaciones_rrss")
-      .insert([{
-        fecha: today,
-        usuario: selectedUsuario,
-        cuenta_id: cuentaId,
-        tipo,
-        link,
-        estado: "ok"
-      }])
-      .select("id, created_at, fecha, usuario, cuenta_id, tipo, link")
-      .single();
+  const { data, error } = await sb
+    .from("publicaciones_rrss")
+    .insert([{ fecha: today, usuario: selectedUsuario, cuenta_id: cuentaId, tipo, link, estado: "ok" }])
+    .select("id, created_at, fecha, usuario, cuenta_id, tipo, link")
+    .single();
 
-    if (error) throw error;
+  if (error) return showError(`No se pudo guardar: ${error.message}`);
 
-    // ✅ Actualización instantánea sin rearmar toda la pantalla
-    input.value = "";
-    linksHoy.unshift(data);
-    updateTipoUI(tipo);
-    updateTipoTable(tipo);
-
-  }catch(e){
-    console.error(e);
-    showError(`No se pudo guardar: ${e?.message || e}`);
-  }
+  input.value = "";
+  if (!linksHoy.some(x => x.id === data.id)) linksHoy.unshift(data);
+  updateTipoUI(tipo);
+  updateTipoTable(tipo);
 }
 
 function attachRealtime(){
@@ -312,18 +273,10 @@ function attachRealtime(){
   }
 
   rtChannel = sb.channel("rt-publicaciones-rrss")
-    .on("postgres_changes", {
-      event: "INSERT",
-      schema: "public",
-      table: "publicaciones_rrss"
-    }, (payload) => {
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "publicaciones_rrss" }, (payload) => {
       const n = payload.new;
-
-      // Solo impacta si es del día + del usuario que estamos mirando
       if (n?.fecha !== today) return;
       if (n?.usuario !== selectedUsuario) return;
-
-      // Evita duplicados (por si guardaste y además llegó realtime)
       if (linksHoy.some(x => x.id === n.id)) return;
 
       linksHoy.unshift(n);
