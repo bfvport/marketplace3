@@ -1,235 +1,301 @@
-import { requireSession, loadSidebar, fmtDateISO, escapeHtml, getSession } from "../../assets/js/app.js";
+import { requireSession, loadSidebar, fmtDateISO } from "../../assets/js/app.js";
 
 const sb = window.supabaseClient;
 const s = requireSession();
-if (!s) throw new Error("Sin sesión");
 
+const DRIVE_URL = "https://drive.google.com/drive/folders/1WEKYsaptpUnGCKOszZOKEAovzL5ld7j7?usp=sharing";
 const today = fmtDateISO(new Date());
-const $ = (id) => document.getElementById(id);
 
-// ✅ Tu app.js espera loadSidebar({ activeKey, basePath })
-await loadSidebar({ activeKey: "publicaciones", basePath: "../" });
-
-$("pill-rol").textContent = `Rol: ${s?.rol || "-"}`;
-$("pill-hoy").textContent = `Hoy: ${today}`;
-
-// Drive en otra pestaña
-const DRIVE_LINK = "https://drive.google.com/drive/folders/1WEKYsaptpUnGCKOszZOKEAovzL5ld7j7?usp=sharing";
-$("btn-drive").href = DRIVE_LINK;
-
-// Auto refresh (gerente ve cambios sin F5)
-const AUTO_MS = 5000;
-let timer = null;
-
-const TIPOS = [
-  { key: "historias", titulo: "Historias", colReq: "req_historias" },
-  { key: "reels",     titulo: "Reels",     colReq: "req_reels" },
-  { key: "muro",      titulo: "Muro",      colReq: "req_muro" },
-  { key: "grupos",    titulo: "Grupos",    colReq: "req_grupos" },
+const TYPES = [
+  { key: "historias", title: "Historias" },
+  { key: "reels",     title: "Reels" },
+  { key: "muro",      title: "Muro" },
+  { key: "grupos",    title: "Grupos" },
 ];
 
-const IS_GERENTE = s.rol === "gerente";
-let usuarioObjetivo = s.usuario;
+const $ = (id) => document.getElementById(id);
 
-init();
+let selectedUsuario = null; // gerente puede cambiar operador
+let cuentas = [];           // cuentas del operador elegido
+let metas = { historias:0, reels:0, muro:0, grupos:0 };
+let linksHoy = [];          // publicaciones_rrss del día (operador elegido)
+
+let rtChannel = null;
+let autoTimer = null;
+
+function showError(msg){
+  const box = $("errorbox");
+  if (!box) return;
+  box.style.display = "block";
+  box.textContent = msg;
+}
+function clearError(){
+  const box = $("errorbox");
+  if (!box) return;
+  box.style.display = "none";
+  box.textContent = "";
+}
+
+function isValidUrl(u){
+  try { new URL(u); return true; } catch { return false; }
+}
 
 async function init(){
-  if (IS_GERENTE){
-    $("ver-operador-wrap").style.display = "inline-flex";
-    await cargarOperadores();
+  // Sidebar (NO tocamos app.js)
+  await loadSidebar({ activeKey: "publicaciones", basePath: "../" });
+
+  $("pill-hoy").textContent = `Hoy: ${today}`;
+  $("pill-rol").textContent = `Rol: ${s.rol || "-"}`;
+  $("btn-drive").href = DRIVE_URL;
+
+  // Selección de operador (solo gerente)
+  if (s.rol === "gerente"){
+    $("wrap-operador").style.display = "block";
+    await cargarOperadoresEnSelect();
+    selectedUsuario = $("sel-operador").value || null;
+
     $("sel-operador").addEventListener("change", async () => {
-      usuarioObjetivo = $("sel-operador").value;
-      await renderAll();
+      selectedUsuario = $("sel-operador").value;
+      await refreshAll();
+      attachRealtime(); // reengancha realtime al cambiar operador
     });
+  } else {
+    selectedUsuario = s.usuario;
   }
 
-  await renderAll();
+  // Primer render
+  await refreshAll();
+  attachRealtime();
+  startAutoRefresh();
 
-  timer = setInterval(renderAll, AUTO_MS);
-
+  // Pausa auto-refresh si pestaña no está visible
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden){
-      if (timer) clearInterval(timer);
-      timer = null;
-    } else {
-      if (!timer) timer = setInterval(renderAll, AUTO_MS);
-      renderAll();
-    }
+    if (document.hidden) stopAutoRefresh();
+    else startAutoRefresh(true);
   });
 }
 
-async function cargarOperadores(){
-  const { data, error } = await sb
-    .from("usuarios")
-    .select("usuario, rol")
-    .order("usuario", { ascending: true });
-
+async function cargarOperadoresEnSelect(){
+  // Usamos tabla usuarios (tiene usuario, rol)
+  const { data, error } = await sb.from("usuarios").select("usuario, rol").order("usuario", { ascending:true });
   if (error) throw error;
 
-  const ops = (data || []).filter(x => x.rol === "operador").map(x => x.usuario);
-  $("sel-operador").innerHTML = ops.map(u => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join("");
+  const ops = (data || []).filter(x => x.rol === "operador");
 
-  if (!ops.includes(usuarioObjetivo)) usuarioObjetivo = ops[0] || usuarioObjetivo;
-  $("sel-operador").value = usuarioObjetivo;
+  const sel = $("sel-operador");
+  sel.innerHTML = ops.map(o => `<option value="${o.usuario}">${o.usuario}</option>`).join("");
+
+  // Por defecto: primero
+  if (ops.length) sel.value = ops[0].usuario;
 }
 
-async function renderAll(){
-  const cont = $("cards-recursos");
-  cont.innerHTML = "";
+async function refreshAll(){
+  clearError();
 
-  const [cuentas, planHoy, linksHoy] = await Promise.all([
-    cargarCuentas(usuarioObjetivo),
-    cargarPlanHoy(usuarioObjetivo),
-    cargarLinksHoy(usuarioObjetivo),
-  ]);
+  try{
+    // 1) cuentas asignadas: cuentas_facebook.ocupada_por = usuario
+    const resCuentas = await sb
+      .from("cuentas_facebook")
+      .select("id, email, ocupada_por")
+      .eq("ocupada_por", selectedUsuario)
+      .order("id", { ascending:true });
 
-  for (const t of TIPOS){
-    const meta = sumCol(planHoy, t.colReq); // meta del calentamiento
-    const cargados = (linksHoy[t.key] || []).length; // evidencia (links)
-    const pendientes = Math.max(0, meta - cargados);
+    if (resCuentas.error) throw resCuentas.error;
+    cuentas = resCuentas.data || [];
 
-    cont.innerHTML += cardHTML(t, usuarioObjetivo, cuentas, meta, cargados, pendientes);
-    renderLinksList(t.key, linksHoy[t.key] || []);
+    // 2) metas desde calentamiento_plan (req_*)
+    const resPlan = await sb
+      .from("calentamiento_plan")
+      .select("req_historias, req_reels, req_muro, req_grupos")
+      .eq("fecha", today)
+      .eq("usuario", selectedUsuario);
 
-    if (!IS_GERENTE){
-      const btn = document.getElementById(`btn-save-${t.key}`);
-      if (btn) btn.onclick = () => guardarLink(t.key);
+    if (resPlan.error) throw resPlan.error;
+
+    // suma por si hay varias filas (por cuenta)
+    metas = { historias:0, reels:0, muro:0, grupos:0 };
+    for (const p of (resPlan.data || [])){
+      metas.historias += Number(p.req_historias || 0);
+      metas.reels     += Number(p.req_reels || 0);
+      metas.muro      += Number(p.req_muro || 0);
+      metas.grupos    += Number(p.req_grupos || 0);
     }
+
+    // 3) links guardados hoy
+    const resLinks = await sb
+      .from("publicaciones_rrss")
+      .select("id, created_at, fecha, usuario, cuenta_id, tipo, link")
+      .eq("fecha", today)
+      .eq("usuario", selectedUsuario)
+      .order("created_at", { ascending:false });
+
+    if (resLinks.error) throw resLinks.error;
+    linksHoy = resLinks.data || [];
+
+    // 4) render cards
+    renderCards();
+
+  }catch(e){
+    console.error(e);
+    showError(`Error cargando Recursos: ${e?.message || e}`);
+    // aunque falle, rendereá base para no quedar en blanco
+    renderCards(true);
   }
 }
 
-function cardHTML(t, usuario, cuentas, meta, cargados, pendientes){
-  const badgePend = pendientes === 0
-    ? `<span class="badge badge-ok">OK</span>`
-    : `<span class="badge badge-warn">Pend. ${pendientes}</span>`;
+function renderCards(forceEmpty=false){
+  const host = $("cards-recursos");
+  if (!host) return;
 
-  const badgeCont = `<span class="badge">${cargados}/${meta}</span>`;
+  const opLabel = (s.rol === "gerente")
+    ? `Operador: ${selectedUsuario || "-"} (lectura)`
+    : `Operador: ${selectedUsuario || "-"}`;
 
-  const disabled = IS_GERENTE ? "disabled" : "";
+  host.innerHTML = TYPES.map(t => {
+    const meta = metas[t.key] || 0;
+    const done = forceEmpty ? 0 : linksHoy.filter(x => x.tipo === t.key).length;
+    const pend = Math.max(0, meta - done);
 
-  const cuentasOptions = cuentas.length
-    ? cuentas.map(c => `<option value="${escapeHtml(c.email)}">${escapeHtml(c.email)}</option>`).join("")
-    : `<option value="">(Sin cuentas asignadas)</option>`;
-
-  return `
-    <div class="card" id="card-${t.key}">
-      <div class="card-head">
-        <div>
-          <h3 class="card-title">${t.titulo}</h3>
-          <div class="card-muted">Operador: <b>${escapeHtml(usuario)}</b>${IS_GERENTE ? " (lectura)" : ""}</div>
+    return `
+      <div class="card" id="card-${t.key}">
+        <div class="card-top">
+          <div>
+            <h3>${t.title}</h3>
+            <div class="muted">${opLabel}</div>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;">
+            <span class="badge">Pend. <strong>${pend}</strong></span>
+            <span class="badge"><strong>${done}</strong> / ${meta}</span>
+          </div>
         </div>
-        <div style="display:flex; gap:8px; align-items:center;">
-          ${badgePend}
-          ${badgeCont}
+
+        <div class="row">
+          <div class="w-40">
+            <select id="sel-${t.key}">
+              <option value="">Seleccionar cuenta</option>
+              ${
+                (cuentas || []).map(c => `<option value="${c.id}">${c.email}</option>`).join("")
+              }
+            </select>
+          </div>
+          <div class="w-60">
+            <input id="in-${t.key}" placeholder="Pegá el link acá..." />
+          </div>
+        </div>
+
+        <div class="actions">
+          <button class="btn btn-primary" id="btn-${t.key}">Guardar link</button>
+        </div>
+
+        <div class="list" id="list-${t.key}">
+          ${renderList(t.key, forceEmpty)}
         </div>
       </div>
+    `;
+  }).join("");
 
-      <div class="row">
-        <select id="sel-${t.key}" ${disabled}>
-          <option value="">Seleccionar cuenta</option>
-          ${cuentasOptions}
-        </select>
-        <input id="inp-${t.key}" type="url" placeholder="Pegá el link acá..." ${disabled} />
-      </div>
-
-      <button class="btn-save" id="btn-save-${t.key}" ${disabled}>
-        Guardar link
-      </button>
-
-      <div class="links" id="links-${t.key}">
-        <div class="muted">Cargando...</div>
-      </div>
-    </div>
-  `;
+  // listeners
+  for (const t of TYPES){
+    const btn = $(`btn-${t.key}`);
+    if (!btn) continue;
+    btn.addEventListener("click", () => guardarLink(t.key));
+  }
 }
 
-function renderLinksList(tipoKey, items){
-  const box = document.getElementById(`links-${tipoKey}`);
-  if (!box) return;
+function renderList(tipo, forceEmpty){
+  if (forceEmpty) return `<div class="muted">No se pudo cargar (revisá el error arriba).</div>`;
 
-  if (!items.length){
-    box.innerHTML = `<div class="muted">Todavía no hay links cargados hoy.</div>`;
-    return;
-  }
+  const rows = linksHoy.filter(x => x.tipo === tipo).slice(0, 8);
+  if (!rows.length) return `<div class="muted">Todavía no hay links cargados hoy.</div>`;
 
-  box.innerHTML = items.map(x => `
-    <div class="link-item">
-      <span title="${escapeHtml(x.cuenta_fb)}">${escapeHtml(x.cuenta_fb)}</span>
-      <a href="${escapeHtml(x.link)}" target="_blank" rel="noopener noreferrer">Ver</a>
+  return rows.map(r => `
+    <div class="item">
+      <div class="muted">${new Date(r.created_at).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"})}</div>
+      <a href="${r.link}" target="_blank" rel="noopener">Ver link</a>
     </div>
   `).join("");
 }
 
-async function cargarCuentas(usuario){
-  const { data, error } = await sb
-    .from("cuentas_facebook")
-    .select("email")
-    .eq("ocupada_por", usuario);
+async function guardarLink(tipo){
+  clearError();
 
-  if (error) throw error;
-  return data || [];
-}
+  const sel = $(`sel-${tipo}`);
+  const input = $(`in-${tipo}`);
 
-async function cargarPlanHoy(usuario){
-  const { data, error } = await sb
-    .from("calentamiento_plan")
-    .select("req_historias, req_reels, req_muro, req_grupos")
-    .eq("usuario", usuario)
-    .eq("fecha", today);
+  const cuentaId = Number(sel?.value || 0);
+  const link = (input?.value || "").trim();
 
-  if (error) throw error;
-  return data || [];
-}
-
-async function cargarLinksHoy(usuario){
-  const out = { historias:[], reels:[], muro:[], grupos:[] };
-
-  const { data, error } = await sb
-    .from("publicaciones_rrss")
-    .select("tipo, cuenta_fb, link, created_at")
-    .eq("usuario", usuario)
-    .eq("fecha", today)
-    .order("created_at", { ascending:false });
-
-  if (error){
-    console.error("Falta tabla publicaciones_rrss o error:", error);
-    return out;
+  if (!cuentaId){
+    showError("Seleccioná una cuenta antes de guardar.");
+    return;
   }
-
-  for (const r of (data || [])){
-    const k = String(r.tipo || "").toLowerCase();
-    if (out[k]) out[k].push(r);
-  }
-  return out;
-}
-
-function sumCol(rows, col){
-  return (rows || []).reduce((acc, r) => acc + Number(r?.[col] || 0), 0);
-}
-
-async function guardarLink(tipoKey){
-  const sel = document.getElementById(`sel-${tipoKey}`);
-  const inp = document.getElementById(`inp-${tipoKey}`);
-  const cuenta = sel?.value || "";
-  const link = (inp?.value || "").trim();
-
-  if (!cuenta) return alert("Seleccioná una cuenta");
-  if (!link.startsWith("http")) return alert("Pegá un link válido (http/https)");
-
-  const { error } = await sb.from("publicaciones_rrss").insert([{
-    usuario: usuarioObjetivo,
-    cuenta_fb: cuenta,
-    tipo: tipoKey,
-    link,
-    fecha: today
-  }]);
-
-  if (error){
-    console.error(error);
-    alert("No se pudo guardar. Mirá consola.");
+  if (!link || !isValidUrl(link)){
+    showError("Pegá un link válido (tiene que empezar con http/https).");
     return;
   }
 
-  inp.value = "";
-  await renderAll();
+  // si es gerente: lectura (no debería guardar)
+  if (s.rol === "gerente"){
+    showError("Modo gerente es solo lectura. Guardá links desde el operador.");
+    return;
+  }
+
+  try{
+    const { error } = await sb.from("publicaciones_rrss").insert([{
+      fecha: today,
+      usuario: selectedUsuario,
+      cuenta_id: cuentaId,
+      tipo,
+      link,
+      estado: "ok"
+    }]);
+
+    if (error) throw error;
+
+    input.value = "";
+    await refreshAll();
+
+  }catch(e){
+    console.error(e);
+    showError(`No se pudo guardar: ${e?.message || e}`);
+  }
 }
+
+function attachRealtime(){
+  // limpia canal anterior
+  if (rtChannel){
+    try { sb.removeChannel(rtChannel); } catch {}
+    rtChannel = null;
+  }
+
+  // realtime: cuando alguien inserta/borrar/actualiza un link -> refresca
+  rtChannel = sb.channel("rt-publicaciones-rrss")
+    .on("postgres_changes", {
+      event: "*",
+      schema: "public",
+      table: "publicaciones_rrss"
+    }, (payload) => {
+      // si es otro usuario, igual refrescamos (gerente ve al toque)
+      // pero evitamos pegar 50 refresh si hay mucho tráfico:
+      debounceRefresh();
+    })
+    .subscribe();
+}
+
+let debTimer = null;
+function debounceRefresh(){
+  if (debTimer) clearTimeout(debTimer);
+  debTimer = setTimeout(() => refreshAll(), 400);
+}
+
+function startAutoRefresh(force=false){
+  if (autoTimer && !force) return;
+  stopAutoRefresh();
+  autoTimer = setInterval(() => refreshAll(), 5000);
+}
+function stopAutoRefresh(){
+  if (autoTimer) clearInterval(autoTimer);
+  autoTimer = null;
+}
+
+init();
