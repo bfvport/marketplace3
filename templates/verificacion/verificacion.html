@@ -14,140 +14,52 @@
 
   <!-- Estilos SOLO de esta pantalla -->
   <style>
-    .veri-wrap{
-      padding: 22px;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
+    /* ===== FIX LAYOUT: arriba + scroll tabla ===== */
 
-    .veri-title{
-      display:flex;
-      align-items:center;
-      gap:10px;
-      margin: 6px 0 4px;
-      font-size: 34px;
-      font-weight: 800;
-    }
-    .veri-sub{
-      opacity:.75;
-      margin-bottom: 16px;
-      font-size: 14px;
-    }
+/* el body ocupa pantalla y arranca arriba */
+html, body{
+  height: 100%;
+}
 
-    .veri-card{
-      background: rgba(15, 23, 42, .35);
-      border: 1px solid rgba(148,163,184,.18);
-      border-radius: 16px;
-      padding: 14px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.25);
-      backdrop-filter: blur(10px);
-    }
+/* el wrapper arranca arriba, no al medio */
+.veri-wrap{
+  padding: 18px 22px;
+  max-width: 1200px;
+  margin: 0 auto;
+  min-height: calc(100vh - 20px);
+}
 
-    .veri-filters{
-      display:grid;
-      grid-template-columns: 1.2fr 1fr 1fr auto;
-      gap: 12px;
-      align-items:end;
-      margin-top: 8px;
-    }
-    .veri-filters label{
-      display:block;
-      font-size: 12px;
-      opacity: .8;
-      margin-bottom: 6px;
-    }
-    .veri-filters input,
-    .veri-filters select{
-      width:100%;
-      padding: 10px 12px;
-      border-radius: 12px;
-      background: rgba(2,6,23,.45);
-      border: 1px solid rgba(148,163,184,.22);
-      color: #e5e7eb;
-      outline: none;
-    }
-    .veri-filters button{
-      padding: 10px 14px;
-      border-radius: 12px;
-      border: 1px solid rgba(148,163,184,.22);
-      background: rgba(59,130,246,.18);
-      color: #e5e7eb;
-      cursor: pointer;
-      font-weight: 700;
-    }
-    .veri-filters button:hover{ filter: brightness(1.1); }
+/* tarjeta más “arriba” */
+.veri-card{
+  margin-top: 12px;
+}
 
-    .veri-table-wrap{
-      margin-top: 12px;
-      border-radius: 16px;
-      overflow: hidden;
-      border: 1px solid rgba(148,163,184,.18);
-      background: rgba(2,6,23,.35);
-    }
+/* tabla con scroll interno */
+.veri-table-wrap{
+  margin-top: 12px;
+  max-height: 55vh;      /* <- ajustá si querés más/menos alto */
+  overflow: auto;        /* <- scroll interno */
+}
 
-    table.veri-table{
-      width:100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
-    .veri-table thead th{
-      text-align:left;
-      padding: 10px 12px;
-      position: sticky;
-      top: 0;
-      background: rgba(2,6,23,.85);
-      border-bottom: 1px solid rgba(148,163,184,.18);
-      z-index: 2;
-      white-space: nowrap;
-    }
-    .veri-table tbody td{
-      padding: 10px 12px;
-      border-bottom: 1px solid rgba(148,163,184,.10);
-      vertical-align: middle;
-    }
-    .veri-table tbody tr:hover{
-      background: rgba(148,163,184,.06);
-    }
+/* header sticky dentro del scroll */
+.veri-table thead th{
+  position: sticky;
+  top: 0;
+  background: rgba(2,6,23,.92);
+  z-index: 2;
+}
 
-    .tag{
-      display:inline-flex;
-      align-items:center;
-      gap:6px;
-      padding: 4px 10px;
-      border-radius: 999px;
-      background: rgba(34,197,94,.12);
-      border: 1px solid rgba(34,197,94,.22);
-      font-size: 12px;
-      white-space: nowrap;
-    }
-    .tag.mp{
-      background: rgba(245,158,11,.12);
-      border-color: rgba(245,158,11,.22);
-    }
+/* mejora: si hay muchas columnas, que no rompa */
+.veri-table{
+  min-width: 900px;
+}
+.veri-filters{
+  display:grid;
+  grid-template-columns: 1.1fr .9fr .9fr auto;
+  gap: 12px;
+  align-items:end;
+}
 
-    .link-btn{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding: 6px 10px;
-      border-radius: 10px;
-      border: 1px solid rgba(148,163,184,.20);
-      background: rgba(59,130,246,.10);
-      color: #c7d2fe;
-      text-decoration:none;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-    .link-btn:hover{ filter: brightness(1.12); }
-
-    .muted{ opacity:.75; }
-    .right{ text-align:right; }
-    .nowrap{ white-space: nowrap; }
-
-    @media (max-width: 980px){
-      .veri-filters{ grid-template-columns: 1fr; }
-      .right{ text-align:left; }
-    }
   </style>
 </head>
 
