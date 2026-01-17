@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Centro de Recursos | Marketplace Manager</title>
 
-  <link rel="stylesheet" href="../../assets/css/app.css" />
+  <link rel="stylesheet" href="././assets/css/app.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../../assets/js/supabase.js"></script>
+  <script src="././assets/js/supabase.js"></script>
 
   <style>
     .layout { display:flex; min-height:100vh; }
@@ -29,19 +29,25 @@
     .card-top { display:flex; justify-content:space-between; gap:10px; align-items:flex-start; }
     .card h3 { margin:0; font-size:1.05rem; }
     .muted { color:var(--muted); font-size:.88rem; }
+
     .badge { display:inline-flex; gap:6px; align-items:center; border:1px solid var(--border); padding:5px 10px; border-radius:999px; font-size:.8rem; color:var(--muted); }
     .badge strong { color:var(--text); }
 
     .row { display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; }
+
+    /* ✅ SELECT MÁS OSCURO + OPCIONES LEGIBLES */
     select, input {
       width:100%;
       padding:10px 12px;
       border-radius:12px;
-      border:1px solid var(--border);
-      background:rgba(0,0,0,.15);
-      color:var(--text);
+      border:1px solid rgba(255,255,255,.18);
+      background:#0b1220;
+      color:#e5e7eb;
       outline:none;
     }
+    select:focus, input:focus { border-color: rgba(99,102,241,.55); }
+    option { background:#0b1220; color:#e5e7eb; }
+
     .w-40 { flex: 1 1 280px; }
     .w-60 { flex: 2 1 420px; }
 
@@ -49,7 +55,7 @@
     .btn-primary { background:rgba(99,102,241,.18); border-color: rgba(99,102,241,.35); }
     .btn-primary:hover { background:rgba(99,102,241,.26); }
 
-    .list { margin-top:12px; border-top:1px solid rgba(255,255,255,.06); padding-top:10px; }
+    .list { margin-top:12px; border-top:1px solid rgba(255,255,255,.06); padding-top:10px; max-height:180px; overflow:auto; }
     .item { display:flex; justify-content:space-between; gap:10px; padding:8px 0; border-bottom:1px solid rgba(255,255,255,.06); }
     .item a { color:#a5b4fc; text-decoration:none; }
     .item a:hover { text-decoration:underline; }
@@ -62,6 +68,27 @@
       margin-bottom:14px;
       display:none;
     }
+
+    /* ✅ TABLITAS DEL DÍA (debajo de cards) */
+    .day-section { margin-top:16px; }
+    .day-grid { display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
+    @media (max-width: 1100px){ .day-grid { grid-template-columns: 1fr; } }
+
+    .tabla-mini { width:100%; border-collapse:collapse; }
+    .tabla-mini th, .tabla-mini td {
+      border-bottom:1px solid rgba(255,255,255,.08);
+      padding:10px 8px;
+      font-size:.9rem;
+      vertical-align:top;
+    }
+    .tabla-mini th { color:var(--muted); text-align:left; font-weight:700; }
+    .btn-open {
+      display:inline-flex; align-items:center; gap:8px;
+      padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,.18);
+      background:rgba(255,255,255,.04); color:var(--text); cursor:pointer; text-decoration:none; font-weight:700;
+    }
+    .btn-open:hover { background:rgba(255,255,255,.08); }
+    .cap { max-width:380px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   </style>
 </head>
 
@@ -75,7 +102,7 @@
       <div class="page-head">
         <div>
           <div class="page-title">Centro de Recursos</div>
-          <div class="page-sub">Pegá y guardá links por cuenta (Historias / Reels / Muro / Grupos). Se actualiza solo.</div>
+          <div class="page-sub">Cargá links por cuenta. Se ven al instante (sin resetear lo que escribís).</div>
         </div>
 
         <div class="toolbar">
@@ -88,10 +115,51 @@
           </div>
 
           <a id="btn-drive" class="btn btn-primary" target="_blank" rel="noopener">Abrir Drive</a>
+          <button id="btn-refresh" class="btn" type="button">Actualizar</button>
         </div>
       </div>
 
+      <!-- Cards de carga -->
       <div id="cards-recursos" class="grid-recursos"></div>
+
+      <!-- ✅ Tablitas del día (solo HOY) -->
+      <div class="day-section">
+        <h2 style="margin:18px 0 10px;">📅 Links cargados hoy</h2>
+        <div class="day-grid">
+          <div class="card">
+            <h3>Historias</h3>
+            <table class="tabla-mini">
+              <thead><tr><th>Hora</th><th>Cuenta</th><th>Acción</th></tr></thead>
+              <tbody id="tbl-historias"></tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3>Reels</h3>
+            <table class="tabla-mini">
+              <thead><tr><th>Hora</th><th>Cuenta</th><th>Acción</th></tr></thead>
+              <tbody id="tbl-reels"></tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3>Muro</h3>
+            <table class="tabla-mini">
+              <thead><tr><th>Hora</th><th>Cuenta</th><th>Acción</th></tr></thead>
+              <tbody id="tbl-muro"></tbody>
+            </table>
+          </div>
+
+          <div class="card">
+            <h3>Grupos</h3>
+            <table class="tabla-mini">
+              <thead><tr><th>Hora</th><th>Cuenta</th><th>Acción</th></tr></thead>
+              <tbody id="tbl-grupos"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
