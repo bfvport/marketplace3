@@ -1,280 +1,189 @@
-import { requireSession, loadSidebar, fmtDateISO } from "../../assets/js/app.js";
+import { requireSession, loadSidebar } from "../../assets/js/app.js";
 
 const sb = window.supabaseClient;
 
-const PAGE_SIZE = 25;
+const $fecha = document.getElementById("f-fecha");
+const $operador = document.getElementById("f-operador");
+const $tipo = document.getElementById("f-tipo");
+const $btn = document.getElementById("btn-aplicar");
+const $tbody = document.getElementById("veri-tbody");
 
-const $ = (id) => document.getElementById(id);
+// Tablas reales (de tu captura)
+const TABLE_RRSS = "publicaciones_rrss";
+const TABLE_MP   = "marketplace_actividad";
 
-const state = {
-  page: 1,
-  total: 0,
-  rows: [],
-  marketplaceTable: null,
-};
-
-function safeText(v){ return (v ?? "").toString(); }
-
-function linkCell(url){
-  const u = safeText(url).trim();
-  if (!u) return "";
-  const safe = u.replaceAll('"', "&quot;");
-  return `<a href="${safe}" target="_blank" rel="noopener">Abrir</a>`;
+function toISODate(d = new Date()){
+  const pad = n => String(n).padStart(2,"0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 }
 
-/**
- * Detecta qué tabla de marketplace existe (porque vos dijiste que está en otra tabla,
- * pero no sabemos el nombre exacto). Probamos varias.
- */
-async function detectMarketplaceTable(){
-  const candidates = [
-    "publicaciones_marketplace",
-    "marketplace_publicaciones",
-    "publicaciones_mp",
-    "marketplace_links",
-    "publicaciones_market",
-  ];
+function escapeHtml(str){
+  return String(str ?? "")
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
 
-  for (const t of candidates){
-    const { error } = await sb.from(t).select("id").limit(1);
-    if (!error) return t;
+// Busca un campo por “candidatos” (para evitar que explote si el nombre exacto cambia)
+function pick(obj, candidates){
+  for (const k of candidates){
+    if (obj && obj[k] !== undefined && obj[k] !== null && obj[k] !== "") return obj[k];
   }
-  return null;
+  return "";
 }
 
-async function cargarOperadores(){
-  const sel = $("vf-operador");
-  if (!sel) return;
+function rowHTML(r){
+  const tag = r.fuente === "Marketplace"
+    ? `<span class="tag mp">🟠 Marketplace</span>`
+    : `<span class="tag">🟢 RRSS</span>`;
 
-  // trae usuarios operadores + (opcional) todos
+  const linkBtn = r.link
+    ? `<a class="link-btn" href="${escapeHtml(r.link)}" target="_blank" rel="noopener">Abrir ↗</a>`
+    : `<span class="muted">—</span>`;
+
+  return `
+    <tr>
+      <td class="nowrap">${escapeHtml(r.fecha || "")}</td>
+      <td>${escapeHtml(r.usuario || "")}</td>
+      <td>${escapeHtml(r.cuenta || "")}</td>
+      <td class="nowrap">${escapeHtml(r.tipo || "")}</td>
+      <td class="nowrap">${linkBtn}</td>
+      <td class="nowrap">${tag}</td>
+    </tr>
+  `;
+}
+
+function setLoading(msg="Cargando…"){
+  $tbody.innerHTML = `<tr><td colspan="6" class="muted">${escapeHtml(msg)}</td></tr>`;
+}
+
+function setEmpty(msg="Sin resultados."){
+  $tbody.innerHTML = `<tr><td colspan="6" class="muted">${escapeHtml(msg)}</td></tr>`;
+}
+
+async function loadOperators(){
+  // Usamos usuarios (tabla que se ve en tu esquema)
   const { data, error } = await sb
     .from("usuarios")
-    .select("usuario, rol")
-    .order("usuario", { ascending: true });
+    .select("usuario,rol")
+    .order("usuario", { ascending:true });
 
   if (error){
     console.error(error);
-    sel.innerHTML = `<option value="">(Error cargando usuarios)</option>`;
     return;
   }
 
-  const ops = (data || []).filter(x => x.rol === "operador").map(x => x.usuario);
+  // solo operadores + gerente si querés (yo dejo todos)
+  const users = (data || []).map(u => u.usuario).filter(Boolean);
 
-  sel.innerHTML = `
-    <option value="">Todos los operadores</option>
-    ${ops.map(u => `<option value="${u}">${u}</option>`).join("")}
-  `;
+  // limpiar y cargar
+  $operador.innerHTML = `<option value="">Todos los operadores</option>` +
+    users.map(u => `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`).join("");
 }
 
-function cargarTipos(){
-  const sel = $("vf-tipo");
-  if (!sel) return;
-
-  // “Marketplace” es un tipo especial, lo mostramos igual
-  sel.innerHTML = `
-    <option value="">Todos los tipos</option>
-    <option value="historias">Historias</option>
-    <option value="reels">Reels</option>
-    <option value="muro">Muro</option>
-    <option value="grupos">Grupos</option>
-    <option value="marketplace">Marketplace</option>
-  `;
-}
-
-async function fetchRRSS({ fecha, usuario, tipo }){
-  let q = sb
-    .from("publicaciones_rrss")
-    .select("id, fecha, usuario, cuenta_id, tipo, link, created_at")
-    .order("created_at", { ascending: false });
+async function fetchRRSS({ fecha, operador, tipo }){
+  // RRSS: columnas vistas en tu tabla: usuario, cuenta_fb, tipo, link, fecha
+  let q = sb.from(TABLE_RRSS).select("*").order("id", { ascending:false });
 
   if (fecha) q = q.eq("fecha", fecha);
-  if (usuario) q = q.eq("usuario", usuario);
+  if (operador) q = q.eq("usuario", operador);
   if (tipo && tipo !== "marketplace") q = q.eq("tipo", tipo);
 
   const { data, error } = await q;
-  if (error) throw error;
-
-  // cuenta_id -> mail (join manual, porque supabase-js simple)
-  const cuentaIds = [...new Set((data || []).map(x => x.cuenta_id).filter(Boolean))];
-  let cuentasMap = new Map();
-  if (cuentaIds.length){
-    const { data: cuentas, error: e2 } = await sb
-      .from("cuentas_facebook")
-      .select("id,email")
-      .in("id", cuentaIds);
-
-    if (!e2){
-      (cuentas || []).forEach(c => cuentasMap.set(c.id, c.email));
-    }
+  if (error){
+    console.error("RRSS error:", error);
+    return [];
   }
 
-  return (data || []).map(r => ({
-    fecha: r.fecha || "",
-    usuario: r.usuario || "",
-    cuenta: cuentasMap.get(r.cuenta_id) || `#${r.cuenta_id ?? ""}`,
-    tipo: r.tipo || "",
-    link: r.link || "",
+  return (data || []).map(x => ({
     fuente: "RRSS",
-    created_at: r.created_at || null,
+    fecha: pick(x, ["fecha", "created_at"]),
+    usuario: pick(x, ["usuario"]),
+    cuenta: pick(x, ["cuenta_fb", "cuenta", "cuenta_id"]),
+    tipo: pick(x, ["tipo"]),
+    link: pick(x, ["link", "url"])
   }));
 }
 
-async function fetchMarketplace({ fecha, usuario }){
-  if (!state.marketplaceTable) return [];
+async function fetchMarketplace({ fecha, operador, tipo }){
+  if (tipo && tipo !== "marketplace") return []; // si filtran rrss, no trae marketplace
 
-  // Intentamos columnas típicas (porque puede variar tu esquema)
-  // Primero probamos campos comunes; si falla, devolvemos vacío sin romper.
-  const tryQueries = [
-    () => sb.from(state.marketplaceTable).select("id, fecha, usuario, cuenta_fb, link, created_at").order("created_at",{ascending:false}),
-    () => sb.from(state.marketplaceTable).select("id, fecha, usuario, cuenta, link, created_at").order("created_at",{ascending:false}),
-    () => sb.from(state.marketplaceTable).select("id, fecha, usuario, cuenta_id, link, created_at").order("created_at",{ascending:false}),
-  ];
+  // Marketplace: tabla marketplace_actividad (tu captura)
+  let q = sb.from(TABLE_MP).select("*").order("id", { ascending:false });
 
-  let data = null;
+  // fecha_publicacion es timestamp (en tu esquema). Si querés filtrar por día:
+  // hacemos rango [fecha 00:00, fecha+1 00:00)
+  if (fecha){
+    const from = `${fecha}T00:00:00`;
+    const toDate = new Date(fecha);
+    toDate.setDate(toDate.getDate() + 1);
+    const to = `${toISODate(toDate)}T00:00:00`;
 
-  for (const make of tryQueries){
-    let q = make();
-    if (fecha) q = q.eq("fecha", fecha);
-    if (usuario) q = q.eq("usuario", usuario);
-
-    const res = await q;
-    if (!res.error){
-      data = res.data || [];
-      break;
-    }
+    q = q.gte("fecha_publicacion", from).lt("fecha_publicacion", to);
   }
 
-  if (!data) return [];
+  if (operador) q = q.eq("usuario", operador);
 
-  return data.map(r => ({
-    fecha: r.fecha || "",
-    usuario: r.usuario || "",
-    cuenta: r.cuenta_fb || r.cuenta || (r.cuenta_id ? `#${r.cuenta_id}` : "-"),
-    tipo: "marketplace",
-    link: r.link || "",
+  const { data, error } = await q;
+  if (error){
+    console.error("Marketplace error:", error);
+    return [];
+  }
+
+  return (data || []).map(x => ({
     fuente: "Marketplace",
-    created_at: r.created_at || null,
+    fecha: String(pick(x, ["fecha_publicacion", "created_at"])).slice(0,10), // YYYY-MM-DD
+    usuario: pick(x, ["usuario"]),
+    cuenta: pick(x, ["facebook_account_usada", "facebook_account_utilizada", "facebook_account", "cuenta_fb", "cuenta"]),
+    tipo: "marketplace",
+    link: pick(x, ["marketplace_link_publicacion", "marketplace_link", "link"])
   }));
 }
 
-function render(){
-  const tbody = $("vf-tbody");
-  const info = $("vf-info");
-  const page = $("vf-page");
-  if (!tbody || !info || !page) return;
+async function render(){
+  const fecha = $fecha.value || "";
+  const operador = $operador.value || "";
+  const tipo = $tipo.value || "";
 
-  const start = (state.page - 1) * PAGE_SIZE;
-  const end = start + PAGE_SIZE;
-  const slice = state.rows.slice(start, end);
+  setLoading("Cargando datos…");
 
-  info.textContent = `Resultados: ${state.rows.length} | Mostrando ${slice.length} | Página ${state.page}`;
+  const [rrss, mp] = await Promise.all([
+    fetchRRSS({ fecha, operador, tipo }),
+    fetchMarketplace({ fecha, operador, tipo })
+  ]);
 
-  if (!slice.length){
-    tbody.innerHTML = `<tr><td colspan="6" class="muted">Sin resultados.</td></tr>`;
-    page.textContent = `Página ${state.page}`;
-    return;
-  }
+  // juntar y ordenar por fecha desc (simple)
+  const rows = [...rrss, ...mp].sort((a,b) => (b.fecha || "").localeCompare(a.fecha || ""));
 
-  tbody.innerHTML = slice.map(r => `
-    <tr>
-      <td title="${safeText(r.fecha)}">${safeText(r.fecha)}</td>
-      <td title="${safeText(r.usuario)}">${safeText(r.usuario)}</td>
-      <td title="${safeText(r.cuenta)}">${safeText(r.cuenta)}</td>
-      <td title="${safeText(r.tipo)}">${safeText(r.tipo)}</td>
-      <td>${linkCell(r.link)}</td>
-      <td title="${safeText(r.fuente)}">${safeText(r.fuente)}</td>
-    </tr>
-  `).join("");
+  if (!rows.length) return setEmpty("Sin resultados para esos filtros.");
 
-  page.textContent = `Página ${state.page}`;
-}
-
-async function aplicar(){
-  const fechaEl = $("vf-fecha");
-  const opEl = $("vf-operador");
-  const tipoEl = $("vf-tipo");
-  const tbody = $("vf-tbody");
-  if (!fechaEl || !opEl || !tipoEl || !tbody) return;
-
-  const fecha = fechaEl.value || "";
-  const usuario = opEl.value || "";
-  const tipo = tipoEl.value || "";
-
-  tbody.innerHTML = `<tr><td colspan="6" class="muted">Cargando…</td></tr>`;
-
-  try{
-    // Si el tipo es marketplace, no traemos RRSS (porque no aplica)
-    const rrss = (tipo === "marketplace") ? [] : await fetchRRSS({ fecha, usuario, tipo });
-    const mp   = (tipo && tipo !== "marketplace") ? [] : await fetchMarketplace({ fecha, usuario });
-
-    // Merge y orden por created_at (si existe)
-    state.rows = [...rrss, ...mp].sort((a,b) => {
-      const da = a.created_at ? new Date(a.created_at).getTime() : 0;
-      const db = b.created_at ? new Date(b.created_at).getTime() : 0;
-      return db - da;
-    });
-
-    state.page = 1;
-    render();
-
-  }catch(e){
-    console.error(e);
-    tbody.innerHTML = `<tr><td colspan="6" class="muted">Error cargando: ${safeText(e?.message || e)}</td></tr>`;
-  }
-}
-
-function initPager(){
-  const prev = $("vf-prev");
-  const next = $("vf-next");
-  if (!prev || !next) return;
-
-  prev.addEventListener("click", () => {
-    if (state.page <= 1) return;
-    state.page--;
-    render();
-  });
-
-  next.addEventListener("click", () => {
-    const maxPage = Math.max(1, Math.ceil(state.rows.length / PAGE_SIZE));
-    if (state.page >= maxPage) return;
-    state.page++;
-    render();
-  });
+  $tbody.innerHTML = rows.map(rowHTML).join("");
 }
 
 async function init(){
+  // sesión + rol
   const s = requireSession();
   if (!s) return;
 
   // Solo gerente
   if (s.rol !== "gerente"){
-    document.body.innerHTML = "<div style='padding:24px;color:#fff'>Solo gerente.</div>";
+    alert("Solo gerente puede ingresar a Verificación.");
+    location.replace("../dashboard/dashboard.html");
     return;
   }
 
+  // Sidebar (ruta correcta desde /templates/verificacion/)
   await loadSidebar({ activeKey: "verificacion", basePath: "../" });
 
-  // Defaults
-  const today = fmtDateISO(new Date());
-  const fechaEl = $("vf-fecha");
-  if (fechaEl) fechaEl.value = today;
+  // fecha default hoy
+  $fecha.value = toISODate(new Date());
 
-  cargarTipos();
-  await cargarOperadores();
+  await loadOperators();
+  await render();
 
-  // Detect marketplace table (si no existe, igual funciona RRSS)
-  state.marketplaceTable = await detectMarketplaceTable();
-  console.log("Marketplace table:", state.marketplaceTable);
-
-  // Listeners
-  const btn = $("vf-apply");
-  if (btn) btn.addEventListener("click", aplicar);
-
-  initPager();
-
-  // Primera carga
-  await aplicar();
+  $btn.addEventListener("click", render);
 }
 
-document.addEventListener("DOMContentLoaded", init);
-
+init();
