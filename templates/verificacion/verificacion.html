@@ -2,17 +2,17 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Verificación | Marketplace Manager</title>
 
-  <!-- ✅ RUTAS CORRECTAS -->
   <link rel="stylesheet" href="../../assets/css/app.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../assets/js/supabase.js"></script>
 
   <style>
     .wrap { padding:22px; }
-    .filters { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 
+    .filters { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
     select, input {
       padding:10px 12px; border-radius:12px;
       border:1px solid rgba(255,255,255,.18);
@@ -27,6 +27,7 @@
     details { border:1px solid rgba(255,255,255,.12); border-radius:14px; background:rgba(255,255,255,.03); padding:10px 12px; }
     summary { cursor:pointer; font-weight:900; list-style:none; }
     summary::-webkit-details-marker { display:none; }
+
     .sub { color:var(--muted); font-size:.9rem; margin-top:4px; }
     .chip { border:1px solid rgba(255,255,255,.14); border-radius:999px; padding:6px 10px; font-size:.85rem; color:var(--muted); margin-left:8px; display:inline-block; }
     .list { margin-top:10px; display:grid; gap:8px; }
@@ -39,46 +40,43 @@
 </head>
 
 <body>
-  <div id="sidebar-container"></div>
+  <div class="layout">
+    <aside id="sidebar-host"></aside>
 
-  <main class="main-content">
-    <div class="wrap">
-      <h1>🔎 Verificación</h1>
-      <p class="muted">Vista de gerente. Operador no entra.</p>
+    <main class="main-content">
+      <div class="wrap">
+        <h1>🔎 Verificación</h1>
+        <p class="muted">Solo gerente. Operador no entra.</p>
 
-      <div class="card">
-        <div class="filters">
-          <input type="date" id="f-fecha" />
-          <select id="f-operador">
-            <option value="">Todos los operadores</option>
-          </select>
-          <select id="f-tipo">
-            <option value="">Todos los tipos</option>
-            <option value="historias">Historias</option>
-            <option value="reels">Reels</option>
-            <option value="muro">Muro</option>
-            <option value="grupos">Grupos</option>
-          </select>
+        <div class="card">
+          <div class="filters">
+            <input type="date" id="f-fecha" />
+            <select id="f-operador">
+              <option value="">Todos los operadores</option>
+            </select>
+            <select id="f-tipo">
+              <option value="">Todos los tipos</option>
+              <option value="historias">Historias</option>
+              <option value="reels">Reels</option>
+              <option value="muro">Muro</option>
+              <option value="grupos">Grupos</option>
+            </select>
 
-          <button class="btn" id="btn-aplicar">Aplicar</button>
+            <button class="btn" id="btn-aplicar">Aplicar</button>
+          </div>
+
+          <div class="pager">
+            <button class="btn" id="btn-prev">◀</button>
+            <div class="muted" id="lbl-page">Página 1</div>
+            <button class="btn" id="btn-next">▶</button>
+          </div>
         </div>
 
-        <div class="pager">
-          <button class="btn" id="btn-prev">◀</button>
-          <div class="muted" id="lbl-page">Página 1</div>
-          <button class="btn" id="btn-next">▶</button>
-        </div>
+        <div id="host" class="grid"></div>
       </div>
+    </main>
+  </div>
 
-      <div id="host" class="grid"></div>
-    </div>
-  </main>
-
-  <script src="./verificacion.js"></script>
-  <script>
-    fetch("../sidebar.html")
-      .then(r => r.text())
-      .then(html => document.getElementById("sidebar-container").innerHTML = html);
-  </script>
+  <script type="module" src="./verificacion.js"></script>
 </body>
 </html>
