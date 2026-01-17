@@ -1,155 +1,280 @@
-import { escapeHtml, fmtDateISO } from "../../assets/js/app.js";
+import { requireSession, loadSidebar, fmtDateISO } from "../../assets/js/app.js";
 
-const supabase = window.supabaseClient;
+const sb = window.supabaseClient;
 
-const tabla = document.getElementById("tabla-links");
-const filtroFecha = document.getElementById("filtro-fecha");
-const filtroUsuario = document.getElementById("filtro-usuario");
-const filtroTipo = document.getElementById("filtro-tipo");
-const btnFiltrar = document.getElementById("btn-filtrar");
+const PAGE_SIZE = 25;
 
-document.addEventListener("DOMContentLoaded", () => {
-  // por default: hoy
-  if (!filtroFecha.value) filtroFecha.value = fmtDateISO(new Date());
+const $ = (id) => document.getElementById(id);
 
-  cargarFiltros();
-  cargarTodo();
+const state = {
+  page: 1,
+  total: 0,
+  rows: [],
+  marketplaceTable: null,
+};
 
-  btnFiltrar.addEventListener("click", cargarTodo);
-});
+function safeText(v){ return (v ?? "").toString(); }
 
-async function cargarFiltros() {
-  try {
-    const { data: usuarios, error } = await supabase
-      .from("usuarios")
-      .select("usuario")
-      .order("usuario", { ascending: true });
+function linkCell(url){
+  const u = safeText(url).trim();
+  if (!u) return "";
+  const safe = u.replaceAll('"', "&quot;");
+  return `<a href="${safe}" target="_blank" rel="noopener">Abrir</a>`;
+}
 
-    if (error) throw error;
+/**
+ * Detecta qué tabla de marketplace existe (porque vos dijiste que está en otra tabla,
+ * pero no sabemos el nombre exacto). Probamos varias.
+ */
+async function detectMarketplaceTable(){
+  const candidates = [
+    "publicaciones_marketplace",
+    "marketplace_publicaciones",
+    "publicaciones_mp",
+    "marketplace_links",
+    "publicaciones_market",
+  ];
 
-    (usuarios || []).forEach(u => {
-      const op = document.createElement("option");
-      op.value = u.usuario;
-      op.textContent = u.usuario;
-      filtroUsuario.appendChild(op);
-    });
-  } catch (e) {
-    console.error("Error cargando filtros:", e);
+  for (const t of candidates){
+    const { error } = await sb.from(t).select("id").limit(1);
+    if (!error) return t;
   }
+  return null;
 }
 
-function getDayRangeISO(dateStr) {
-  // dateStr: YYYY-MM-DD
-  const start = new Date(`${dateStr}T00:00:00`);
-  const end = new Date(`${dateStr}T23:59:59.999`);
-  return { startISO: start.toISOString(), endISO: end.toISOString() };
-}
+async function cargarOperadores(){
+  const sel = $("vf-operador");
+  if (!sel) return;
 
-async function cargarTodo() {
-  tabla.innerHTML = `<tr><td colspan="6">Cargando...</td></tr>`;
+  // trae usuarios operadores + (opcional) todos
+  const { data, error } = await sb
+    .from("usuarios")
+    .select("usuario, rol")
+    .order("usuario", { ascending: true });
 
-  const fecha = filtroFecha.value;
-  const usuario = filtroUsuario.value;
-  const tipo = filtroTipo.value; // historias/muro/reels/grupos/marketplace
-
-  try {
-    const [rrss, mp] = await Promise.all([
-      (tipo === "marketplace" ? Promise.resolve([]) : cargarRRSS({ fecha, usuario, tipo })),
-      (tipo && tipo !== "marketplace" ? Promise.resolve([]) : cargarMarketplace({ fecha, usuario }))
-    ]);
-
-    const rows = [...rrss, ...mp].sort((a, b) => (b.ts || 0) - (a.ts || 0));
-
-    if (!rows.length) {
-      tabla.innerHTML = `<tr><td colspan="6">No hay resultados</td></tr>`;
-      return;
-    }
-
-    tabla.innerHTML = "";
-    for (const r of rows) {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${escapeHtml(r.fechaTxt || "-")}</td>
-        <td>${escapeHtml(r.usuario || "-")}</td>
-        <td>${escapeHtml(r.cuenta || "-")}</td>
-        <td>${escapeHtml(r.tipo || "-")}</td>
-        <td>${r.link ? `<a href="${escapeHtml(r.link)}" target="_blank" rel="noopener">Abrir</a>` : "-"}</td>
-        <td>${escapeHtml(r.fuente || "-")}</td>
-      `;
-      tabla.appendChild(tr);
-    }
-
-  } catch (e) {
-    console.error(e);
-    tabla.innerHTML = `<tr><td colspan="6">Error cargando datos</td></tr>`;
+  if (error){
+    console.error(error);
+    sel.innerHTML = `<option value="">(Error cargando usuarios)</option>`;
+    return;
   }
+
+  const ops = (data || []).filter(x => x.rol === "operador").map(x => x.usuario);
+
+  sel.innerHTML = `
+    <option value="">Todos los operadores</option>
+    ${ops.map(u => `<option value="${u}">${u}</option>`).join("")}
+  `;
 }
 
-async function cargarRRSS({ fecha, usuario, tipo }) {
-  let q = supabase
+function cargarTipos(){
+  const sel = $("vf-tipo");
+  if (!sel) return;
+
+  // “Marketplace” es un tipo especial, lo mostramos igual
+  sel.innerHTML = `
+    <option value="">Todos los tipos</option>
+    <option value="historias">Historias</option>
+    <option value="reels">Reels</option>
+    <option value="muro">Muro</option>
+    <option value="grupos">Grupos</option>
+    <option value="marketplace">Marketplace</option>
+  `;
+}
+
+async function fetchRRSS({ fecha, usuario, tipo }){
+  let q = sb
     .from("publicaciones_rrss")
-    .select(`
-      id,
-      fecha,
-      usuario,
-      tipo,
-      link,
-      cuenta_id,
-      cuentas_facebook(nombre)
-    `)
+    .select("id, fecha, usuario, cuenta_id, tipo, link, created_at")
     .order("created_at", { ascending: false });
 
   if (fecha) q = q.eq("fecha", fecha);
   if (usuario) q = q.eq("usuario", usuario);
-  if (tipo) q = q.eq("tipo", tipo);
+  if (tipo && tipo !== "marketplace") q = q.eq("tipo", tipo);
 
   const { data, error } = await q;
   if (error) throw error;
 
-  return (data || []).map(x => ({
-    ts: x.fecha ? new Date(`${x.fecha}T00:00:00`).getTime() : 0,
-    fechaTxt: x.fecha || "-",
-    usuario: x.usuario,
-    cuenta: x.cuentas_facebook?.nombre || "-",
-    tipo: x.tipo,
-    link: x.link,
-    fuente: "RRSS"
+  // cuenta_id -> mail (join manual, porque supabase-js simple)
+  const cuentaIds = [...new Set((data || []).map(x => x.cuenta_id).filter(Boolean))];
+  let cuentasMap = new Map();
+  if (cuentaIds.length){
+    const { data: cuentas, error: e2 } = await sb
+      .from("cuentas_facebook")
+      .select("id,email")
+      .in("id", cuentaIds);
+
+    if (!e2){
+      (cuentas || []).forEach(c => cuentasMap.set(c.id, c.email));
+    }
+  }
+
+  return (data || []).map(r => ({
+    fecha: r.fecha || "",
+    usuario: r.usuario || "",
+    cuenta: cuentasMap.get(r.cuenta_id) || `#${r.cuenta_id ?? ""}`,
+    tipo: r.tipo || "",
+    link: r.link || "",
+    fuente: "RRSS",
+    created_at: r.created_at || null,
   }));
 }
 
-async function cargarMarketplace({ fecha, usuario }) {
-  let q = supabase
-    .from("marketplace_actividad")
-    .select(`
-      id,
-      usuario,
-      facebook_account_usada,
-      fecha_publicacion,
-      marketplace_link_publicacion
-    `)
-    .order("fecha_publicacion", { ascending: false });
+async function fetchMarketplace({ fecha, usuario }){
+  if (!state.marketplaceTable) return [];
 
-  // marketplace_actividad usa timestamp → filtramos por rango del día
-  if (fecha) {
-    const { startISO, endISO } = getDayRangeISO(fecha);
-    q = q.gte("fecha_publicacion", startISO).lte("fecha_publicacion", endISO);
+  // Intentamos columnas típicas (porque puede variar tu esquema)
+  // Primero probamos campos comunes; si falla, devolvemos vacío sin romper.
+  const tryQueries = [
+    () => sb.from(state.marketplaceTable).select("id, fecha, usuario, cuenta_fb, link, created_at").order("created_at",{ascending:false}),
+    () => sb.from(state.marketplaceTable).select("id, fecha, usuario, cuenta, link, created_at").order("created_at",{ascending:false}),
+    () => sb.from(state.marketplaceTable).select("id, fecha, usuario, cuenta_id, link, created_at").order("created_at",{ascending:false}),
+  ];
+
+  let data = null;
+
+  for (const make of tryQueries){
+    let q = make();
+    if (fecha) q = q.eq("fecha", fecha);
+    if (usuario) q = q.eq("usuario", usuario);
+
+    const res = await q;
+    if (!res.error){
+      data = res.data || [];
+      break;
+    }
   }
-  if (usuario) q = q.eq("usuario", usuario);
 
-  const { data, error } = await q;
-  if (error) throw error;
+  if (!data) return [];
 
-  return (data || []).map(x => {
-    const ts = x.fecha_publicacion ? new Date(x.fecha_publicacion).getTime() : 0;
-    const fechaTxt = x.fecha_publicacion ? x.fecha_publicacion.slice(0, 10) : "-";
-    return {
-      ts,
-      fechaTxt,
-      usuario: x.usuario,
-      cuenta: x.facebook_account_usada || "-",
-      tipo: "marketplace",
-      link: x.marketplace_link_publicacion || "",
-      fuente: "Marketplace"
-    };
+  return data.map(r => ({
+    fecha: r.fecha || "",
+    usuario: r.usuario || "",
+    cuenta: r.cuenta_fb || r.cuenta || (r.cuenta_id ? `#${r.cuenta_id}` : "-"),
+    tipo: "marketplace",
+    link: r.link || "",
+    fuente: "Marketplace",
+    created_at: r.created_at || null,
+  }));
+}
+
+function render(){
+  const tbody = $("vf-tbody");
+  const info = $("vf-info");
+  const page = $("vf-page");
+  if (!tbody || !info || !page) return;
+
+  const start = (state.page - 1) * PAGE_SIZE;
+  const end = start + PAGE_SIZE;
+  const slice = state.rows.slice(start, end);
+
+  info.textContent = `Resultados: ${state.rows.length} | Mostrando ${slice.length} | Página ${state.page}`;
+
+  if (!slice.length){
+    tbody.innerHTML = `<tr><td colspan="6" class="muted">Sin resultados.</td></tr>`;
+    page.textContent = `Página ${state.page}`;
+    return;
+  }
+
+  tbody.innerHTML = slice.map(r => `
+    <tr>
+      <td title="${safeText(r.fecha)}">${safeText(r.fecha)}</td>
+      <td title="${safeText(r.usuario)}">${safeText(r.usuario)}</td>
+      <td title="${safeText(r.cuenta)}">${safeText(r.cuenta)}</td>
+      <td title="${safeText(r.tipo)}">${safeText(r.tipo)}</td>
+      <td>${linkCell(r.link)}</td>
+      <td title="${safeText(r.fuente)}">${safeText(r.fuente)}</td>
+    </tr>
+  `).join("");
+
+  page.textContent = `Página ${state.page}`;
+}
+
+async function aplicar(){
+  const fechaEl = $("vf-fecha");
+  const opEl = $("vf-operador");
+  const tipoEl = $("vf-tipo");
+  const tbody = $("vf-tbody");
+  if (!fechaEl || !opEl || !tipoEl || !tbody) return;
+
+  const fecha = fechaEl.value || "";
+  const usuario = opEl.value || "";
+  const tipo = tipoEl.value || "";
+
+  tbody.innerHTML = `<tr><td colspan="6" class="muted">Cargando…</td></tr>`;
+
+  try{
+    // Si el tipo es marketplace, no traemos RRSS (porque no aplica)
+    const rrss = (tipo === "marketplace") ? [] : await fetchRRSS({ fecha, usuario, tipo });
+    const mp   = (tipo && tipo !== "marketplace") ? [] : await fetchMarketplace({ fecha, usuario });
+
+    // Merge y orden por created_at (si existe)
+    state.rows = [...rrss, ...mp].sort((a,b) => {
+      const da = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const db = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return db - da;
+    });
+
+    state.page = 1;
+    render();
+
+  }catch(e){
+    console.error(e);
+    tbody.innerHTML = `<tr><td colspan="6" class="muted">Error cargando: ${safeText(e?.message || e)}</td></tr>`;
+  }
+}
+
+function initPager(){
+  const prev = $("vf-prev");
+  const next = $("vf-next");
+  if (!prev || !next) return;
+
+  prev.addEventListener("click", () => {
+    if (state.page <= 1) return;
+    state.page--;
+    render();
+  });
+
+  next.addEventListener("click", () => {
+    const maxPage = Math.max(1, Math.ceil(state.rows.length / PAGE_SIZE));
+    if (state.page >= maxPage) return;
+    state.page++;
+    render();
   });
 }
+
+async function init(){
+  const s = requireSession();
+  if (!s) return;
+
+  // Solo gerente
+  if (s.rol !== "gerente"){
+    document.body.innerHTML = "<div style='padding:24px;color:#fff'>Solo gerente.</div>";
+    return;
+  }
+
+  await loadSidebar({ activeKey: "verificacion", basePath: "../" });
+
+  // Defaults
+  const today = fmtDateISO(new Date());
+  const fechaEl = $("vf-fecha");
+  if (fechaEl) fechaEl.value = today;
+
+  cargarTipos();
+  await cargarOperadores();
+
+  // Detect marketplace table (si no existe, igual funciona RRSS)
+  state.marketplaceTable = await detectMarketplaceTable();
+  console.log("Marketplace table:", state.marketplaceTable);
+
+  // Listeners
+  const btn = $("vf-apply");
+  if (btn) btn.addEventListener("click", aplicar);
+
+  initPager();
+
+  // Primera carga
+  await aplicar();
+}
+
+document.addEventListener("DOMContentLoaded", init);
+

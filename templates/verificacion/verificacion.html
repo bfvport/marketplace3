@@ -5,87 +5,184 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Verificación | Marketplace Manager</title>
 
-  <!-- ✅ CSS GLOBAL (ruta correcta desde /templates/verificacion/) -->
-  <link rel="stylesheet" href="../../assets/css/app.css" />
+  <!-- RUTAS ABSOLUTAS (evita que “no carguen estilos” según carpeta) -->
+  <link rel="stylesheet" href="/assets/css/app.css" />
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/assets/js/supabase.js"></script>
+
+  <style>
+    /* Ajustes específicos para que se vea bien sí o sí */
+    .veri-wrap{ max-width: 1200px; margin: 24px auto; padding: 0 18px; }
+    .veri-head h1{ margin: 0; font-size: 28px; }
+    .veri-head .muted{ opacity: .8; margin-top: 6px; }
+
+    .veri-card{
+      margin-top: 16px;
+      padding: 16px;
+      border-radius: 16px;
+      background: rgba(15, 23, 42, .55);
+      border: 1px solid rgba(148,163,184,.18);
+      box-shadow: 0 10px 30px rgba(0,0,0,.25);
+      backdrop-filter: blur(10px);
+    }
+
+    .veri-filters{
+      display: grid;
+      grid-template-columns: 1.2fr 1fr 1fr auto;
+      gap: 12px;
+      align-items: end;
+    }
+    .veri-filters label{ display:block; font-size: 12px; opacity:.85; margin: 0 0 6px; }
+    .veri-filters input, .veri-filters select{
+      width:100%;
+      height: 40px;
+      border-radius: 12px;
+      border: 1px solid rgba(148,163,184,.18);
+      background: rgba(2,6,23,.45);
+      color: #e5e7eb;
+      padding: 0 12px;
+      outline: none;
+    }
+
+    .veri-actions{ display:flex; gap: 10px; }
+    .veri-actions button{
+      height: 40px; padding: 0 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(148,163,184,.18);
+      background: rgba(59,130,246,.20);
+      color: #e5e7eb;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .veri-actions button:hover{ filter: brightness(1.1); }
+
+    .veri-tablewrap{
+      margin-top: 14px;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(148,163,184,.18);
+      background: rgba(2,6,23,.35);
+    }
+    .veri-table{
+      width:100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    .veri-table thead th{
+      text-align: left;
+      font-size: 12px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      padding: 12px 12px;
+      background: rgba(15,23,42,.65);
+      border-bottom: 1px solid rgba(148,163,184,.18);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .veri-table tbody td{
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(148,163,184,.10);
+      vertical-align: middle;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .veri-table a{ color:#60a5fa; font-weight: 700; text-decoration: none; }
+    .veri-table a:hover{ text-decoration: underline; }
+
+    .veri-scroll{ max-height: 420px; overflow:auto; }
+
+    .veri-footer{
+      margin-top: 12px;
+      display:flex;
+      justify-content: space-between;
+      align-items:center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .veri-pager{ display:flex; gap: 10px; align-items:center; }
+    .veri-pill{
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(148,163,184,.18);
+      background: rgba(15,23,42,.45);
+      font-size: 12px;
+      opacity: .9;
+    }
+
+    @media (max-width: 920px){
+      .veri-filters{ grid-template-columns: 1fr; }
+      .veri-actions{ justify-content: flex-start; }
+    }
+  </style>
 </head>
 
 <body>
+  <!-- Sidebar host (IMPORTANTE: loadSidebar lo usa) -->
+  <div id="sidebar-host"></div>
 
-  <!-- ✅ HOST DEL SIDEBAR -->
-  <div class="layout">
-        <div id="sidebar-host"></div>
+  <main class="veri-wrap">
+    <div class="veri-head">
+      <h1>🔎 Verificación</h1>
+      <div class="muted">Solo gerente. Acá se ven links de RRSS + Marketplace.</div>
+    </div>
 
-     <!-- ✅ CONTENIDO -->
-     <main class="page vf-page">
-    <header class="vf-head">
-      <h1 class="vf-title">🔎 Verificación</h1>
-      <p class="vf-sub">Solo gerente. Acá se ven links de RRSS + Marketplace.</p>
-    </header>
-
-    <section class="vf-card">
-      <div class="vf-filters">
-        <div class="vf-field">
+    <section class="veri-card">
+      <div class="veri-filters">
+        <div>
           <label for="vf-fecha">Fecha</label>
           <input id="vf-fecha" type="date" />
         </div>
 
-        <div class="vf-field">
+        <div>
           <label for="vf-operador">Operador</label>
-          <select id="vf-operador">
-            <option value="">Todos los operadores</option>
-          </select>
+          <select id="vf-operador"></select>
         </div>
 
-        <div class="vf-field">
+        <div>
           <label for="vf-tipo">Tipo</label>
-          <select id="vf-tipo">
-            <option value="">Todos los tipos</option>
-          </select>
+          <select id="vf-tipo"></select>
         </div>
 
-        <button class="btn vf-apply" id="vf-aplicar" type="button">Aplicar</button>
+        <div class="veri-actions">
+          <button id="vf-apply" type="button">Aplicar</button>
+        </div>
       </div>
 
-      <div class="vf-table-wrap">
-        <table class="vf-table">
-          <thead>
-            <tr>
-              <th>Fecha</th>
-              <th>Usuario</th>
-              <th>Cuenta</th>
-              <th>Tipo</th>
-              <th>Link</th>
-              <th class="vf-right">Fuente</th>
-            </tr>
-          </thead>
-
-          <tbody id="vf-tbody">
-            <tr>
-              <td colspan="6" class="vf-empty">Cargando…</td>
-            </tr>
-          </tbody>
-        </table>
+      <div class="veri-tablewrap">
+        <div class="veri-scroll">
+          <table class="veri-table">
+            <thead>
+              <tr>
+                <th style="width:120px;">Fecha</th>
+                <th style="width:140px;">Usuario</th>
+                <th style="width:260px;">Cuenta</th>
+                <th style="width:120px;">Tipo</th>
+                <th>Link</th>
+                <th style="width:140px;">Fuente</th>
+              </tr>
+            </thead>
+            <tbody id="vf-tbody">
+              <tr><td colspan="6" class="muted">Cargando…</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      <div class="vf-foot">
-        <button class="btn2" id="vf-prev" type="button">◀</button>
-        <span id="vf-page">Página 1</span>
-        <button class="btn2" id="vf-next" type="button">▶</button>
+      <div class="veri-footer">
+        <div class="veri-pill" id="vf-info">—</div>
+
+        <div class="veri-pager">
+          <button id="vf-prev" type="button">◀</button>
+          <div class="veri-pill" id="vf-page">Página 1</div>
+          <button id="vf-next" type="button">▶</button>
+        </div>
       </div>
     </section>
   </main>
 
-  <!-- ✅ SUPABASE (si ya lo tenés en otro lado, no lo dupliques) -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <!-- ✅ CLIENTE SUPABASE -->
-  <script src="../../assets/js/supabase.js"></script>
-
-  <!-- ✅ TU APP (donde cargas sidebar/rol/session) -->
-  <script type="module" src="../../assets/js/app.js"></script>
-
-  <!-- ✅ JS DE VERIFICACION -->
   <script type="module" src="./verificacion.js"></script>
-
 </body>
 </html>
