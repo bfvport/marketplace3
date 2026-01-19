@@ -144,4 +144,38 @@ document.addEventListener("DOMContentLoaded", async () => {
       await cargarCuentas();
     }
   };
+  // ===== LOGIN FACEBOOK HELPER =====
+
+window.abrirFBLogin = function(email, pass){
+  document.getElementById("fbEmail").value = email;
+  document.getElementById("fbPass").value = pass;
+  document.getElementById("fbMsg").textContent = "";
+  document.getElementById("fbLoginModal").style.display = "flex";
+
+  // abre marketplace directo
+  window.open("https://www.facebook.com/marketplace/", "_blank", "noopener");
+}
+
+window.cerrarFBModal = function(){
+  document.getElementById("fbLoginModal").style.display = "none";
+}
+
+window.copiarFB = async function(id){
+  const val = document.getElementById(id).value;
+  try{
+    await navigator.clipboard.writeText(val);
+    document.getElementById("fbMsg").textContent = "✅ Copiado";
+  }catch{
+    alert("No se pudo copiar.");
+  }
+}
+
+window.abrirFacebook = function(){
+  window.open("https://www.facebook.com/login", "_blank", "noopener");
+}
+
+window.abrirMarketplace = function(){
+  window.open("https://www.facebook.com/marketplace/", "_blank", "noopener");
+}
+
 });

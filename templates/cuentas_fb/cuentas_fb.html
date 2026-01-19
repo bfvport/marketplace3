@@ -93,5 +93,44 @@
   </script>
    <!-- JS de esta página -->
   <script type="module" src="cuentas_fb.js"></script>
+  <!-- ===== MODAL INICIAR SESIÓN FACEBOOK ===== -->
+<div id="fbLoginModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:999; align-items:center; justify-content:center;">
+  <div style="background:#020617; border:1px solid rgba(255,255,255,.15); border-radius:16px; padding:16px; width:100%; max-width:420px;">
+    
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <strong>🔐 Iniciar sesión en Facebook</strong>
+      <button class="btn2" onclick="cerrarFBModal()">✖</button>
+    </div>
+
+    <div style="margin-top:12px;">
+      <label>Email</label>
+      <div style="display:flex; gap:8px;">
+        <input id="fbEmail" readonly>
+        <button class="btn2" onclick="copiarFB('fbEmail')">Copiar</button>
+      </div>
+    </div>
+
+    <div style="margin-top:10px;">
+      <label>Contraseña</label>
+      <div style="display:flex; gap:8px;">
+        <input id="fbPass" readonly type="password">
+        <button class="btn2" onclick="copiarFB('fbPass')">Copiar</button>
+      </div>
+    </div>
+
+    <div class="muted small" style="margin-top:10px;">
+      👉 Abrí Facebook, pegá el email, siguiente, pegá la contraseña.  
+      Si pide código 2FA, pedilo al gerente.
+    </div>
+
+    <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn" onclick="abrirMarketplace()">Abrir Marketplace</button>
+      <button class="btn2" onclick="abrirFacebook()">Abrir Facebook</button>
+    </div>
+
+    <div class="muted small" id="fbMsg" style="margin-top:8px;"></div>
+  </div>
+</div>
+
 </body>
 </html>
