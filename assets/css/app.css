@@ -1099,3 +1099,30 @@ body.sb-collapsed .veri-wrap{ margin-left: 86px; }
   background: #020617;
   z-index: 10;
 }
+/* ===== FIX RESPONSIVE GLOBAL ===== */
+main.content { min-width: 0; }          /* clave para layouts con sidebar */
+.card { min-width: 0; }
+
+/* Contenedor genérico para tablas grandes */
+.table-wrap{
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(0,0,0,0.18);
+}
+
+/* Asegura que la tabla no rompa el layout: si no entra, scrollea */
+.table{
+  min-width: 980px; /* ajustá según tabla */
+}
+
+/* Compacto para pantallas chicas */
+@media (max-width: 700px){
+  .table th, .table td{
+    padding: 8px 10px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+}

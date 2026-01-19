@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>🛠️ Reportar Error | Marketplace Manager</title>
+
+  <link rel="stylesheet" href="../../assets/css/app.css" />
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+
+  <style>
+    .wrap{ padding:18px 22px; max-width: 1050px; margin:0 auto; }
+    .title2{ font-size: 26px; font-weight: 900; margin: 0 0 6px 0; }
+    .sub{ font-size: 13px; opacity: .8; margin: 0 0 16px 0; }
+    .cardx{ background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10); border-radius: 16px; padding: 14px; }
+    .grid2{ display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .grid1{ display:grid; grid-template-columns: 1fr; gap: 10px; }
+    .help{ font-size: 12px; opacity: .75; margin-top: 6px; }
+    .rowbtn{ display:flex; gap:10px; flex-wrap:wrap; margin-top: 14px; align-items:center; }
+    .preview{ margin-top: 10px; display:none; gap:10px; align-items:center; }
+    .preview img{ width: 130px; height: 130px; object-fit: cover; border-radius: 10px; border:1px solid rgba(255,255,255,.15); }
+    .pill{ display:inline-block; padding: 4px 10px; border-radius: 999px; font-size: 12px; background: rgba(59,130,246,.15); color:#93c5fd; }
+    @media (max-width: 900px){ .grid2{ grid-template-columns: 1fr; } }
+  </style>
+</head>
+
+<body>
+  <div class="layout">
+    <div id="sidebar-host"></div>
+
+    <main class="content">
+      <div class="wrap">
+        <div class="title2">🛠️ Reportar error</div>
+        <p class="sub">Solo operadores. Dejá captura + respuestas cortas para que el gerente lo vea.</p>
+
+        <section class="cardx">
+          <div class="grid2">
+            <div>
+              <label class="required">Pantalla donde pasó</label>
+              <select id="pantalla">
+                <option value="diario">Diario</option>
+                <option value="dashboard">Dashboard</option>
+                <option value="actividad">Actividad</option>
+                <option value="verificacion">Verificación</option>
+                <option value="cuentas_facebook">Cuentas Facebook</option>
+                <option value="metricas">Métricas</option>
+                <option value="otra">Otra</option>
+              </select>
+              <div class="help">Elegí lo más parecido.</div>
+            </div>
+
+            <div>
+              <label class="required">Prioridad</label>
+              <select id="prioridad">
+                <option value="baja">Baja</option>
+                <option value="media" selected>Media</option>
+                <option value="alta">Alta</option>
+              </select>
+              <div class="help">Alta = bloquea trabajo / no deja seguir.</div>
+            </div>
+          </div>
+
+          <div class="grid1" style="margin-top: 12px;">
+            <div>
+              <label class="required">📌 ¿Qué estabas haciendo?</label>
+              <textarea id="queHaciendo" placeholder="Ej: estaba guardando una publicación en Diario..." style="min-height:80px;"></textarea>
+              <div class="help">Una línea o dos, corto.</div>
+            </div>
+
+            <div>
+              <label class="required">💥 ¿Qué pasó?</label>
+              <textarea id="quePaso" placeholder="Ej: se congeló la pantalla / no guardó / salió error..." style="min-height:80px;"></textarea>
+              <div class="help">Decí qué viste: error, pantalla en blanco, no responde, etc.</div>
+            </div>
+
+            <div>
+              <label>🔁 Pasos para reproducir (opcional)</label>
+              <textarea id="pasos" placeholder="1) Entré a Diario  2) Elegí cuenta  3) Guardar..." style="min-height:70px;"></textarea>
+            </div>
+
+            <div>
+              <label class="required">🖼️ Captura del error (imagen)</label>
+              <input id="captura" type="file" accept="image/*" />
+              <div class="help">Subí una captura donde se vea el error.</div>
+
+              <div class="preview" id="previewBox">
+                <img id="previewImg" alt="preview"/>
+                <span class="pill" id="previewName"></span>
+              </div>
+            </div>
+
+            <div class="rowbtn">
+              <button class="btn" id="btnEnviar">Enviar reporte</button>
+              <button class="btn2" id="btnLimpiar" type="button">Limpiar</button>
+              <span class="muted small" id="msg"></span>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="./reporte_error.js"></script>
+</body>
+</html>

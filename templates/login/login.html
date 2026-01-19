@@ -9,11 +9,94 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../assets/js/supabase.js"></script>
+
+  <style>
+    /* Login: look & feel pro sin afectar otras pantallas */
+    body{
+      min-height: 100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 28px;
+    }
+
+    /* “Freno” a las bandas: ponemos un overlay suave encima */
+    .login-bg{
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background: radial-gradient(1200px 600px at 20% 10%, rgba(59,130,246,.18), transparent 60%),
+                  radial-gradient(900px 500px at 70% 40%, rgba(16,185,129,.12), transparent 55%),
+                  radial-gradient(800px 500px at 40% 90%, rgba(99,102,241,.14), transparent 60%),
+                  linear-gradient(180deg, #050916, #02040a);
+      opacity: .95;
+    }
+
+    .login-wrap{
+      width: min(440px, 92vw);
+      position: relative;
+      z-index: 1;
+    }
+
+    .login-card{
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 18px;
+      padding: 18px;
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      box-shadow: 0 18px 60px rgba(0,0,0,.45);
+    }
+
+    .login-head{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-bottom: 10px;
+    }
+
+    .login-title{
+      font-size: 18px;
+      font-weight: 900;
+      margin: 0;
+      letter-spacing: .2px;
+    }
+
+    .login-sub{
+      margin: 0 0 14px 0;
+      font-size: 13px;
+      color: rgba(226,232,240,0.75);
+    }
+
+    .login-actions{
+      display:flex;
+      justify-content:flex-end;
+      margin-top: 14px;
+    }
+
+    /* input un toque más “premium” */
+    input{
+      background: rgba(0,0,0,0.28);
+      border: 1px solid rgba(255,255,255,0.16);
+    }
+    input:focus{
+      outline: none;
+      border-color: rgba(99,102,241,0.55);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.18);
+    }
+  </style>
 </head>
+
 <body>
-  <div style="max-width:420px;margin:60px auto;padding:16px;">
-    <div class="card">
-      <h1>🔐 Login</h1>
+  <div class="login-bg"></div>
+
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-head">
+        <div style="font-size:22px;">🔐</div>
+        <h1 class="login-title">Login</h1>
+      </div>
+      <p class="login-sub">Ingresá con tu usuario y contraseña.</p>
 
       <label>Usuario</label>
       <input id="usuario" autocomplete="username" />
@@ -21,7 +104,7 @@
       <label>Contraseña</label>
       <input id="contra" type="password" autocomplete="current-password" />
 
-      <div class="row" style="margin-top:14px;">
+      <div class="login-actions">
         <button class="btn" id="btnLogin">Entrar</button>
       </div>
 

@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>🧾 Reportes de Errores | Marketplace Manager</title>
+
+  <link rel="stylesheet" href="../../assets/css/app.css" />
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+
+  <style>
+    .wrap{ padding:18px 22px; max-width: 1250px; margin:0 auto; }
+    .title2{ font-size: 26px; font-weight: 900; margin: 0 0 6px 0; }
+    .sub{ font-size: 13px; opacity: .8; margin: 0 0 14px 0; }
+
+    .cardx{ background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10); border-radius: 16px; padding: 14px; }
+
+    .filters{ display:grid; grid-template-columns: 1fr 1fr 1fr auto; gap: 10px; align-items:end; }
+    @media (max-width: 900px){ .filters{ grid-template-columns: 1fr; } }
+
+    .table-wrap{ margin-top: 14px; max-height: 62vh; overflow:auto; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); background: rgba(0,0,0,0.20); }
+    table{ width:100%; border-collapse: collapse; min-width: 1050px; }
+    th,td{ padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); font-size: 13px; white-space: nowrap; }
+    thead th{ position: sticky; top: 0; z-index: 5; background: rgba(2,6,23,.92); backdrop-filter: blur(6px); }
+    .btnlink{ color:#60a5fa; font-weight: 800; text-decoration:none; }
+    .btnlink:hover{ text-decoration: underline; }
+
+    .modal-backdrop{ position:fixed; inset:0; background: rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; padding: 18px; }
+    .modal{ max-width: 980px; width: 100%; background: rgba(2,6,23,.98); border:1px solid rgba(255,255,255,.12); border-radius: 16px; overflow:hidden; }
+    .modal-head{ padding: 12px 14px; display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid rgba(255,255,255,.08); }
+    .modal-body{ padding: 14px; display:grid; grid-template-columns: 320px 1fr; gap: 14px; }
+    @media (max-width: 900px){ .modal-body{ grid-template-columns: 1fr; } }
+    .imgbox img{ width:100%; border-radius: 12px; border:1px solid rgba(255,255,255,.12); }
+    .kv{ font-size: 13px; opacity:.9; margin: 0 0 8px 0; }
+    .kv b{ opacity:1; }
+    .rowbtn{ display:flex; gap:10px; flex-wrap:wrap; margin-top: 10px; }
+  </style>
+</head>
+
+<body>
+  <div class="layout">
+    <div id="sidebar-host"></div>
+
+    <main class="content">
+      <div class="wrap">
+        <div class="title2">🧾 Reportes de errores</div>
+        <div class="sub">Solo gerente. Abrí un reporte para ver la captura y los detalles.</div>
+
+        <section class="cardx">
+          <div class="filters">
+            <div>
+              <label>Estado</label>
+              <select id="f-estado">
+                <option value="">Todos</option>
+                <option value="abierto" selected>Abierto</option>
+                <option value="en_progreso">En progreso</option>
+                <option value="resuelto">Resuelto</option>
+              </select>
+            </div>
+            <div>
+              <label>Prioridad</label>
+              <select id="f-prioridad">
+                <option value="">Todas</option>
+                <option value="alta">Alta</option>
+                <option value="media">Media</option>
+                <option value="baja">Baja</option>
+              </select>
+            </div>
+            <div>
+              <label>Operador</label>
+              <input id="f-operador" placeholder="ej: guillermo" />
+            </div>
+            <button class="btn" id="btn-aplicar" type="button">Aplicar</button>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Operador</th>
+                  <th>Pantalla</th>
+                  <th>Prioridad</th>
+                  <th>Estado</th>
+                  <th>Detalle</th>
+                </tr>
+              </thead>
+              <tbody id="tbody">
+                <tr><td colspan="6" class="muted">Cargando…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal detalle -->
+  <div class="modal-backdrop" id="modalBack">
+    <div class="modal">
+      <div class="modal-head">
+        <div style="font-weight:900;" id="mTitle">Detalle</div>
+        <button class="btn2" id="mClose">Cerrar</button>
+      </div>
+      <div class="modal-body">
+        <div class="imgbox">
+          <img id="mImg" alt="captura"/>
+          <div class="rowbtn">
+            <a class="btn" id="mDownload" href="#" target="_blank" rel="noopener">Descargar captura</a>
+          </div>
+        </div>
+        <div>
+          <p class="kv"><b>Fecha:</b> <span id="mFecha"></span></p>
+          <p class="kv"><b>Operador:</b> <span id="mOperador"></span></p>
+          <p class="kv"><b>Pantalla:</b> <span id="mPantalla"></span></p>
+          <p class="kv"><b>Prioridad:</b> <span id="mPrioridad"></span></p>
+          <p class="kv"><b>Estado:</b> <span id="mEstado"></span></p>
+
+          <hr style="border-color: rgba(255,255,255,.08); margin: 12px 0;">
+
+          <p class="kv"><b>¿Qué estabas haciendo?</b><br><span id="mHaciendo"></span></p>
+          <p class="kv"><b>¿Qué pasó?</b><br><span id="mPaso"></span></p>
+          <p class="kv"><b>Pasos para reproducir:</b><br><span id="mPasos"></span></p>
+
+          <div class="rowbtn">
+            <button class="btn2" id="btnAbierto">Marcar Abierto</button>
+            <button class="btn2" id="btnProgreso">Marcar En progreso</button>
+            <button class="btn2" id="btnResuelto">Marcar Resuelto</button>
+          </div>
+
+          <div class="muted small" id="mMsg" style="margin-top:8px;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./reportes.js"></script>
+</body>
+</html>

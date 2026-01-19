@@ -100,6 +100,57 @@
       #btn-aplicar{ width: 100%; }
       table.veri-table{ min-width: 800px; }
     }
+    /* ===== RESPONSIVE FIX: VERIFICACION ===== */
+
+/* Que el contenido no se “ahogue” cuando el sidebar ocupa espacio */
+main.content{
+  min-width: 0;              /* CLAVE para que flex no reviente */
+}
+
+/* El card se adapta y no se queda raro en pantallas chicas */
+.veri-wrap{
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Tabla: el scroll horizontal queda adentro del card, no en toda la página */
+.veri-table-wrap{
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Evita que la tabla rompa el diseño: si no entra, scrollea */
+.veri-table{
+  min-width: 900px;          /* ajustá si querés más compacto */
+}
+
+/* En pantallas chicas, filtros en columna y botón a lo ancho */
+@media (max-width: 900px){
+  .veri-filters{
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+  }
+
+  #btn-aplicar{
+    width: 100%;
+    height: 44px;
+  }
+
+  /* baja un toque el padding para que entre todo más lindo */
+  .veri-wrap{
+    padding: 14px 14px;
+  }
+}
+
+/* En pantallas MUY chicas, hacemos la tabla más compacta */
+@media (max-width: 520px){
+  .veri-table th, .veri-table td{
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}
+
   </style>
 </head>
 
