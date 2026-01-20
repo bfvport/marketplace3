@@ -1,26 +1,26 @@
 <!-- templates/sidebar.html -->
 <aside class="sidebar">
-  <div class="sb-top">
-    <div class="sb-brand">Marketplace Manager</div>
+  <div class="sb-head">
+    <div class="sb-title">Marketplace Manager</div>
 
-    <div class="sb-user">
-      <div id="sb-user" class="sb-user-name">—</div>
-      <div id="sb-role" class="sb-user-role">—</div>
+    <div class="sb-userbox">
+      <div id="sb-usuario" class="sb-user">—</div>
+      <div id="sb-rol" class="sb-rol muted">—</div>
     </div>
   </div>
 
   <nav class="sb-nav">
-    <!-- ✅ COMUNES -->
+    <!-- ===================== COMUNES ===================== -->
     <a data-key="dashboard" href="../dashboard/dashboard.html">🏠 Dashboard</a>
 
-    <!-- ✅ OPERADOR -->
+    <!-- ===================== OPERADOR ===================== -->
     <a data-key="diario" class="only-operador" href="../diario/diario.html">🗓️ Diario</a>
     <a data-key="recursos" class="only-operador" href="../publicaciones/publicaciones.html">📎 Recursos (Fotos)</a>
     <a data-key="calentamiento" class="only-operador" href="../calentamiento/calentamiento.html">🔥 Calentamiento</a>
     <a data-key="mensajes" class="only-operador" href="../mensajes/mensajes.html">💬 Mensajes</a>
     <a data-key="reportar_error" class="only-operador" href="../reportar_error/reportar_error.html">🛠️ Reportar error</a>
 
-    <!-- ✅ GERENTE -->
+    <!-- ===================== GERENTE ===================== -->
     <a data-key="gestionar_recursos" class="only-gerente" href="../publicaciones_gerente/publicaciones_gerente.html">📦 Gestionar Recursos</a>
     <a data-key="categorias" class="only-gerente" href="../categoria/categoria.html">🏷️ Categorías</a>
     <a data-key="cuentas_fb" class="only-gerente" href="../cuentas_fb/cuentas_fb.html">👤 Cuentas Facebook</a>
@@ -30,28 +30,34 @@
     <a data-key="verificacion" class="only-gerente" href="../verificacion/verificacion.html">✅ Verificación</a>
     <a data-key="metricas" class="only-gerente" href="../metricas/metricas.html">📈 Métricas</a>
     <a data-key="calentamiento_gerente" class="only-gerente" href="../calentamiento_gerente/calentamiento_gerente.html">🔥 Calentamiento (Gerente)</a>
+
+    <!-- El gerente ve reportes, el operador NO -->
     <a data-key="reportes_errores" class="only-gerente" href="../reportes_errores/reportes_errores.html">🧾 Reportes de errores</a>
   </nav>
 
-  <div class="sb-bottom">
-    <button id="sb-logout" class="btn-danger" style="width:100%;">Salir</button>
+  <div class="sb-foot">
+    <button id="sb-salir" class="btn-danger" style="width:100%;">Salir</button>
   </div>
 
-  <!-- ⚠️ Esto NO cambia tu estética global, solo oculta/mostrar -->
+  <!-- ✅ Solo ocultamos/mostramos. No te cambiamos el tema. -->
   <style>
     .only-gerente, .only-operador { display: none; }
     .role-gerente .only-gerente { display: flex; }
     .role-operador .only-operador { display: flex; }
 
-    /* Si ya tenés estilos en app.css, esto casi ni se nota */
+    /* Si tu app.css ya define estilos, esto casi no afecta.
+       Es solo para que el sidebar no se rompa si faltan clases. */
     .sidebar { display:flex; flex-direction:column; height:100%; }
-    .sb-top { padding:14px; }
-    .sb-brand { font-weight:900; color:white; }
-    .sb-user-name { color:white; font-weight:800; margin-top:10px; }
-    .sb-user-role { color:#94a3b8; font-size:0.85rem; }
+    .sb-head { padding:14px; }
+    .sb-title { font-weight:900; color:white; }
+    .sb-userbox { margin-top:10px; }
+    .sb-user { color:white; font-weight:800; }
+    .sb-rol { margin-top:2px; font-size:0.85rem; }
+
     .sb-nav { display:flex; flex-direction:column; gap:6px; padding:0 10px; }
     .sb-nav a { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; text-decoration:none; }
-    .sb-bottom { padding:14px; margin-top:auto; }
+
+    .sb-foot { padding:14px; margin-top:auto; }
   </style>
 
   <script>
@@ -60,18 +66,23 @@
       try { s = JSON.parse(localStorage.getItem("mp_session_v1") || "null"); } catch {}
 
       const usuario = s?.usuario || "—";
-      const rol = s?.rol || "operador";
+      const rol = s?.rol || "operador"; // default operador
 
-      document.getElementById("sb-user").textContent = usuario;
-      document.getElementById("sb-role").textContent = "Rol: " + rol;
+      const u = document.getElementById("sb-usuario");
+      const r = document.getElementById("sb-rol");
+      if (u) u.textContent = usuario;
+      if (r) r.textContent = "Rol: " + rol;
 
       const root = document.querySelector(".sidebar");
-      root.classList.add(rol === "gerente" ? "role-gerente" : "role-operador");
+      if (root) root.classList.add(rol === "gerente" ? "role-gerente" : "role-operador");
 
-      document.getElementById("sb-logout").onclick = () => {
-        localStorage.removeItem("mp_session_v1");
-        location.href = "../login/login.html";
-      };
+      const btn = document.getElementById("sb-salir");
+      if (btn) {
+        btn.onclick = () => {
+          localStorage.removeItem("mp_session_v1");
+          location.href = "../login/login.html";
+        };
+      }
     })();
   </script>
 </aside>
