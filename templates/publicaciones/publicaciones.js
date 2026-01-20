@@ -3,48 +3,63 @@ import { requireSession, loadSidebar, fmtDateISO } from "../../assets/js/app.js"
 const sb = window.supabaseClient;
 const s = requireSession();
 
-const DRIVE_URL = "https://drive.google.com/drive/folders/1WEKYsaptpUnGCKOszZOKEAovzL5ld7j7?usp=sharing";
+const DRIVE_URL =
+  "https://drive.google.com/drive/folders/1WEKYsaptpUnGCKOszZOKEAovzL5ld7j7?usp=sharing";
 const today = fmtDateISO(new Date());
 
 const TYPES = [
   { key: "historias", title: "Historias" },
-  { key: "reels",     title: "Reels" },
-  { key: "muro",      title: "Muro" },
-  { key: "grupos",    title: "Grupos" },
+  { key: "reels", title: "Reels" },
+  { key: "muro", title: "Muro" },
+  { key: "grupos", title: "Grupos" },
 ];
 
 const $ = (id) => document.getElementById(id);
 
 let selectedUsuario = null;
 let cuentas = [];
-let metas = { historias:0, reels:0, muro:0, grupos:0 };
+let metas = { historias: 0, reels: 0, muro: 0, grupos: 0 };
 let linksHoy = [];
 let rtChannel = null;
 
-function showError(msg){
+function showError(msg) {
   const box = $("errorbox");
   if (!box) return;
   box.style.display = "block";
   box.textContent = msg;
 }
-function clearError(){
+function clearError() {
   const box = $("errorbox");
   if (!box) return;
   box.style.display = "none";
   box.textContent = "";
 }
-function isValidUrl(u){
-  try { new URL(u); return true; } catch { return false; }
+function isValidUrl(u) {
+  try {
+    const url = new URL(u);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
-async function init(){
+function cuentaById(cuentaId) {
+  return (cuentas || []).find((x) => String(x.id) === String(cuentaId)) || null;
+}
+
+function cuentaLabel(cuentaId) {
+  const c = cuentaById(cuentaId);
+  return c?.email || `#${cuentaId}`;
+}
+
+async function init() {
   await loadSidebar({ activeKey: "publicaciones", basePath: "../" });
 
   $("pill-hoy").textContent = `Hoy: ${today}`;
   $("pill-rol").textContent = `Rol: ${s.rol || "-"}`;
   $("btn-drive").href = DRIVE_URL;
 
-  if (s.rol === "gerente"){
+  if (s.rol === "gerente") {
     $("wrap-operador").style.display = "block";
     await cargarOperadoresEnSelect();
     selectedUsuario = $("sel-operador").value || null;
@@ -67,29 +82,38 @@ async function init(){
   attachRealtime();
 }
 
-async function cargarOperadoresEnSelect(){
-  const { data, error } = await sb.from("usuarios").select("usuario, rol").order("usuario", { ascending:true });
+async function cargarOperadoresEnSelect() {
+  const { data, error } = await sb
+    .from("usuarios")
+    .select("usuario, rol")
+    .order("usuario", { ascending: true });
+
   if (error) throw error;
 
-  const ops = (data || []).filter(x => x.rol === "operador");
+  const ops = (data || []).filter((x) => x.rol === "operador");
   const sel = $("sel-operador");
-  sel.innerHTML = ops.map(o => `<option value="${o.usuario}">${o.usuario}</option>`).join("");
+  sel.innerHTML = ops
+    .map((o) => `<option value="${o.usuario}">${o.usuario}</option>`)
+    .join("");
+
   if (ops.length) sel.value = ops[0].usuario;
 }
 
-async function refreshAll(rerender){
+async function refreshAll(rerender) {
   clearError();
 
-  try{
+  try {
+    // 1) Cuentas asignadas al operador
     const resCuentas = await sb
       .from("cuentas_facebook")
       .select("id, email, ocupada_por")
       .eq("ocupada_por", selectedUsuario)
-      .order("id", { ascending:true });
+      .order("id", { ascending: true });
 
     if (resCuentas.error) throw resCuentas.error;
     cuentas = resCuentas.data || [];
 
+    // 2) Metas del día (calentamiento_plan)
     const resPlan = await sb
       .from("calentamiento_plan")
       .select("req_historias, req_reels, req_muro, req_grupos")
@@ -98,45 +122,46 @@ async function refreshAll(rerender){
 
     if (resPlan.error) throw resPlan.error;
 
-    metas = { historias:0, reels:0, muro:0, grupos:0 };
-    for (const p of (resPlan.data || [])){
+    metas = { historias: 0, reels: 0, muro: 0, grupos: 0 };
+    for (const p of resPlan.data || []) {
       metas.historias += Number(p.req_historias || 0);
-      metas.reels     += Number(p.req_reels || 0);
-      metas.muro      += Number(p.req_muro || 0);
-      metas.grupos    += Number(p.req_grupos || 0);
+      metas.reels += Number(p.req_reels || 0);
+      metas.muro += Number(p.req_muro || 0);
+      metas.grupos += Number(p.req_grupos || 0);
     }
 
+    // 3) Links guardados hoy
     const resLinks = await sb
       .from("publicaciones_rrss")
-      .select("id, created_at, fecha, usuario, cuenta_id, tipo, link")
+      .select("id, created_at, fecha, usuario, cuenta_id, cuenta_fb, tipo, link")
       .eq("fecha", today)
       .eq("usuario", selectedUsuario)
-      .order("created_at", { ascending:false });
+      .order("created_at", { ascending: false });
 
     if (resLinks.error) throw resLinks.error;
     linksHoy = resLinks.data || [];
 
     if (rerender) renderCards();
     refreshAllViews();
-
-  }catch(e){
+  } catch (e) {
     console.error(e);
     showError(`Error cargando Recursos: ${e?.message || e}`);
     if (rerender) renderCards(true);
   }
 }
 
-function renderCards(forceEmpty=false){
+function renderCards(forceEmpty = false) {
   const host = $("cards-recursos");
   if (!host) return;
 
-  const opLabel = (s.rol === "gerente")
-    ? `Operador: ${selectedUsuario || "-"} (lectura)`
-    : `Operador: ${selectedUsuario || "-"}`;
+  const opLabel =
+    s.rol === "gerente"
+      ? `Operador: ${selectedUsuario || "-"} (lectura)`
+      : `Operador: ${selectedUsuario || "-"}`;
 
-  host.innerHTML = TYPES.map(t => {
+  host.innerHTML = TYPES.map((t) => {
     const meta = metas[t.key] || 0;
-    const done = forceEmpty ? 0 : linksHoy.filter(x => x.tipo === t.key).length;
+    const done = forceEmpty ? 0 : linksHoy.filter((x) => x.tipo === t.key).length;
     const pend = Math.max(0, meta - done);
 
     return `
@@ -156,7 +181,9 @@ function renderCards(forceEmpty=false){
           <div class="w-40">
             <select id="sel-${t.key}">
               <option value="">Seleccionar cuenta</option>
-              ${(cuentas || []).map(c => `<option value="${c.id}">${c.email}</option>`).join("")}
+              ${(cuentas || [])
+                .map((c) => `<option value="${c.id}">${c.email}</option>`)
+                .join("")}
             </select>
           </div>
           <div class="w-60">
@@ -173,21 +200,21 @@ function renderCards(forceEmpty=false){
     `;
   }).join("");
 
-  for (const t of TYPES){
+  for (const t of TYPES) {
     $(`btn-${t.key}`)?.addEventListener("click", () => guardarLink(t.key));
   }
 }
 
-function refreshAllViews(){
-  for (const t of TYPES){
+function refreshAllViews() {
+  for (const t of TYPES) {
     updateTipoUI(t.key);
     updateTipoTable(t.key);
   }
 }
 
-function updateTipoUI(tipo){
+function updateTipoUI(tipo) {
   const meta = metas[tipo] || 0;
-  const done = linksHoy.filter(x => x.tipo === tipo).length;
+  const done = linksHoy.filter((x) => x.tipo === tipo).length;
   const pend = Math.max(0, meta - done);
 
   $(`done-${tipo}`) && ($(`done-${tipo}`).textContent = done);
@@ -197,54 +224,65 @@ function updateTipoUI(tipo){
   const list = $(`list-${tipo}`);
   if (!list) return;
 
-  const rows = linksHoy.filter(x => x.tipo === tipo).slice(0, 8);
-  if (!rows.length){
+  const rows = linksHoy.filter((x) => x.tipo === tipo).slice(0, 8);
+  if (!rows.length) {
     list.innerHTML = `<div class="muted">Todavía no hay links cargados hoy.</div>`;
     return;
   }
 
-  list.innerHTML = rows.map(r => {
-    const hhmm = new Date(r.created_at).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-    return `
-      <div class="item">
-        <div class="muted">${hhmm}</div>
-        <a href="${r.link}" target="_blank" rel="noopener">Ver link</a>
-      </div>
-    `;
-  }).join("");
+  list.innerHTML = rows
+    .map((r) => {
+      const hhmm = new Date(r.created_at).toLocaleTimeString("es-AR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      return `
+        <div class="item">
+          <div class="muted">${hhmm}</div>
+          <a href="${r.link}" target="_blank" rel="noopener">Ver link</a>
+        </div>
+      `;
+    })
+    .join("");
 }
 
-function cuentaLabel(cuentaId){
-  const c = (cuentas || []).find(x => String(x.id) === String(cuentaId));
-  return c?.email || `#${cuentaId}`;
-}
-
-function updateTipoTable(tipo){
+function updateTipoTable(tipo) {
   const body = $(`tbl-${tipo}`);
   if (!body) return;
 
-  const rows = linksHoy.filter(x => x.tipo === tipo).slice(0, 60);
-  if (!rows.length){
+  const rows = linksHoy.filter((x) => x.tipo === tipo).slice(0, 60);
+  if (!rows.length) {
     body.innerHTML = `<tr><td colspan="3" class="muted">Sin links hoy.</td></tr>`;
     return;
   }
 
-  body.innerHTML = rows.map(r => {
-    const hhmm = new Date(r.created_at).toLocaleTimeString("es-AR",{hour:"2-digit",minute:"2-digit"});
-    return `
-      <tr>
-        <td>${hhmm}</td>
-        <td class="cap">${cuentaLabel(r.cuenta_id)}</td>
-        <td><a class="btn-open" href="${r.link}" target="_blank" rel="noopener">Abrir</a></td>
-      </tr>
-    `;
-  }).join("");
+  body.innerHTML = rows
+    .map((r) => {
+      const hhmm = new Date(r.created_at).toLocaleTimeString("es-AR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      // si por alguna razón viene cuenta_id null, mostramos cuenta_fb
+      const cuentaTxt = r.cuenta_id ? cuentaLabel(r.cuenta_id) : (r.cuenta_fb || "-");
+
+      return `
+        <tr>
+          <td>${hhmm}</td>
+          <td class="cap">${cuentaTxt}</td>
+          <td><a class="btn-open" href="${r.link}" target="_blank" rel="noopener">Abrir</a></td>
+        </tr>
+      `;
+    })
+    .join("");
 }
 
-async function guardarLink(tipo){
+async function guardarLink(tipo) {
   clearError();
 
-  const cuentaId = Number($(`sel-${tipo}`)?.value || 0);
+  const cuentaIdRaw = $(`sel-${tipo}`)?.value || "";
+  const cuentaId = Number(cuentaIdRaw || 0);
+
   const input = $(`in-${tipo}`);
   const link = (input?.value || "").trim();
 
@@ -252,37 +290,59 @@ async function guardarLink(tipo){
   if (!link || !isValidUrl(link)) return showError("Pegá un link válido (http/https).");
   if (s.rol === "gerente") return showError("Modo gerente es solo lectura.");
 
+  const cuenta = cuentaById(cuentaId);
+  const cuentaFb = cuenta?.email || null;
+
+  if (!cuentaFb) return showError("No se pudo detectar el email de la cuenta seleccionada.");
+
   const { data, error } = await sb
     .from("publicaciones_rrss")
-    .insert([{ fecha: today, usuario: selectedUsuario, cuenta_id: cuentaId, tipo, link, estado: "ok" }])
-    .select("id, created_at, fecha, usuario, cuenta_id, tipo, link")
+    .insert([
+      {
+        fecha: today,
+        usuario: selectedUsuario,
+        cuenta_id: cuentaId,
+        cuenta_fb: cuentaFb, // ✅ clave para NO romper el NOT NULL
+        tipo,
+        link,
+      },
+    ])
+    .select("id, created_at, fecha, usuario, cuenta_id, cuenta_fb, tipo, link")
     .single();
 
   if (error) return showError(`No se pudo guardar: ${error.message}`);
 
   input.value = "";
-  if (!linksHoy.some(x => x.id === data.id)) linksHoy.unshift(data);
+  if (!linksHoy.some((x) => x.id === data.id)) linksHoy.unshift(data);
+
   updateTipoUI(tipo);
   updateTipoTable(tipo);
 }
 
-function attachRealtime(){
-  if (rtChannel){
-    try { sb.removeChannel(rtChannel); } catch {}
+function attachRealtime() {
+  if (rtChannel) {
+    try {
+      sb.removeChannel(rtChannel);
+    } catch {}
     rtChannel = null;
   }
 
-  rtChannel = sb.channel("rt-publicaciones-rrss")
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "publicaciones_rrss" }, (payload) => {
-      const n = payload.new;
-      if (n?.fecha !== today) return;
-      if (n?.usuario !== selectedUsuario) return;
-      if (linksHoy.some(x => x.id === n.id)) return;
+  rtChannel = sb
+    .channel("rt-publicaciones-rrss")
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "publicaciones_rrss" },
+      (payload) => {
+        const n = payload.new;
+        if (n?.fecha !== today) return;
+        if (n?.usuario !== selectedUsuario) return;
+        if (linksHoy.some((x) => x.id === n.id)) return;
 
-      linksHoy.unshift(n);
-      updateTipoUI(n.tipo);
-      updateTipoTable(n.tipo);
-    })
+        linksHoy.unshift(n);
+        updateTipoUI(n.tipo);
+        updateTipoTable(n.tipo);
+      }
+    )
     .subscribe();
 }
 
