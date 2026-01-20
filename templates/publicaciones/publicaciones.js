@@ -280,20 +280,21 @@ function updateTipoTable(tipo) {
 async function guardarLink(tipo) {
   clearError();
 
-  const cuentaIdRaw = $(`sel-${tipo}`)?.value || "";
+  const select = document.getElementById(`sel-${tipo}`);
+  const cuentaIdRaw = select?.value || "";
   const cuentaId = Number(cuentaIdRaw || 0);
 
-  const input = $(`in-${tipo}`);
+  const input = document.getElementById(`in-${tipo}`);
   const link = (input?.value || "").trim();
 
   if (!cuentaId) return showError("Seleccioná una cuenta antes de guardar.");
   if (!link || !isValidUrl(link)) return showError("Pegá un link válido (http/https).");
   if (s.rol === "gerente") return showError("Modo gerente es solo lectura.");
 
-  const cuenta = cuentaById(cuentaId);
-  const cuentaFb = cuenta?.email || null;
+  // 🔥 EMAIL DIRECTO DEL SELECT (blindado)
+  const cuentaFb = select.options[select.selectedIndex].text.trim();
 
-  if (!cuentaFb) return showError("No se pudo detectar el email de la cuenta seleccionada.");
+  if (!cuentaFb) return showError("No se pudo obtener el email de la cuenta.");
 
   const { data, error } = await sb
     .from("publicaciones_rrss")
@@ -302,22 +303,26 @@ async function guardarLink(tipo) {
         fecha: today,
         usuario: selectedUsuario,
         cuenta_id: cuentaId,
-        cuenta_fb: cuentaFb, // ✅ clave para NO romper el NOT NULL
+        cuenta_fb: cuentaFb, // ✅ ya no puede ser null
         tipo,
         link,
       },
     ])
-    .select("id, created_at, fecha, usuario, cuenta_id, cuenta_fb, tipo, link")
+    .select()
     .single();
 
   if (error) return showError(`No se pudo guardar: ${error.message}`);
 
   input.value = "";
-  if (!linksHoy.some((x) => x.id === data.id)) linksHoy.unshift(data);
+
+  if (!linksHoy.some((x) => x.id === data.id)) {
+    linksHoy.unshift(data);
+  }
 
   updateTipoUI(tipo);
   updateTipoTable(tipo);
 }
+
 
 function attachRealtime() {
   if (rtChannel) {
