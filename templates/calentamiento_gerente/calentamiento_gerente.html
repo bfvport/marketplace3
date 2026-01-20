@@ -20,20 +20,20 @@
   </style>
 </head>
 
-<body class="app">
-<div class="layout">
-    <div id="sidebar-host"></div>
+<body>
+    <div class="layout">
+     <div id="sidebar-host"></div>
 
-  <main class="main">
-    <div class="card">
+     <main class="main">
+        <div class="card">
       <h1 style="color:white; margin:0;">🔥 Centro de Comando de Calentamiento</h1>
       <p class="muted" style="margin-top:6px;">
         Gerencia define la estrategia y genera el plan de 7 días (aleatorio) por cuenta.
       </p>
-    </div>
+        </div>
 
-    <div class="stats-grid" style="margin-top:16px;">
-      <div class="stat-card" style="border-color:#ef4444;">
+        <div class="stats-grid" style="margin-top:16px;">
+            <div class="stat-card" style="border-color:#ef4444;">
         <div id="stat-baneadas" style="font-size:2rem; font-weight:900; color:#ef4444;">0</div>
         <small class="muted">Baneadas / Inactivas</small>
       </div>
@@ -45,9 +45,9 @@
         <div id="stat-calientes" style="font-size:2rem; font-weight:900; color:#10b981;">0</div>
         <small class="muted">Calientes</small>
       </div>
-    </div>
+        </div>
 
-    <div class="grid" style="grid-template-columns: 1fr 1.6fr; gap:16px;">
+        <div class="grid" style="grid-template-columns: 1fr 1.6fr; gap:16px;">
       <!-- CONFIG -->
       <section class="card">
         <h3 style="color:white; margin:0;">⚙️ Estrategia Global</h3>
@@ -113,9 +113,9 @@
           </table>
         </div>
       </section>
+        </div>
+     </main>
     </div>
-  </main>
-</div>
   <script type="module" src="./calentamiento_gerente.js"></script>
 </body>
 </html>
