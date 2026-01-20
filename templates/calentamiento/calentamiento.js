@@ -3,67 +3,83 @@ import { requireSession, loadSidebar, fmtDateISO } from "../../assets/js/app.js"
 const s = requireSession();
 const sb = window.supabaseClient;
 const $ = (id) => document.getElementById(id);
-const today = fmtDateISO(new Date());
 
 let cachedEmails = new Map(); // cuenta_id -> email
 
-// 1) Si entra un gerente al módulo operador, lo mandamos al panel de gerencia.
-// 2) Así nunca ve “dos calentamientos” y no toca lo que no corresponde.
 if (s.rol === "gerente") {
   window.location.href = "../calentamiento_gerente/calentamiento_gerente.html";
 }
 
-// 1) Random determinístico: mismo día + misma cuenta => mismo resultado.
-// 2) Evita que cambien las tareas si el operador recarga la página.
-function seededRand(seedStr) {
-  let h = 2166136261;
-  for (let i = 0; i < seedStr.length; i++) {
-    h ^= seedStr.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return () => {
-    h += 0x6D2B79F5;
-    let t = Math.imul(h ^ (h >>> 15), 1 | h);
-    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+function todayISO(){ return fmtDateISO(new Date()); }
+function addDaysISO(baseISO, days) {
+  const d = new Date(baseISO + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return fmtDateISO(d);
 }
 
-function randInt(rng, min, max) {
-  const a = Math.min(min, max);
-  const b = Math.max(min, max);
-  return a + Math.floor(rng() * (b - a + 1));
+function ensureFechaPicker(){
+  if (document.getElementById("sel-fecha")) return;
+
+  // Insertamos picker debajo de los botones
+  const btnDrive = $("btn-drive");
+  if (!btnDrive) return;
+
+  const wrap = document.createElement("div");
+  wrap.style.display = "flex";
+  wrap.style.gap = "10px";
+  wrap.style.flexWrap = "wrap";
+  wrap.style.alignItems = "center";
+  wrap.style.marginTop = "12px";
+
+  const start = todayISO();
+  const end = addDaysISO(start, 6);
+
+  wrap.innerHTML = `
+    <label class="muted" style="font-size:0.85rem;">📅 Fecha:</label>
+    <input id="sel-fecha" type="date"
+      min="${start}" max="${end}" value="${start}"
+      style="padding:10px; border-radius:8px; border:1px solid #334155; background:#0f172a; color:white;" />
+    <span class="muted" style="font-size:0.8rem;">(hoy + 6 días)</span>
+  `;
+
+  btnDrive.parentElement.insertAdjacentElement("afterend", wrap);
 }
 
-// 1) Inicializa pantalla: sidebar y primer carga.
-// 2) El operador solo ve lo suyo (cuentas frías asignadas).
 (async function init() {
   await loadSidebar({ activeKey: "calentamiento", basePath: "../" });
 
+  ensureFechaPicker();
+
   $("btn-refrescar")?.addEventListener("click", () => cargarTodo());
+  document.getElementById("sel-fecha")?.addEventListener("change", () => cargarTodo());
+
   await cargarTodo();
 })();
 
-// 1) Carga configuración + cuentas frías asignadas + plan de hoy.
-// 2) Si el plan no existe, lo crea; si existe, lo respeta (no cambia).
 async function cargarTodo() {
-  const { data: cfg, error: eCfg } = await sb
-    .from("calentamiento_config")
+  const fecha = (document.getElementById("sel-fecha")?.value) || todayISO();
+
+  // 1) Drive desde configuracion_calentamiento (última)
+  const { data: cfgData, error: eCfg } = await sb
+    .from("configuracion_calentamiento")
     .select("*")
-    .eq("id", 1)
-    .single();
+    .order("updated_at", { ascending: false })
+    .limit(1);
 
   if (eCfg) {
-    alert("Error cargando configuración de calentamiento: " + eCfg.message);
+    alert("Error cargando configuración: " + eCfg.message);
     return;
   }
 
-  $("btn-drive").href = cfg.link_drive || "#";
-  $("btn-drive").style.opacity = cfg.link_drive ? "1" : "0.6";
+  const cfg = cfgData?.[0];
+  const drive = cfg?.link_drive || "#";
+  $("btn-drive").href = drive;
+  $("btn-drive").style.opacity = (cfg?.link_drive ? "1" : "0.6");
 
+  // 2) Cuentas frías asignadas al operador (como ya venías)
   const { data: cuentas, error: eC } = await sb
     .from("cuentas_facebook")
-    .select("id,email,calidad,ocupada_por")
+    .select("id,email,calidad,ocupada_por,estado")
     .eq("ocupada_por", s.usuario)
     .in("calidad", ["fria", "frío", "frio", "nueva"]);
 
@@ -77,79 +93,21 @@ async function cargarTodo() {
   if (!cuentas || cuentas.length === 0) {
     $("tabla-calentamiento").innerHTML =
       `<tr><td colspan="6" class="muted">No tenés cuentas frías asignadas.</td></tr>`;
-    $("resumen").textContent = "Pendientes hoy → H:0 | M:0 | R:0 | G:0";
+    $("resumen").textContent = "Pendientes → H:0 | M:0 | R:0 | G:0";
     return;
   }
 
-  // Generar plan solo si no existe (para que no cambie al recargar)
-  for (const c of cuentas) {
-    const { data: existe } = await sb
-      .from("calentamiento_plan")
-      .select("id")
-      .eq("fecha", today)
-      .eq("cuenta_id", c.id)
-      .maybeSingle();
-
-    if (!existe) {
-      const rng = seededRand(`${today}|${c.id}|${s.usuario}`);
-
-      let h = randInt(rng, cfg.historias_min, cfg.historias_max);
-      let m = randInt(rng, cfg.muro_min, cfg.muro_max);
-      let r = randInt(rng, cfg.reels_min, cfg.reels_max);
-      let g = randInt(rng, cfg.grupos_min, cfg.grupos_max);
-
-      // Si todo da 0, forzamos 1 acción mínima para que “siempre haya tarea”
-      if (h + m + r + g === 0) h = 1;
-
-      const { data: creado, error: eUp } = await sb
-        .from("calentamiento_plan")
-        .insert([{
-          fecha: today,
-          cuenta_id: c.id,
-          usuario: s.usuario,
-          req_historias: h,
-          req_muro: m,
-          req_reels: r,
-          req_grupos: g,
-          done_historias: 0,
-          done_muro: 0,
-          done_reels: 0,
-          done_grupos: 0,
-          estado: "pendiente"
-        }])
-        .select("id")
-        .single();
-
-      if (eUp) {
-        alert("Error creando plan de hoy: " + eUp.message);
-        return;
-      }
-
-      // 1) Log de “plan generado” para Torre de Actividad (sin spam: solo cuando se crea).
-      // 2) Esto permite ver qué le tocó hoy a esa cuenta, sin entrar a calentamiento.
-      await sb.from("usuarios_actividad").insert([{
-        usuario: s.usuario,
-        evento: `📌 Plan Calentamiento HOY | ${c.email} | H:${h} M:${m} R:${r} G:${g}`,
-        cuenta_fb: `cuenta_id:${c.id}`,
-      }]);
-
-      // evitamos usar la variable creado para más cosas, pero queda por si querés debug
-      void creado;
-    }
-  }
-
-  await dibujarTablaYResumen(cuentas);
+  await dibujarTablaYResumen(cuentas, fecha);
 }
 
-// 1) Dibuja tabla de tareas por cuenta (hecho/requerido) y calcula pendientes totales.
-// 2) Deja los botones listos para registrar “+1” y mandar log a Actividad.
-async function dibujarTablaYResumen(cuentas) {
+async function dibujarTablaYResumen(cuentas, fecha) {
   const ids = cuentas.map(c => c.id);
 
+  // 3) Traemos el plan asignado por gerencia para esa fecha
   const { data: planes, error } = await sb
     .from("calentamiento_plan")
     .select("*")
-    .eq("fecha", today)
+    .eq("fecha", fecha)
     .in("cuenta_id", ids);
 
   if (error) {
@@ -162,7 +120,17 @@ async function dibujarTablaYResumen(cuentas) {
 
   const rows = cuentas.map(c => {
     const p = map.get(c.id);
-    if (!p) return "";
+
+    // Si NO hay plan para esa cuenta en esa fecha, mostramos “sin asignación”
+    if (!p) {
+      return `
+        <tr>
+          <td style="color:white; font-weight:700;">${escapeHtml(c.email)}</td>
+          <td class="muted" colspan="4">Sin plan asignado para ${fecha}</td>
+          <td class="muted">—</td>
+        </tr>
+      `;
+    }
 
     const faltH = Math.max(0, (p.req_historias || 0) - (p.done_historias || 0));
     const faltM = Math.max(0, (p.req_muro || 0) - (p.done_muro || 0));
@@ -179,24 +147,22 @@ async function dibujarTablaYResumen(cuentas) {
         <td style="color:white;">${p.done_reels}/${p.req_reels}</td>
         <td style="color:white;">${p.done_grupos}/${p.req_grupos}</td>
         <td style="display:flex; gap:6px; flex-wrap:wrap;">
-          <button class="btn2" data-id="${p.id}" data-a="h">+1 Historia</button>
-          <button class="btn2" data-id="${p.id}" data-a="m">+1 Muro</button>
-          <button class="btn2" data-id="${p.id}" data-a="r">+1 Reel</button>
-          <button class="btn2" data-id="${p.id}" data-a="g">+1 Grupo</button>
+          <button class="btn2" data-fecha="${fecha}" data-id="${p.id}" data-a="h">+1 Historia</button>
+          <button class="btn2" data-fecha="${fecha}" data-id="${p.id}" data-a="m">+1 Muro</button>
+          <button class="btn2" data-fecha="${fecha}" data-id="${p.id}" data-a="r">+1 Reel</button>
+          <button class="btn2" data-fecha="${fecha}" data-id="${p.id}" data-a="g">+1 Grupo</button>
         </td>
       </tr>
     `;
   }).join("");
 
-  $("tabla-calentamiento").innerHTML = rows || `<tr><td colspan="6" class="muted">Sin datos.</td></tr>`;
-  $("resumen").innerHTML = `Pendientes hoy → H:${ph} | M:${pm} | R:${pr} | G:${pg}`;
+  $("tabla-calentamiento").innerHTML = rows;
+  $("resumen").innerHTML = `Pendientes (${fecha}) → H:${ph} | M:${pm} | R:${pr} | G:${pg}`;
 
-  bindAcciones();
+  bindAcciones(fecha);
 }
 
-// 1) Al apretar +1, actualiza el progreso del plan y registra un log detallado en Actividad.
-// 2) El log incluye cuánto hizo y cuánto falta en H/M/R/G para esa cuenta.
-function bindAcciones() {
+function bindAcciones(fecha) {
   document.querySelectorAll("button[data-a]").forEach(btn => {
     btn.onclick = async () => {
       const planId = Number(btn.dataset.id);
@@ -219,10 +185,8 @@ function bindAcciones() {
       if (act === "r" && p.done_reels < p.req_reels) patch.done_reels = p.done_reels + 1;
       if (act === "g" && p.done_grupos < p.req_grupos) patch.done_grupos = p.done_grupos + 1;
 
-      // Si ya estaba completo en esa acción, no hacemos nada (evita inflar números)
       if (Object.keys(patch).length === 1) return;
 
-      // Recalcular “done” con el patch aplicado
       const doneH = (patch.done_historias ?? p.done_historias);
       const doneM = (patch.done_muro ?? p.done_muro);
       const doneR = (patch.done_reels ?? p.done_reels);
@@ -247,7 +211,7 @@ function bindAcciones() {
 
       const email = cachedEmails.get(p.cuenta_id) || `CuentaID ${p.cuenta_id}`;
       const evento =
-        `🔥 Calentamiento | ${email} | ${tipo} +1 | ` +
+        `🔥 Calentamiento (${fecha}) | ${email} | ${tipo} +1 | ` +
         `H ${doneH}/${reqH} (faltan ${faltH}) | ` +
         `M ${doneM}/${reqM} (faltan ${faltM}) | ` +
         `R ${doneR}/${reqR} (faltan ${faltR}) | ` +
@@ -256,7 +220,7 @@ function bindAcciones() {
       await sb.from("usuarios_actividad").insert([{
         usuario: s.usuario,
         evento,
-        cuenta_fb: `cuenta_id:${p.cuenta_id}`,
+        cuenta_fb: `cuenta_id:${p.cuenta_id}`
       }]);
 
       await cargarTodo();
@@ -272,4 +236,3 @@ function escapeHtml(v) {
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
 }
-

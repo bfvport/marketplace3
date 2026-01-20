@@ -1,24 +1,107 @@
-import { requireSession, loadSidebar } from "../../assets/js/app.js";
+import { requireSession, loadSidebar, fmtDateISO } from "../../assets/js/app.js";
 
 const s = requireSession();
 const sb = window.supabaseClient;
 const $ = (id) => document.getElementById(id);
 
-// Estado
 let cuentasCache = [];
-let configCache = {
-  meta_historias: 0,
-  meta_muro: 0,
-  meta_reels: 0,
-  meta_grupos: 0,
-  link_drive: ""
-};
+let configCache = null;
 
-// Inicialización
+// ---------- Helpers ----------
+function todayISO() { return fmtDateISO(new Date()); }
+function addDaysISO(baseISO, days) {
+  const d = new Date(baseISO + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return fmtDateISO(d);
+}
+function randInt(min, max) {
+  const a = Math.min(min, max);
+  const b = Math.max(min, max);
+  return a + Math.floor(Math.random() * (b - a + 1));
+}
+function getCfgFromInputs(){
+  return {
+    meta_historias: parseInt($("cfg-historias").value, 10) || 0,
+    meta_muro: parseInt($("cfg-muro").value, 10) || 0,
+    meta_reels: parseInt($("cfg-reels").value, 10) || 0,
+    meta_grupos: parseInt($("cfg-grupos").value, 10) || 0,
+    link_drive: ($("cfg-drive").value || "").trim()
+  };
+}
+
+// Rutina aleatoria “conservadora”, usando los números del gerente como “tope”
+function rutinaAleatoriaDesde(cfg){
+  const Hmax = Math.max(0, cfg.meta_historias || 0);
+  const Mmax = Math.max(0, cfg.meta_muro || 0);
+  const Rmax = Math.max(0, cfg.meta_reels || 0);
+  const Gmax = Math.max(0, cfg.meta_grupos || 0);
+
+  // Historias: si hay tope, mínimo 1; si no, 0
+  const h = Hmax > 0 ? randInt(Math.max(1, Hmax - 1), Hmax) : 0;
+  // Muro/Reels/Grupos: permiten 0..tope
+  const m = Mmax > 0 ? randInt(Math.max(0, Mmax - 1), Mmax) : 0;
+  const r = Rmax > 0 ? randInt(Math.max(0, Rmax - 1), Rmax) : 0;
+  const g = Gmax > 0 ? randInt(Math.max(0, Gmax - 1), Gmax) : 0;
+
+  // Nunca todo 0
+  if (h + m + r + g === 0) return { h: 1, m: 0, r: 0, g: 0 };
+  return { h, m, r, g };
+}
+
+function asegurarUISeleccionYBotones(){
+  // 1) Inyectar botones debajo del btn-save
+  const btnSave = $("btn-save");
+  if (btnSave && !document.getElementById("btn-plan-7d")) {
+    const wrap = document.createElement("div");
+    wrap.style.display = "grid";
+    wrap.style.gap = "10px";
+    wrap.style.marginTop = "10px";
+
+    wrap.innerHTML = `
+      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+        <button id="btn-plan-7d" class="btn" style="width:100%;">🎲 Generar PLAN 7 días (seleccionadas)</button>
+        <div class="muted" id="sel-count" style="font-size:0.85rem;">0 seleccionadas</div>
+      </div>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button id="btn-sel-all" class="btn2" type="button">Seleccionar todo</button>
+        <button id="btn-sel-none" class="btn2" type="button">Limpiar</button>
+      </div>
+      <div class="muted" style="font-size:0.8rem;">
+        Tip: Solo se planifican cuentas con <b>Resp.</b> asignado (ocupada_por) y que no estén baneadas/inactivas.
+      </div>
+    `;
+    btnSave.insertAdjacentElement("afterend", wrap);
+  }
+
+  // 2) Inyectar columna de selección en tabla (header + rows)
+  const theadRow = document.querySelector("table.table thead tr");
+  if (theadRow && !theadRow.querySelector("th[data-sel='1']")) {
+    const th = document.createElement("th");
+    th.textContent = "Sel";
+    th.setAttribute("data-sel", "1");
+    th.style.width = "55px";
+    theadRow.prepend(th);
+  }
+}
+
+function actualizarContadorSeleccion(){
+  const checked = document.querySelectorAll(".ck-cuenta:checked").length;
+  const el = document.getElementById("sel-count");
+  if (el) el.textContent = `${checked} seleccionadas`;
+  const btn = document.getElementById("btn-plan-7d");
+  if (btn) btn.disabled = checked === 0;
+}
+
+function getSeleccionadasIds(){
+  return Array.from(document.querySelectorAll(".ck-cuenta:checked"))
+    .map(x => Number(x.getAttribute("data-id")))
+    .filter(Boolean);
+}
+
+// ---------- Init ----------
 (async function init() {
   await loadSidebar({ activeKey: "calentamiento_gerente", basePath: "../" });
 
-  // 1) Seguridad (Solo Gerentes)
   if (s.rol !== "gerente") {
     document.body.innerHTML = `
       <div style="text-align:center; padding:50px; color:white;">
@@ -29,134 +112,95 @@ let configCache = {
     return;
   }
 
+  asegurarUISeleccionYBotones();
+
   await cargarConfiguracion();
   await cargarCuentas();
 
-  // Botones
   $("btn-save").onclick = guardarConfiguracion;
 
-  // Si tenés este botón en el HTML, lo usamos (si no existe, no rompe)
-  const btnAplicar = $("btn-aplicar");
-  if (btnAplicar) btnAplicar.onclick = aplicarEstrategiaACuentasSeleccionadas;
+  // Botones extra
+  const b7 = document.getElementById("btn-plan-7d");
+  if (b7) b7.onclick = generarPlan7DiasSeleccionadas;
 
-  // Helpers de selección (si existen en el HTML)
-  const btnSelAll = $("btn-sel-all");
-  if (btnSelAll) btnSelAll.onclick = () => toggleSeleccion(true);
+  const bAll = document.getElementById("btn-sel-all");
+  if (bAll) bAll.onclick = () => toggleSeleccion(true);
 
-  const btnSelNone = $("btn-sel-none");
-  if (btnSelNone) btnSelNone.onclick = () => toggleSeleccion(false);
+  const bNone = document.getElementById("btn-sel-none");
+  if (bNone) bNone.onclick = () => toggleSeleccion(false);
 
-  // Delegación para checkbox (no hace falta re-crear listeners por fila)
   document.addEventListener("change", (e) => {
     if (e.target && e.target.classList && e.target.classList.contains("ck-cuenta")) {
-      actualizarEstadoSeleccion();
+      actualizarContadorSeleccion();
     }
   });
 
-  actualizarEstadoSeleccion();
+  actualizarContadorSeleccion();
 })();
 
-// --- Utilidades ---
-function hoyISO() {
-  // YYYY-MM-DD
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function intVal(id) {
-  return parseInt($(id)?.value, 10) || 0;
-}
-
-function getCfgFromInputs() {
-  return {
-    meta_historias: intVal("cfg-historias"),
-    meta_muro: intVal("cfg-muro"),
-    meta_reels: intVal("cfg-reels"),
-    meta_grupos: intVal("cfg-grupos"),
-    link_drive: $("cfg-drive")?.value?.trim() || ""
-  };
-}
-
-function getSeleccionadasIds() {
-  return Array.from(document.querySelectorAll(".ck-cuenta:checked"))
-    .map((el) => el.getAttribute("data-id"))
-    .filter(Boolean);
-}
-
-function toggleSeleccion(checked) {
-  document.querySelectorAll(".ck-cuenta").forEach((ck) => {
-    // si la cuenta no es asignable (libre o baneada) no la tocamos
-    if (ck.disabled) return;
-    ck.checked = checked;
-  });
-  actualizarEstadoSeleccion();
-}
-
-function actualizarEstadoSeleccion() {
-  const sel = getSeleccionadasIds();
-  const lbl = $("sel-count");
-  if (lbl) lbl.textContent = `${sel.length} seleccionadas`;
-
-  const btnAplicar = $("btn-aplicar");
-  if (btnAplicar) btnAplicar.disabled = sel.length === 0;
-}
-
-// --- LÓGICA DE CONFIGURACIÓN GLOBAL ---
+// ---------- Configuracion ----------
 async function cargarConfiguracion() {
-  const { data: config, error } = await sb
+  // Traemos la última config (si hay 0 filas, no rompe)
+  const { data, error } = await sb
     .from("configuracion_calentamiento")
     .select("*")
-    .single();
+    .order("updated_at", { ascending: false })
+    .limit(1);
 
-  if (error && error.code !== "PGRST116") {
+  if (error) {
     console.error("Error cargando config:", error);
     return;
   }
 
-  if (config) {
-    $("cfg-historias").value = config.meta_historias || 0;
-    $("cfg-muro").value = config.meta_muro || 0;
-    $("cfg-reels").value = config.meta_reels || 0;
-    $("cfg-grupos").value = config.meta_grupos || 0;
-    $("cfg-drive").value = config.link_drive || "";
+  const cfg = data?.[0];
+  if (!cfg) return;
 
-    configCache = {
-      meta_historias: config.meta_historias || 0,
-      meta_muro: config.meta_muro || 0,
-      meta_reels: config.meta_reels || 0,
-      meta_grupos: config.meta_grupos || 0,
-      link_drive: config.link_drive || ""
-    };
-  }
+  configCache = cfg;
+
+  $("cfg-historias").value = cfg.meta_historias || 0;
+  $("cfg-muro").value = cfg.meta_muro || 0;
+  $("cfg-reels").value = cfg.meta_reels || 0;
+  $("cfg-grupos").value = cfg.meta_grupos || 0;
+  $("cfg-drive").value = cfg.link_drive || "";
 }
 
 async function guardarConfiguracion() {
   const payload = {
-    meta_historias: intVal("cfg-historias"),
-    meta_muro: intVal("cfg-muro"),
-    meta_reels: intVal("cfg-reels"),
-    meta_grupos: intVal("cfg-grupos"),
-    link_drive: $("cfg-drive").value,
+    meta_historias: parseInt($("cfg-historias").value, 10) || 0,
+    meta_muro: parseInt($("cfg-muro").value, 10) || 0,
+    meta_reels: parseInt($("cfg-reels").value, 10) || 0,
+    meta_grupos: parseInt($("cfg-grupos").value, 10) || 0,
+    link_drive: ($("cfg-drive").value || "").trim(),
     updated_at: new Date()
   };
 
-  // ✅ Upsert (config global fija en id=1)
-  const { error } = await sb
+  // ✅ NO usamos id=1 (evita “cannot insert non-default into id”)
+  // 1) si existe una fila, la actualizamos; 2) si no existe, insertamos.
+  const { data: upd, error: eUpd } = await sb
     .from("configuracion_calentamiento")
-    .upsert({ id: 1, ...payload });
+    .update(payload)
+    .select("id")
+    .limit(1);
 
-  if (error) {
-    alert("❌ Error al guardar: " + error.message);
-  } else {
-    configCache = { ...payload };
-    alert("✅ Estrategia global actualizada. Ahora podés aplicarla a cuentas.");
+  if (eUpd) {
+    alert("❌ Error al guardar (update): " + eUpd.message);
+    return;
   }
+
+  if (upd && upd.length > 0) {
+    alert("✅ Estrategia global actualizada.");
+    return;
+  }
+
+  const { error: eIns } = await sb
+    .from("configuracion_calentamiento")
+    .insert([payload]);
+
+  if (eIns) alert("❌ Error al guardar (insert): " + eIns.message);
+  else alert("✅ Estrategia global creada.");
 }
 
-// --- LÓGICA DE GESTIÓN DE CUENTAS ---
+// ---------- Cuentas ----------
 async function cargarCuentas() {
   const { data: cuentas, error } = await sb
     .from("cuentas_facebook")
@@ -164,59 +208,42 @@ async function cargarCuentas() {
     .order("calidad");
 
   if (error) {
-    console.error(error);
     alert("❌ Error cargando cuentas: " + error.message);
     return;
   }
 
   cuentasCache = cuentas || [];
 
-  // KPIs
-  const baneadas = cuentasCache.filter((c) => c.calidad === "baneada" || c.estado === "inactiva").length;
-  const frias = cuentasCache.filter((c) => c.calidad === "fria" || c.calidad === "nueva").length;
-  const calientes = cuentasCache.filter((c) => c.calidad === "caliente").length;
+  const baneadas = cuentasCache.filter(c => c.calidad === "baneada" || c.estado === "inactiva").length;
+  const frias = cuentasCache.filter(c => c.calidad === "fria" || c.calidad === "nueva").length;
+  const calientes = cuentasCache.filter(c => c.calidad === "caliente").length;
 
   $("stat-baneadas").textContent = baneadas;
   $("stat-frias").textContent = frias;
   $("stat-calientes").textContent = calientes;
 
-  renderTablaCuentas();
-  actualizarEstadoSeleccion();
-}
-
-function renderTablaCuentas() {
   const tbody = $("tabla-cuentas");
   tbody.innerHTML = "";
 
-  cuentasCache.forEach((c) => {
+  cuentasCache.forEach(c => {
     let colorEstado = "#94a3b8";
     if (c.calidad === "caliente") colorEstado = "#10b981";
     if (c.calidad === "fria" || c.calidad === "nueva") colorEstado = "#3b82f6";
     if (c.calidad === "baneada") colorEstado = "#ef4444";
 
-    const esBaneada = c.calidad === "baneada" || c.estado === "inactiva";
-    const esLibre = !c.ocupada_por;
-    const asignable = !esBaneada && !esLibre;
+    const inactiva = (c.calidad === "baneada" || c.estado === "inactiva");
+    const libre = !c.ocupada_por;
+    const habilitada = !inactiva && !libre;
 
     tbody.innerHTML += `
       <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
-        <td style="width:40px;">
-          <input
-            type="checkbox"
-            class="ck-cuenta"
-            data-id="${c.id}"
-            ${asignable ? "" : "disabled"}
-            title="${asignable ? "Seleccionar cuenta" : (esLibre ? "No se puede: cuenta Libre" : "No se puede: cuenta Inactiva/Baneada")}"
-          />
+        <td style="width:55px;">
+          <input type="checkbox" class="ck-cuenta" data-id="${c.id}" ${habilitada ? "" : "disabled"}
+            title="${habilitada ? "Seleccionar" : (libre ? "No: Libre" : "No: Inactiva/Baneada")}" />
         </td>
-
         <td>${c.email}</td>
         <td><span class="muted">${c.ocupada_por || "Libre"}</span></td>
-
-        <td style="color:${colorEstado}; font-weight:bold; text-transform:uppercase;">
-          ${c.calidad}
-        </td>
-
+        <td style="color:${colorEstado}; font-weight:bold; text-transform:uppercase;">${c.calidad}</td>
         <td>
           ${c.calidad !== "baneada"
             ? `<button class="btn-danger" style="padding:4px 8px; font-size:0.7rem;" onclick="reportarBan('${c.id}')">☠️ Ban</button>`
@@ -226,71 +253,94 @@ function renderTablaCuentas() {
       </tr>
     `;
   });
+
+  actualizarContadorSeleccion();
 }
 
-// ✅ Aplicar estrategia a cuentas seleccionadas (GUARDA EN calentamiento_plan)
-async function aplicarEstrategiaACuentasSeleccionadas() {
+function toggleSeleccion(checked){
+  document.querySelectorAll(".ck-cuenta").forEach(ck => {
+    if (ck.disabled) return;
+    ck.checked = checked;
+  });
+  actualizarContadorSeleccion();
+}
+
+// ---------- Plan 7 días ----------
+async function generarPlan7DiasSeleccionadas(){
   const ids = getSeleccionadasIds();
   if (!ids.length) return alert("Seleccioná al menos 1 cuenta.");
 
-  const cfg = getCfgFromInputs(); // usa lo que está en inputs (lo más fiel)
-  const fecha = hoyISO();
+  const cfg = getCfgFromInputs();
+  const start = todayISO();
 
-  // Construimos filas a upsert
   const rows = [];
 
-  for (const idStr of ids) {
-    const id = Number(idStr);
-    const c = cuentasCache.find((x) => Number(x.id) === id);
-    if (!c) continue;
+  for (let i = 0; i < 7; i++) {
+    const fecha = addDaysISO(start, i);
 
-    // Solo asignables (por si acaso)
-    const esBaneada = c.calidad === "baneada" || c.estado === "inactiva";
-    const esLibre = !c.ocupada_por;
-    if (esBaneada || esLibre) continue;
+    for (const cuenta_id of ids) {
+      const c = cuentasCache.find(x => Number(x.id) === Number(cuenta_id));
+      if (!c) continue;
 
-    rows.push({
-      // ⚠️ NO mandamos "id" (lo genera la DB)
-      fecha,
-      cuenta_id: id,
-      usuario: c.ocupada_por,
-      req_historias: cfg.meta_historias,
-      req_muro: cfg.meta_muro,
-      req_reels: cfg.meta_reels,
-      req_grupos: cfg.meta_grupos,
+      const inactiva = (c.calidad === "baneada" || c.estado === "inactiva");
+      const libre = !c.ocupada_por;
+      if (inactiva || libre) continue;
 
-      // si tu tabla no tiene link_drive, después te paso el SQL y lo activás
-      link_drive: cfg.link_drive
-    });
+      const r = rutinaAleatoriaDesde(cfg);
+
+      rows.push({
+        fecha,
+        cuenta_id: Number(cuenta_id),
+        usuario: c.ocupada_por,
+        req_historias: r.h,
+        req_muro: r.m,
+        req_reels: r.r,
+        req_grupos: r.g,
+        done_historias: 0,
+        done_muro: 0,
+        done_reels: 0,
+        done_grupos: 0,
+        estado: "pendiente",
+        link_drive: cfg.link_drive || null
+      });
+    }
   }
 
-  if (!rows.length) {
-    return alert("No hay cuentas válidas para asignar (están libres o inactivas).");
-  }
+  if (!rows.length) return alert("No hay cuentas válidas (libres/inactivas).");
 
-  // Upsert: evita duplicados por (fecha, cuenta_id)
-  const { error } = await sb
+  // Intento upsert con link_drive; si tu tabla no tiene esa columna, reintenta sin link_drive.
+  let { error } = await sb
     .from("calentamiento_plan")
     .upsert(rows, { onConflict: "fecha,cuenta_id" });
 
+  if (error && /link_drive|column/i.test(error.message)) {
+    const rows2 = rows.map(({ link_drive, ...rest }) => rest);
+    const retry = await sb.from("calentamiento_plan").upsert(rows2, { onConflict: "fecha,cuenta_id" });
+    error = retry.error;
+  }
+
   if (error) {
     console.error(error);
-    alert("❌ Error aplicando estrategia: " + error.message);
+    alert("❌ Error generando plan 7 días: " + error.message);
     return;
   }
 
-  alert(`✅ Estrategia aplicada a ${rows.length} cuentas para ${fecha}.`);
+  // Log simple en actividad (opcional, pero útil)
+  await sb.from("usuarios_actividad").insert([{
+    usuario: s.usuario,
+    evento: `🗓️ Gerencia generó PLAN 7 días (aleatorio) para ${ids.length} cuentas`,
+    cuenta_fb: "calentamiento_plan"
+  }]);
+
+  alert(`✅ Plan 7 días generado para ${ids.length} cuentas. (Hoy + 6 días)`);
 }
 
-// --- Ban ---
+// ---------- Ban ----------
 window.reportarBan = async (id) => {
   if (confirm("¿Confirmás que esta cuenta ha sido BANEADA permanentemente?")) {
     const { error } = await sb
       .from("cuentas_facebook")
-      .update({
-        calidad: "baneada",
-        estado: "inactiva"
-      })
+      .update({ calidad: "baneada", estado: "inactiva" })
       .eq("id", id);
 
     if (!error) {
