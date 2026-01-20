@@ -1,31 +1,91 @@
 <aside class="sidebar">
-  <div class="brand">📌 Marketplace Manager</div>
-
-  <div class="sb-user">
-    <div><strong id="sb-usuario">-</strong></div>
-    <div class="muted">Rol: <span id="sb-rol">-</span></div>
+  <div class="brand">
+    <div style="font-weight:900; color:white;">Marketplace Manager</div>
   </div>
 
-  <nav class="nav">
-    <a href="../dashboard/dashboard.html" data-nav="dashboard">🏠 Dashboard</a>
-    <a href="../diario/diario.html" data-nav="diario">📅 Diario</a>
-    <a href="../publicaciones/publicaciones.html" data-nav="publicaciones">📥 Recursos (Fotos)</a>
-    <a href="../gestionar_publicaciones/gestionar.html" data-only="gerente" data-nav="gestionar_publicaciones">📸 Gestionar Recursos</a>
-    <a href="../categoria/categoria.html" data-only="gerente" data-nav="categoria">🗂️ Categorías</a>
-    <a href="../cuentas_fb/cuentas_fb.html"  data-nav="cuentas">👤 Cuentas Facebook</a>
-    <a href="../asignaciones/asignaciones.html" data-only="gerente" data-nav="asignaciones">📌 Asignaciones</a>
-    <a href="../actividad/actividad.html" data-nav="actividad" data-only="gerente">📊 Actividad</a>
-    <a href="../usuarios/usuarios.html" data-only="gerente" data-nav="usuarios">👤 Usuarios</a>
-    <a href="../verificacion/verificacion.html" data-only="gerente" data-nav="verificacion">🔎 Verificación</a>
-    <a href="../metricas/metricas.html" data-nav="metricas">📈 Métricas</a>
-    <a href="../calentamiento/calentamiento.html" class="nav-item" data-nav="calentamiento">🔥 Calentamiento</a>
-    <a href="../mensajes/mensajes.html" data-nav="mensajes">💬 Mensajes</a>
-    <a href="../soporte/reporte_error.html" data-nav="reporte_error">🛠️ Reportar error</a>
-    <a href="../soporte/reportes.html" data-only="gerente" data-nav="reportes_errores">🧾 Reportes de errores</a>
+  <div class="userbox" style="margin-top:10px;">
+    <div id="sb-usuario" style="color:white; font-weight:800;">—</div>
+    <div id="sb-rol" class="muted" style="margin-top:2px;">—</div>
+  </div>
 
+  <nav class="nav" style="margin-top:14px;">
+    <!-- ==================== COMUNES ==================== -->
+    <a data-key="dashboard" href="../dashboard/dashboard.html">🏠 Dashboard</a>
+
+    <!-- ==================== OPERADOR ==================== -->
+    <a data-key="diario" class="only-operador" href="../diario/diario.html">🗓️ Diario</a>
+    <a data-key="recursos" class="only-operador" href="../publicaciones/publicaciones.html">📎 Recursos (Fotos)</a>
+    <a data-key="calentamiento" class="only-operador" href="../calentamiento/calentamiento.html">🔥 Calentamiento</a>
+    <a data-key="mensajes" class="only-operador" href="../mensajes/mensajes.html">💬 Mensajes</a>
+    <a data-key="reportar_error" class="only-operador" href="../reportar_error/reportar_error.html">🛠️ Reportar error</a>
+
+    <!-- ==================== GERENTE ==================== -->
+    <a data-key="gestionar_recursos" class="only-gerente" href="../publicaciones_gerente/publicaciones_gerente.html">📦 Gestionar Recursos</a>
+    <a data-key="categorias" class="only-gerente" href="../categoria/categoria.html">🏷️ Categorías</a>
+    <a data-key="cuentas_fb" class="only-gerente" href="../cuentas_fb/cuentas_fb.html">👤 Cuentas Facebook</a>
+    <a data-key="asignaciones" class="only-gerente" href="../asignaciones/asignaciones.html">🧩 Asignaciones</a>
+    <a data-key="actividad" class="only-gerente" href="../actividad/actividad.html">📡 Actividad</a>
+    <a data-key="usuarios" class="only-gerente" href="../usuarios/usuarios.html">👥 Usuarios</a>
+    <a data-key="verificacion" class="only-gerente" href="../verificacion/verificacion.html">✅ Verificación</a>
+    <a data-key="metricas" class="only-gerente" href="../metricas/metricas.html">📈 Métricas</a>
+    <a data-key="calentamiento_gerente" class="only-gerente" href="../calentamiento_gerente/calentamiento_gerente.html">🔥 Calentamiento (Gerente)</a>
+    <a data-key="reportes_errores" class="only-gerente" href="../reportes_errores/reportes_errores.html">🧾 Reportes de errores</a>
   </nav>
 
-  <div class="sb-footer">
-    <button class="btn2" id="btn-logout">Salir</button>
+  <div style="margin-top:auto; padding-top:14px;">
+    <button id="sb-salir" class="btn-danger" style="width:100%;">Salir</button>
   </div>
+
+  <style>
+    /* Por defecto ocultamos todo lo "rol-específico" hasta saber el rol */
+    .only-gerente, .only-operador { display:none; }
+
+    /* Cuando se setea el rol */
+    .role-gerente .only-gerente { display:flex; }
+    .role-operador .only-operador { display:flex; }
+
+    /* Estilo links */
+    .nav a{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      padding:10px 12px;
+      border-radius:12px;
+      color:#cbd5e1;
+      text-decoration:none;
+      margin:4px 0;
+      border:1px solid rgba(255,255,255,0.06);
+      background: rgba(15, 23, 42, 0.35);
+    }
+    .nav a.active{
+      outline: 2px solid rgba(59,130,246,0.35);
+      color:white;
+      background: rgba(30, 41, 59, 0.6);
+    }
+  </style>
+
+  <script>
+    (function () {
+      // lee sesión (misma key del sistema)
+      let s = null;
+      try { s = JSON.parse(localStorage.getItem("mp_session_v1") || "null"); } catch {}
+
+      const usuario = s?.usuario || "—";
+      const rol = s?.rol || "—";
+
+      document.getElementById("sb-usuario").textContent = usuario;
+      document.getElementById("sb-rol").textContent = "Rol: " + rol;
+
+      // marca rol en el sidebar para mostrar/ocultar
+      const root = document.querySelector(".sidebar");
+      if (rol === "gerente") root.classList.add("role-gerente");
+      else root.classList.add("role-operador");
+
+      // salir (limpia sesión)
+      document.getElementById("sb-salir").onclick = () => {
+        localStorage.removeItem("mp_session_v1");
+        location.href = "../login/login.html";
+      };
+    })();
+  </script>
 </aside>

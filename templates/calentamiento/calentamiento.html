@@ -10,29 +10,32 @@
 </head>
 
 <body class="app">
-  <!-- IMPORTANTE: en tu proyecto el sidebar se carga acá -->
   <div id="sidebar-host"></div>
 
   <main class="main">
     <div class="card">
-      <h1 style="color:white; margin:0;">🔥 Calentamiento</h1>
+      <h1 style="color:white; margin:0;">🔥 Calentamiento (Operador)</h1>
       <p class="muted" style="margin-top:6px;">
-        Tus cuentas frías asignadas y lo que toca hacer HOY (aleatorio, pero fijo para el día).
+        Acá ves lo que Gerencia te asignó para cada cuenta (HOY y próximos días).
       </p>
 
-      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px; align-items:center;">
         <a id="btn-drive" class="btn2" target="_blank" rel="noreferrer">📂 Abrir Drive</a>
+
+        <label class="muted" for="sel-dia" style="margin:0;">Día:</label>
+        <select id="sel-dia" class="btn2" style="min-width:160px;"></select>
+
         <button id="btn-refrescar" class="btn2">🔄 Recargar</button>
       </div>
     </div>
 
     <div class="card" style="margin-top:16px;">
-      <h2 style="color:white; margin:0;">📌 Pendientes de hoy</h2>
+      <h2 style="color:white; margin:0;">📌 Resumen</h2>
       <div id="resumen" class="muted" style="margin-top:8px;">Cargando…</div>
     </div>
 
     <div class="card" style="margin-top:16px;">
-      <h2 style="color:white; margin:0;">👤 Tus cuentas frías</h2>
+      <h2 style="color:white; margin:0;">👤 Tus cuentas y tareas</h2>
 
       <div style="overflow:auto; margin-top:12px;">
         <table class="table">
@@ -43,7 +46,9 @@
               <th>Muro</th>
               <th>Reels</th>
               <th>Grupos</th>
-              <th>Acciones</th>
+              <th>Hecho</th>
+              <th>Estado</th>
+              <th>Acción</th>
             </tr>
           </thead>
           <tbody id="tabla-calentamiento"></tbody>

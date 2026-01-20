@@ -1,95 +1,120 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Gestor de Calentamiento | Gerencia</title>
-    <link rel="stylesheet" href="../../assets/css/app.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="../../assets/js/supabase.js"></script>
-    <style>
-        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 25px; }
-        .stat-card { padding: 20px; border-radius: 10px; text-align: center; border: 1px solid #334155; background: #1e293b; }
-        .grid-config { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; }
-        .num-input { font-size: 1.2rem; text-align: center; font-weight: bold; color: #60a5fa; }
-        label { color: #94a3b8; font-size: 0.9rem; margin-bottom: 5px; display: block; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Gestor de Calentamiento | Gerencia</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <link rel="stylesheet" href="../../assets/css/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+  <style>
+    .stats-grid { display:grid; grid-template-columns: repeat(3,1fr); gap:15px; margin-bottom:18px; }
+    .stat-card { padding:18px; border-radius:12px; text-align:center; border:1px solid rgba(255,255,255,0.08); background:#0b1220; }
+    .grid-config { display:grid; grid-template-columns: repeat(4,1fr); gap:12px; }
+    .num-input { font-size: 1.1rem; text-align:center; font-weight:800; color:#60a5fa; width:100%; }
+    label { color:#94a3b8; font-size:0.9rem; display:block; margin-bottom:6px; }
+    .toolbar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .toolbar .muted { font-size:0.85rem; }
+    .table td, .table th { white-space:nowrap; }
+    .ck { transform: scale(1.1); }
+  </style>
 </head>
-<body>
-    <div class="layout">
-        <div id="sidebar-host"></div>
-        <main class="content">
-            
-            <h1>🔥 Centro de Comando de Calentamiento</h1>
-            <p class="muted">Define la estrategia diaria que seguirán todos los operadores en sus cuentas FRÍAS.</p>
 
-            <div class="stats-grid">
-                <div class="stat-card" style="border-color: #ef4444;">
-                    <span id="stat-baneadas" style="font-size:2rem; font-weight:bold; color:#ef4444;">0</span>
-                    <br><small>Baneadas / Inactivas</small>
-                </div>
-                <div class="stat-card" style="border-color: #3b82f6;">
-                    <span id="stat-frias" style="font-size:2rem; font-weight:bold; color:#3b82f6;">0</span>
-                    <br><small>En Calentamiento (Frías)</small>
-                </div>
-                <div class="stat-card" style="border-color: #10b981;">
-                    <span id="stat-calientes" style="font-size:2rem; font-weight:bold; color:#10b981;">0</span>
-                    <br><small>Listas para Vender (Calientes)</small>
-                </div>
-            </div>
+<body class="app">
+  <div id="sidebar-host"></div>
 
-            <div class="grid" style="grid-template-columns: 1fr 1.5fr; gap: 20px;">
-                
-                <section class="card">
-                    <h3>⚙️ Rutina Diaria Global</h3>
-                    <p class="muted" style="font-size:0.8rem; margin-bottom:15px;">Esto actualizará las tareas de todos los operadores.</p>
-
-                    <div class="grid-config" style="margin-bottom:20px;">
-                        <div>
-                            <label>📸 Historias</label>
-                            <input type="number" id="cfg-historias" class="num-input" placeholder="0">
-                        </div>
-                        <div>
-                            <label>🏠 Muro</label>
-                            <input type="number" id="cfg-muro" class="num-input" placeholder="0">
-                        </div>
-                        <div>
-                            <label>🎥 Reels</label>
-                            <input type="number" id="cfg-reels" class="num-input" placeholder="0">
-                        </div>
-                        <div>
-                            <label>👥 Grupos</label>
-                            <input type="number" id="cfg-grupos" class="num-input" placeholder="0">
-                        </div>
-                    </div>
-
-                    <label>🔗 Link de Google Drive (Recursos)</label>
-                    <input type="text" id="cfg-drive" placeholder="https://drive.google.com/..." style="width:100%; padding:10px; margin-bottom:15px; background:#0f172a; border:1px solid #334155; color:white; border-radius:6px;">
-
-                    <button id="btn-save" class="btn" style="width:100%;">💾 Aplicar Estrategia</button>
-                </section>
-
-                <section class="card">
-                    <h3>📋 Estado del Parque de Cuentas</h3>
-                    <div style="overflow-x:auto;">
-                        <table class="table" style="width:100%; font-size:0.9rem;">
-                            <thead>
-                                <tr>
-                                    <th>Cuenta</th>
-                                    <th>Resp.</th>
-                                    <th>Estado</th>
-                                    <th>Acción</th>
-                                </tr>
-                            </thead>
-                            <tbody id="tabla-cuentas">
-                                <tr><td colspan="4" style="text-align:center;">Cargando...</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-            </div>
-
-        </main>
+  <main class="main">
+    <div class="card">
+      <h1 style="color:white; margin:0;">🔥 Centro de Comando de Calentamiento</h1>
+      <p class="muted" style="margin-top:6px;">
+        Gerencia define la estrategia y genera el plan de 7 días (aleatorio) por cuenta.
+      </p>
     </div>
-    <script type="module" src="./calentamiento_gerente.js"></script>
+
+    <div class="stats-grid" style="margin-top:16px;">
+      <div class="stat-card" style="border-color:#ef4444;">
+        <div id="stat-baneadas" style="font-size:2rem; font-weight:900; color:#ef4444;">0</div>
+        <small class="muted">Baneadas / Inactivas</small>
+      </div>
+      <div class="stat-card" style="border-color:#3b82f6;">
+        <div id="stat-frias" style="font-size:2rem; font-weight:900; color:#3b82f6;">0</div>
+        <small class="muted">Frías / Nuevas</small>
+      </div>
+      <div class="stat-card" style="border-color:#10b981;">
+        <div id="stat-calientes" style="font-size:2rem; font-weight:900; color:#10b981;">0</div>
+        <small class="muted">Calientes</small>
+      </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns: 1fr 1.6fr; gap:16px;">
+      <!-- CONFIG -->
+      <section class="card">
+        <h3 style="color:white; margin:0;">⚙️ Estrategia Global</h3>
+        <p class="muted" style="margin-top:6px; font-size:0.85rem;">
+          Estos valores se usan como “tope” para el plan aleatorio (conservador).
+        </p>
+
+        <div class="grid-config" style="margin-top:12px;">
+          <div>
+            <label>📸 Historias (tope)</label>
+            <input type="number" id="cfg-historias" class="num-input" placeholder="0" min="0">
+          </div>
+          <div>
+            <label>🏠 Muro (tope)</label>
+            <input type="number" id="cfg-muro" class="num-input" placeholder="0" min="0">
+          </div>
+          <div>
+            <label>🎥 Reels (tope)</label>
+            <input type="number" id="cfg-reels" class="num-input" placeholder="0" min="0">
+          </div>
+          <div>
+            <label>👥 Grupos (tope)</label>
+            <input type="number" id="cfg-grupos" class="num-input" placeholder="0" min="0">
+          </div>
+        </div>
+
+        <div style="margin-top:14px;">
+          <label>🔗 Link de Google Drive (Recursos)</label>
+          <input type="text" id="cfg-drive" placeholder="https://drive.google.com/..."
+                 style="width:100%; padding:10px; background:#0f172a; border:1px solid rgba(255,255,255,0.12); color:white; border-radius:10px;">
+        </div>
+
+        <div class="toolbar" style="margin-top:14px;">
+          <button id="btn-save" class="btn">💾 Guardar estrategia</button>
+          <button id="btn-plan-7d" class="btn">🎲 Generar PLAN 7 días (seleccionadas)</button>
+          <button id="btn-sel-all" class="btn2" type="button">Seleccionar todo</button>
+          <button id="btn-sel-none" class="btn2" type="button">Limpiar</button>
+          <span id="sel-count" class="muted">0 seleccionadas</span>
+        </div>
+
+        <div class="muted" style="margin-top:10px; font-size:0.85rem;">
+          ✅ Solo se planifican cuentas con <b>Resp.</b> asignado (ocupada_por) y NO baneadas/inactivas.
+        </div>
+      </section>
+
+      <!-- CUENTAS -->
+      <section class="card">
+        <h3 style="color:white; margin:0;">📋 Cuentas (seleccioná cuáles entran al plan)</h3>
+        <div style="overflow:auto; margin-top:12px;">
+          <table class="table" style="width:100%;">
+            <thead>
+              <tr>
+                <th>Sel</th>
+                <th>Cuenta</th>
+                <th>Resp.</th>
+                <th>Calidad</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-cuentas">
+              <tr><td colspan="5" style="text-align:center;" class="muted">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="./calentamiento_gerente.js"></script>
 </body>
 </html>

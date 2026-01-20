@@ -1,208 +1,264 @@
-import { requireSession, loadSidebar } from "../../assets/js/app.js";
+import { requireSession } from "../../assets/js/app.js";
 
 const s = requireSession();
 const sb = window.supabaseClient;
-
 const $ = (id) => document.getElementById(id);
 
-function todayISO() {
-  // ISO simple YYYY-MM-DD (sin depender de fmtDateISO)
-  const d = new Date();
+/* =========================
+   Sidebar robusto SIN tocar app.js
+========================= */
+async function fetchFirstOk(urls) {
+  for (const u of urls) {
+    try {
+      const r = await fetch(u, { cache: "no-store" });
+      if (r.ok) return { url: u, text: await r.text() };
+    } catch {}
+  }
+  return null;
+}
+async function loadSidebarLocal({ activeKey = "", basePath = "../" } = {}) {
+  const host = document.getElementById("sidebar-host");
+  if (!host) return;
+
+  const urls = [
+    `${basePath}sidebar/sidebar_operador.html`,
+    `${basePath}sidebar_operador.html`,
+    `${basePath}sidebar.html`,
+    `${basePath}sidebar/sidebar.html`,
+  ];
+
+  const got = await fetchFirstOk(urls);
+  if (!got) {
+    host.innerHTML = `<div style="color:white;padding:14px;">❌ No encontré sidebar (operador). Revisá rutas.</div>`;
+    return;
+  }
+
+  host.innerHTML = got.text;
+  if (activeKey) {
+    host.querySelectorAll("[data-key]").forEach(el => {
+      el.classList.toggle("active", el.getAttribute("data-key") === activeKey);
+    });
+  }
+}
+
+/* =========================
+   Helpers
+========================= */
+function iso(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
-
-function escapeHtml(v) {
-  return String(v ?? "")
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+function addDays(baseISO, days) {
+  const d = new Date(baseISO + "T00:00:00");
+  d.setDate(d.getDate() + days);
+  return iso(d);
+}
+function clamp(n) {
+  n = Number(n);
+  return Number.isFinite(n) ? Math.max(0, n) : 0;
+}
+function estadoFrom(done, req) {
+  if (req === 0) return "n/a";
+  if (done >= req) return "ok";
+  if (done > 0) return "en_progreso";
+  return "pendiente";
+}
+function prettyEstado(e) {
+  if (e === "ok") return "✅ OK";
+  if (e === "en_progreso") return "🟡 En progreso";
+  if (e === "pendiente") return "⏳ Pendiente";
+  return "—";
 }
 
-async function init() {
-  await loadSidebar({ activeKey: "calentamiento", basePath: "../" });
+/* =========================
+   Init
+========================= */
+(async function init() {
+  await loadSidebarLocal({ activeKey: "calentamiento", basePath: "../" });
 
-  // Seguridad: si es gerente, fuera
-  if (s.rol === "gerente") {
-    window.location.href = "../calentamiento_gerente/calentamiento_gerente.html";
+  // seguridad: esta página es de operador
+  if (s.rol !== "operador") {
+    document.body.innerHTML = `
+      <div style="text-align:center; padding:50px; color:white;">
+        <h1 style="color:#ef4444;">⛔ Acceso Denegado</h1>
+        <p>Esta página es solo para Operadores.</p>
+        <a href="../dashboard/dashboard.html" style="color:#3b82f6;">Volver</a>
+      </div>`;
     return;
   }
 
-  $("btn-refrescar").onclick = cargar;
+  $("btn-refrescar").onclick = cargarTodo;
 
-  await cargar();
+  llenarSelectorDias();
+  $("sel-dia").addEventListener("change", cargarTodo);
+
+  await cargarConfiguracion();
+  await cargarTodo();
+})();
+
+function llenarSelectorDias() {
+  const base = iso(new Date());
+  const sel = $("sel-dia");
+  sel.innerHTML = "";
+
+  for (let i = 0; i < 7; i++) {
+    const d = addDays(base, i);
+    const opt = document.createElement("option");
+    opt.value = d;
+    opt.textContent = (i === 0) ? `Hoy (${d})` : d;
+    sel.appendChild(opt);
+  }
 }
 
-async function cargar() {
-  try {
-    $("resumen").textContent = "Cargando…";
-    $("tabla-calentamiento").innerHTML = "";
+/* =========================
+   Drive global
+========================= */
+async function cargarConfiguracion() {
+  const { data, error } = await sb
+    .from("configuracion_calentamiento")
+    .select("link_drive")
+    .order("updated_at", { ascending: false })
+    .limit(1);
 
-    const hoy = todayISO();
+  if (error) {
+    console.error(error);
+    $("btn-drive").style.display = "none";
+    return;
+  }
 
-    // 1) Config global para Drive
-    const { data: cfgData, error: eCfg } = await sb
-      .from("configuracion_calentamiento")
-      .select("*")
-      .order("updated_at", { ascending: false })
-      .limit(1);
+  const link = data?.[0]?.link_drive;
+  if (link) $("btn-drive").href = link;
+  else $("btn-drive").style.display = "none";
+}
 
-    if (eCfg) throw eCfg;
+/* =========================
+   Carga principal:
+   - Trae plan del día para ESTE operador
+   - Trae emails de cuentas asignadas (cuentas_facebook)
+========================= */
+async function cargarTodo() {
+  const dia = $("sel-dia").value || iso(new Date());
 
-    const cfg = cfgData?.[0];
-    const drive = (cfg?.link_drive || "").trim();
-    $("btn-drive").href = drive || "#";
-    $("btn-drive").style.opacity = drive ? "1" : "0.6";
+  $("resumen").textContent = "Cargando…";
+  $("tabla-calentamiento").innerHTML = "";
 
-    // 2) Cuentas del operador
-    // ⚠️ OJO: si querés SOLO frías, dejalo como está.
-    const { data: cuentas, error: eC } = await sb
-      .from("cuentas_facebook")
-      .select("id,email,calidad,estado,ocupada_por")
-      .eq("ocupada_por", s.usuario)
-      .in("calidad", ["fria", "nueva"]);
+  // 1) plan del día del operador
+  const { data: plan, error: ePlan } = await sb
+    .from("calentamiento_plan")
+    .select("*")
+    .eq("fecha", dia)
+    .eq("usuario", s.usuario)
+    .order("cuenta_id");
 
-    if (eC) throw eC;
+  if (ePlan) {
+    console.error(ePlan);
+    $("resumen").textContent = "❌ Error cargando plan: " + ePlan.message;
+    return;
+  }
 
-    if (!cuentas || cuentas.length === 0) {
-      $("resumen").textContent =
-        `⚠️ No tenés cuentas FRÍAS asignadas (ocupada_por="${s.usuario}").`;
-      $("tabla-calentamiento").innerHTML = `
-        <tr>
-          <td colspan="6" class="muted">
-            No hay cuentas con calidad = fria/nueva asignadas a este operador.
-            Revisá en Supabase: cuentas_facebook.ocupada_por y cuentas_facebook.calidad.
-          </td>
-        </tr>`;
-      return;
-    }
+  if (!plan || plan.length === 0) {
+    $("resumen").innerHTML = `No tenés tareas asignadas para <b>${dia}</b>.`;
+    return;
+  }
 
-    const ids = cuentas.map(c => c.id);
+  // 2) traer cuentas para mostrar email bonito
+  const ids = plan.map(p => p.cuenta_id);
+  const { data: cuentas, error: eCtas } = await sb
+    .from("cuentas_facebook")
+    .select("id,email,calidad,estado")
+    .in("id", ids);
 
-    // 3) Plan asignado para HOY
-    const { data: planes, error: eP } = await sb
-      .from("calentamiento_plan")
-      .select("*")
-      .eq("fecha", hoy)
-      .in("cuenta_id", ids);
+  if (eCtas) console.warn("No pude traer cuentas_facebook:", eCtas.message);
 
-    if (eP) throw eP;
+  const mapEmail = new Map((cuentas || []).map(c => [c.id, c.email]));
 
-    const map = new Map((planes || []).map(p => [Number(p.cuenta_id), p]));
+  renderResumen(plan, dia);
+  renderTabla(plan, mapEmail, dia);
+}
 
-    let ph = 0, pm = 0, pr = 0, pg = 0;
+function renderResumen(plan, dia) {
+  let reqT = 0, doneT = 0;
+  for (const p of plan) {
+    reqT += clamp(p.req_historias) + clamp(p.req_muro) + clamp(p.req_reels) + clamp(p.req_grupos);
+    doneT += clamp(p.done_historias) + clamp(p.done_muro) + clamp(p.done_reels) + clamp(p.done_grupos);
+  }
 
-    const rows = cuentas.map(c => {
-      const p = map.get(Number(c.id));
+  $("resumen").innerHTML = `
+    Día: <b>${dia}</b> · Cuentas: <b>${plan.length}</b> · Progreso: <b>${doneT}/${reqT}</b>
+  `;
+}
 
-      if (!p) {
-        return `
-          <tr>
-            <td>${escapeHtml(c.email)}</td>
-            <td class="muted" colspan="4">Sin plan asignado para hoy (${hoy})</td>
-            <td class="muted">—</td>
-          </tr>
-        `;
-      }
+function renderTabla(plan, mapEmail, dia) {
+  const tbody = $("tabla-calentamiento");
+  tbody.innerHTML = "";
 
-      const faltH = Math.max(0, (p.req_historias || 0) - (p.done_historias || 0));
-      const faltM = Math.max(0, (p.req_muro || 0) - (p.done_muro || 0));
-      const faltR = Math.max(0, (p.req_reels || 0) - (p.done_reels || 0));
-      const faltG = Math.max(0, (p.req_grupos || 0) - (p.done_grupos || 0));
+  for (const p of plan) {
+    const email = mapEmail.get(p.cuenta_id) || `ID ${p.cuenta_id}`;
 
-      ph += faltH; pm += faltM; pr += faltR; pg += faltG;
+    const reqH = clamp(p.req_historias), reqM = clamp(p.req_muro), reqR = clamp(p.req_reels), reqG = clamp(p.req_grupos);
+    const dH = clamp(p.done_historias), dM = clamp(p.done_muro), dR = clamp(p.done_reels), dG = clamp(p.done_grupos);
 
-      return `
-        <tr>
-          <td>${escapeHtml(c.email)}</td>
-          <td>${p.done_historias || 0}/${p.req_historias || 0}</td>
-          <td>${p.done_muro || 0}/${p.req_muro || 0}</td>
-          <td>${p.done_reels || 0}/${p.req_reels || 0}</td>
-          <td>${p.done_grupos || 0}/${p.req_grupos || 0}</td>
-          <td style="display:flex; gap:6px; flex-wrap:wrap;">
-            <button class="btn2" data-id="${p.id}" data-a="h">+1 H</button>
-            <button class="btn2" data-id="${p.id}" data-a="m">+1 M</button>
-            <button class="btn2" data-id="${p.id}" data-a="r">+1 R</button>
-            <button class="btn2" data-id="${p.id}" data-a="g">+1 G</button>
-          </td>
-        </tr>
-      `;
-    }).join("");
+    const estH = estadoFrom(dH, reqH);
+    const estM = estadoFrom(dM, reqM);
+    const estR = estadoFrom(dR, reqR);
+    const estG = estadoFrom(dG, reqG);
 
-    $("tabla-calentamiento").innerHTML = rows;
+    // estado general
+    const totalReq = reqH + reqM + reqR + reqG;
+    const totalDone = dH + dM + dR + dG;
+    let estado = "pendiente";
+    if (totalReq === 0) estado = "n/a";
+    else if (totalDone >= totalReq) estado = "ok";
+    else if (totalDone > 0) estado = "en_progreso";
 
-    if (!planes || planes.length === 0) {
-      $("resumen").textContent =
-        `⚠️ Hoy (${hoy}) no hay plan generado. Pedile a gerencia que apriete “Generar plan 7 días”.`;
-    } else {
-      $("resumen").textContent =
-        `Pendientes HOY (${hoy}) → H:${ph} | M:${pm} | R:${pr} | G:${pg}`;
-    }
-
-    bindAcciones(hoy);
-  } catch (err) {
-    console.error("Calentamiento error:", err);
-    $("resumen").textContent = "❌ Error: " + (err?.message || "desconocido");
-    $("tabla-calentamiento").innerHTML = `
-      <tr><td colspan="6" class="muted">Error cargando calentamiento. Abrí consola para ver el detalle.</td></tr>
+    tbody.innerHTML += `
+      <tr>
+        <td>${email}</td>
+        <td>${dH}/${reqH} <span class="muted">(${prettyEstado(estH)})</span></td>
+        <td>${dM}/${reqM} <span class="muted">(${prettyEstado(estM)})</span></td>
+        <td>${dR}/${reqR} <span class="muted">(${prettyEstado(estR)})</span></td>
+        <td>${dG}/${reqG} <span class="muted">(${prettyEstado(estG)})</span></td>
+        <td><span class="muted">${totalDone}/${totalReq}</span></td>
+        <td>${prettyEstado(estado)}</td>
+        <td>
+          <button class="btn2" onclick="window.marcarTodoOk(${p.cuenta_id}, '${dia}')">Marcar todo OK</button>
+        </td>
+      </tr>
     `;
   }
 }
 
-function bindAcciones(hoy) {
-  document.querySelectorAll("button[data-a]").forEach(btn => {
-    btn.onclick = async () => {
-      const planId = Number(btn.dataset.id);
-      const act = btn.dataset.a;
+/* =========================
+   Acción operador: marcar todo OK (para ese día y cuenta)
+========================= */
+window.marcarTodoOk = async (cuenta_id, fecha) => {
+  // traer la fila para saber req_*
+  const { data, error } = await sb
+    .from("calentamiento_plan")
+    .select("id,req_historias,req_muro,req_reels,req_grupos")
+    .eq("fecha", fecha)
+    .eq("cuenta_id", cuenta_id)
+    .eq("usuario", s.usuario)
+    .limit(1);
 
-      const { data: p, error: e1 } = await sb
-        .from("calentamiento_plan")
-        .select("*")
-        .eq("id", planId)
-        .single();
+  if (error) return alert("❌ Error: " + error.message);
+  const row = data?.[0];
+  if (!row) return alert("No encontré el plan de esa cuenta para ese día.");
 
-      if (e1) return alert("Error leyendo plan: " + e1.message);
+  const patch = {
+    done_historias: clamp(row.req_historias),
+    done_muro: clamp(row.req_muro),
+    done_reels: clamp(row.req_reels),
+    done_grupos: clamp(row.req_grupos),
+    estado: "ok",
+    updated_at: new Date(),
+  };
 
-      const patch = { updated_at: new Date() };
+  const upd = await sb.from("calentamiento_plan").update(patch).eq("id", row.id);
+  if (upd.error) return alert("❌ Error guardando: " + upd.error.message);
 
-      if (act === "h" && (p.done_historias || 0) < (p.req_historias || 0)) patch.done_historias = (p.done_historias || 0) + 1;
-      if (act === "m" && (p.done_muro || 0) < (p.req_muro || 0)) patch.done_muro = (p.done_muro || 0) + 1;
-      if (act === "r" && (p.done_reels || 0) < (p.req_reels || 0)) patch.done_reels = (p.done_reels || 0) + 1;
-      if (act === "g" && (p.done_grupos || 0) < (p.req_grupos || 0)) patch.done_grupos = (p.done_grupos || 0) + 1;
-
-      if (Object.keys(patch).length === 1) return; // nada para sumar
-
-      // estado
-      const doneH = patch.done_historias ?? (p.done_historias || 0);
-      const doneM = patch.done_muro ?? (p.done_muro || 0);
-      const doneR = patch.done_reels ?? (p.done_reels || 0);
-      const doneG = patch.done_grupos ?? (p.done_grupos || 0);
-      const reqH = p.req_historias || 0;
-      const reqM = p.req_muro || 0;
-      const reqR = p.req_reels || 0;
-      const reqG = p.req_grupos || 0;
-
-      patch.estado = (doneH >= reqH && doneM >= reqM && doneR >= reqR && doneG >= reqG)
-        ? "completo"
-        : "pendiente";
-
-      const { error: e2 } = await sb.from("calentamiento_plan").update(patch).eq("id", planId);
-      if (e2) return alert("Error guardando avance: " + e2.message);
-
-      // Log actividad (opcional pero útil)
-      await sb.from("usuarios_actividad").insert([{
-        usuario: s.usuario,
-        evento: `🔥 Calentamiento HOY ${hoy} avance +1 (${act}) plan_id=${planId}`,
-        cuenta_fb: `plan:${planId}`
-      }]);
-
-      await cargar();
-    };
-  });
-}
-
-init();
+  alert("✅ Marcado OK");
+  await cargarTodo();
+};
