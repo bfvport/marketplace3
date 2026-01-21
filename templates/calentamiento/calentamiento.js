@@ -2,129 +2,108 @@ import { requireSession, loadSidebar } from "../../assets/js/app.js";
 
 const s = requireSession();
 const sb = window.supabaseClient;
+
 const $ = (id) => document.getElementById(id);
+const hoyISO = () => new Date().toISOString().slice(0, 10);
 
 (async function init() {
-  // ✅ Volvemos al sidebar del sistema (NO custom)
-  // basePath "../" porque estamos en /templates/calentamiento/
+  // OPERADOR usa el sidebar normal en /templates/sidebar.html
   await loadSidebar({ activeKey: "calentamiento", basePath: "../" });
 
-  // Seguridad básica: si por error entra un gerente acá, lo dejamos igual (no rompe)
-  $("btn-refrescar").onclick = cargarTodo;
+  // Si un gerente cae acá, lo mandamos a su módulo
+  if (s?.rol === "gerente") {
+    window.location.href = "../calentamiento_gerente/calentamiento_gerente.html";
+    return;
+  }
 
-  await cargarConfiguracion();
+  $("btn-refrescar").addEventListener("click", cargarTodo);
+
   await cargarTodo();
 })();
 
-/* ---------------------------
-   CONFIG GLOBAL (drive)
----------------------------- */
-async function cargarConfiguracion() {
-  const { data, error } = await sb
-    .from("configuracion_calentamiento")
-    .select("link_drive")
-    .order("updated_at", { ascending: false })
-    .limit(1);
-
-  if (error) {
-    console.error(error);
-    $("btn-drive").style.display = "none";
-    return;
-  }
-
-  const cfg = data?.[0];
-  if (cfg?.link_drive) {
-    $("btn-drive").href = cfg.link_drive;
-  } else {
-    $("btn-drive").style.display = "none";
-  }
-}
-
-/* ---------------------------
-   CARGA GENERAL
----------------------------- */
 async function cargarTodo() {
   $("resumen").textContent = "Cargando…";
-  $("tabla-calentamiento").innerHTML = `<tr><td colspan="6" style="text-align:center;" class="muted">Cargando…</td></tr>`;
+  $("tabla-calentamiento").innerHTML = "";
 
-  const cuentas = await cargarCuentasFrias();
-  if (!cuentas.length) {
-    $("resumen").textContent = "No tenés cuentas frías asignadas.";
-    $("tabla-calentamiento").innerHTML = `<tr><td colspan="6" style="text-align:center;" class="muted">Sin cuentas frías asignadas.</td></tr>`;
+  // 1) Traer config global (drive + topes)
+  const { data: cfgRows, error: cfgErr } = await sb
+    .from("configuracion_calentamiento")
+    .select("*")
+    .order("id", { ascending: true })
+    .limit(1);
+
+  if (cfgErr) console.warn("Config calentamiento error:", cfgErr);
+
+  const cfg = cfgRows?.[0] || null;
+
+  const drive = cfg?.link_drive?.trim() || "https://drive.google.com/";
+  $("btn-drive").href = drive;
+
+  // 2) Traer cuentas frías/nuevas asignadas al operador
+  const usuario = s?.usuario || s?.email || s?.nombre || "";
+  const { data: cuentas, error: cErr } = await sb
+    .from("cuentas_facebook")
+    .select("id,email,telefono,ocupada_por,calidad,estado")
+    .eq("ocupada_por", usuario)
+    .in("calidad", ["fria", "nueva"])
+    .neq("estado", "inactiva");
+
+  if (cErr) {
+    console.error(cErr);
+    $("resumen").textContent = "❌ Error cargando cuentas.";
     return;
   }
 
-  const plan = await cargarPlanHoy(cuentas.map(c => c.id));
-
-  renderTabla(cuentas, plan);
-  renderResumen(cuentas, plan);
-}
-
-/* ---------------------------
-   CUENTAS FRÍAS DEL OPERADOR
----------------------------- */
-async function cargarCuentasFrias() {
-  const { data, error } = await sb
-    .from("cuentas_facebook")
-    .select("id,email,ocupada_por,calidad,estado")
-    .eq("ocupada_por", s.usuario)
-    .in("calidad", ["fria", "nueva"])
-    .order("email", { ascending: true });
-
-  if (error) {
-    console.error(error);
-    return [];
+  if (!cuentas || cuentas.length === 0) {
+    $("resumen").textContent = "No tenés cuentas frías asignadas.";
+    $("tabla-calentamiento").innerHTML = `<tr><td colspan="6" class="muted" style="text-align:center;">Sin cuentas frías asignadas.</td></tr>`;
+    return;
   }
-  return data || [];
-}
 
-/* ---------------------------
-   PLAN DEL DÍA (de gerente)
----------------------------- */
-async function cargarPlanHoy(cuentasIds) {
-  const hoy = new Date().toISOString().slice(0, 10);
+  // 3) Traer plan del día para esas cuentas
+  const fecha = hoyISO();
+  const cuentaIds = cuentas.map(c => c.id);
 
-  const { data, error } = await sb
+  const { data: planes, error: pErr } = await sb
     .from("calentamiento_plan")
-    .select("cuenta_id,req_historias,req_muro,req_reels,req_grupos,usuario,fecha")
-    .eq("fecha", hoy)
-    .in("cuenta_id", cuentasIds);
+    .select("*")
+    .eq("fecha", fecha)
+    .in("cuenta_id", cuentaIds);
 
-  if (error) {
-    console.error(error);
-    return [];
+  if (pErr) {
+    console.warn("Plan error:", pErr);
   }
-  return data || [];
-}
 
-/* ---------------------------
-   RENDER
----------------------------- */
-function renderResumen(cuentas, plan) {
-  const conPlan = plan.length;
-  $("resumen").innerHTML = `
-    🔹 Cuentas frías: <b>${cuentas.length}</b><br>
-    🔹 Cuentas con plan cargado hoy: <b>${conPlan}</b>
-  `;
-}
+  const planByCuenta = new Map((planes || []).map(p => [p.cuenta_id, p]));
 
-function renderTabla(cuentas, plan) {
+  // 4) Render
+  let totalH = 0, totalM = 0, totalR = 0, totalG = 0;
+
   const tbody = $("tabla-calentamiento");
   tbody.innerHTML = "";
 
-  cuentas.forEach(c => {
-    const p = plan.find(x => Number(x.cuenta_id) === Number(c.id));
+  for (const c of cuentas) {
+    const p = planByCuenta.get(c.id) || null;
+
+    const historias = p?.historias ?? 0;
+    const muro = p?.muro ?? 0;
+    const reels = p?.reels ?? 0;
+    const grupos = p?.grupos ?? 0;
+
+    totalH += historias; totalM += muro; totalR += reels; totalG += grupos;
 
     tbody.innerHTML += `
-      <tr>
-        <td>${c.email}</td>
-        <td>${p ? p.req_historias : "-"}</td>
-        <td>${p ? p.req_muro : "-"}</td>
-        <td>${p ? p.req_reels : "-"}</td>
-        <td>${p ? p.req_grupos : "-"}</td>
-        <td><span class="muted">${p ? "Plan diario asignado" : "Sin plan hoy"}</span></td>
+      <tr style="border-bottom:1px solid rgba(255,255,255,0.05);">
+        <td>${c.email || "-"}</td>
+        <td style="font-weight:800;">${historias}</td>
+        <td style="font-weight:800;">${muro}</td>
+        <td style="font-weight:800;">${reels}</td>
+        <td style="font-weight:800;">${grupos}</td>
+        <td class="muted">Hoy</td>
       </tr>
     `;
-  });
-}
+  }
 
+  $("resumen").textContent =
+    `Hoy: Historias ${totalH} • Muro ${totalM} • Reels ${totalR} • Grupos ${totalG} (según plan generado por Gerencia).`;
+}

@@ -7,61 +7,23 @@
   </div>
 
   <nav class="nav">
-    <!-- COMÚN (si querés que operador también vea dashboard, dejalo sin data-only) -->
     <a href="../dashboard/dashboard.html" data-nav="dashboard">🏠 Dashboard</a>
+    <a href="../diario/diario.html" data-nav="diario">📅 Diario</a>
 
-    <!-- OPERADOR -->
-    <a href="../diario/diario.html" data-only="operador" data-nav="diario">📅 Diario</a>
-    <a href="../publicaciones/publicaciones.html" data-only="operador" data-nav="publicaciones">📥 Recursos (Fotos)</a>
-    <a href="../calentamiento/calentamiento.html" data-only="operador" data-nav="calentamiento">🔥 Calentamiento</a>
-    <a href="../mensajes/mensajes.html" data-only="operador" data-nav="mensajes">💬 Mensajes</a>
-    <a href="../soporte/reporte_error.html" data-only="operador" data-nav="reporte_error">🛠️ Reportar error</a>
+    <a href="../publicaciones/publicaciones.html" data-nav="publicaciones">📥 Recursos (Fotos)</a>
 
-    <!-- GERENTE -->
-    <a href="../gestionar_publicaciones/gestionar.html" data-only="gerente" data-nav="gestionar_publicaciones">📸 Gestionar Recursos</a>
-    <a href="../categoria/categoria.html" data-only="gerente" data-nav="categoria">🗂️ Categorías</a>
-    <a href="../cuentas_fb/cuentas_fb.html" data-only="gerente" data-nav="cuentas">👤 Cuentas Facebook</a>
-    <a href="../asignaciones/asignaciones.html" data-only="gerente" data-nav="asignaciones">📌 Asignaciones</a>
-    <a href="../actividad/actividad.html" data-only="gerente" data-nav="actividad">📊 Actividad</a>
-    <a href="../usuarios/usuarios.html" data-only="gerente" data-nav="usuarios">👤 Usuarios</a>
-    <a href="../verificacion/verificacion.html" data-only="gerente" data-nav="verificacion">🔎 Verificación</a>
-    <a href="../metricas/metricas.html" data-only="gerente" data-nav="metricas">📈 Métricas</a>
-    <a href="../calentamiento_gerente/calentamiento_gerente.html" data-only="gerente" data-nav="calentamiento_gerente">🔥 Calentamiento (Gerencia)</a>
-    <a href="../soporte/reportes.html" data-only="gerente" data-nav="reportes_errores">🧾 Reportes de errores</a>
+    <a href="../metricas/metricas.html" data-nav="metricas">📈 Métricas</a>
+
+    <!-- SOLO OPERADOR -->
+    <a href="../calentamiento/calentamiento.html" data-nav="calentamiento">🔥 Calentamiento</a>
+
+    <a href="../mensajes/mensajes.html" data-nav="mensajes">💬 Mensajes</a>
+
+    <!-- SOLO OPERADOR -->
+    <a href="../soporte/reporte_error.html" data-nav="reporte_error">🛠️ Reportar error</a>
   </nav>
 
   <div class="sb-footer">
     <button class="btn2" id="btn-logout">Salir</button>
   </div>
-
-  <script>
-    (function () {
-      // Leer sesión
-      let s = null;
-      try { s = JSON.parse(localStorage.getItem("mp_session_v1") || "null"); } catch {}
-
-      const rol = (s?.rol || "operador").toLowerCase(); // "operador" | "gerente"
-      const usuario = s?.usuario || "-";
-
-      // Pintar user/rol
-      const u = document.getElementById("sb-usuario");
-      const r = document.getElementById("sb-rol");
-      if (u) u.textContent = usuario;
-      if (r) r.textContent = rol;
-
-      // OCULTAR lo que no corresponde (invisible en sidebar)
-      document.querySelectorAll("[data-only]").forEach(el => {
-        el.style.display = (el.getAttribute("data-only") === rol) ? "" : "none";
-      });
-
-      // Logout
-      const btn = document.getElementById("btn-logout");
-      if (btn) {
-        btn.addEventListener("click", () => {
-          localStorage.removeItem("mp_session_v1");
-          location.href = "../login/login.html";
-        });
-      }
-    })();
-  </script>
 </aside>
