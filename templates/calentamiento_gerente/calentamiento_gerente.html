@@ -7,6 +7,7 @@
   <link rel="stylesheet" href="../../assets/css/app.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../assets/js/supabase.js"></script>
+
   <style>
     .stats-grid { display:grid; grid-template-columns: repeat(3,1fr); gap:15px; margin-bottom:18px; }
     .stat-card { padding:18px; border-radius:12px; text-align:center; border:1px solid rgba(255,255,255,0.08); background:#0b1220; }
@@ -14,20 +15,20 @@
     .num-input { font-size: 1.1rem; text-align:center; font-weight:800; color:#60a5fa; width:100%; }
     label { color:#94a3b8; font-size:0.9rem; display:block; margin-bottom:6px; }
     .toolbar { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .toolbar .muted { font-size:0.85rem; }
     .table td, .table th { white-space:nowrap; }
-    .ck { transform: scale(1.1); }
   </style>
 </head>
 
 <body class="app">
+  <!-- ⚠️ OBLIGATORIO -->
   <div id="sidebar-host"></div>
 
   <main class="main">
+
     <div class="card">
       <h1 style="color:white; margin:0;">🔥 Centro de Comando de Calentamiento</h1>
       <p class="muted" style="margin-top:6px;">
-        Gerencia define la estrategia y genera el plan de 7 días (aleatorio) por cuenta.
+        Gerencia define la estrategia y genera el plan de 7 días por cuenta.
       </p>
     </div>
 
@@ -47,54 +48,51 @@
     </div>
 
     <div class="grid" style="grid-template-columns: 1fr 1.6fr; gap:16px;">
+
+      <!-- CONFIG -->
       <section class="card">
         <h3 style="color:white; margin:0;">⚙️ Estrategia Global</h3>
-        <p class="muted" style="margin-top:6px; font-size:0.85rem;">
-          Estos valores se usan como “tope” para el plan aleatorio (conservador).
-        </p>
 
         <div class="grid-config" style="margin-top:12px;">
           <div>
             <label>📸 Historias (tope)</label>
-            <input type="number" id="cfg-historias" class="num-input" placeholder="0" min="0">
+            <input type="number" id="cfg-historias" class="num-input" min="0">
           </div>
           <div>
             <label>🏠 Muro (tope)</label>
-            <input type="number" id="cfg-muro" class="num-input" placeholder="0" min="0">
+            <input type="number" id="cfg-muro" class="num-input" min="0">
           </div>
           <div>
             <label>🎥 Reels (tope)</label>
-            <input type="number" id="cfg-reels" class="num-input" placeholder="0" min="0">
+            <input type="number" id="cfg-reels" class="num-input" min="0">
           </div>
           <div>
             <label>👥 Grupos (tope)</label>
-            <input type="number" id="cfg-grupos" class="num-input" placeholder="0" min="0">
+            <input type="number" id="cfg-grupos" class="num-input" min="0">
           </div>
         </div>
 
         <div style="margin-top:14px;">
-          <label>🔗 Link de Google Drive (Recursos)</label>
-          <input type="text" id="cfg-drive" placeholder="https://drive.google.com/..."
-                 style="width:100%; padding:10px; background:#0f172a; border:1px solid rgba(255,255,255,0.12); color:white; border-radius:10px;">
+          <label>🔗 Link de Google Drive</label>
+          <input type="text" id="cfg-drive"
+            style="width:100%; padding:10px; background:#0f172a; border:1px solid rgba(255,255,255,0.12); color:white; border-radius:10px;">
         </div>
 
         <div class="toolbar" style="margin-top:14px;">
           <button id="btn-save" class="btn">💾 Guardar estrategia</button>
-          <button id="btn-plan-7d" class="btn">🎲 Generar PLAN 7 días (seleccionadas)</button>
-          <button id="btn-sel-all" class="btn2" type="button">Seleccionar todo</button>
-          <button id="btn-sel-none" class="btn2" type="button">Limpiar</button>
+          <button id="btn-plan-7d" class="btn">🎲 Generar plan 7 días</button>
+          <button id="btn-sel-all" class="btn2">Seleccionar todo</button>
+          <button id="btn-sel-none" class="btn2">Limpiar</button>
           <span id="sel-count" class="muted">0 seleccionadas</span>
-        </div>
-
-        <div class="muted" style="margin-top:10px; font-size:0.85rem;">
-          ✅ Solo se planifican cuentas con <b>Resp.</b> asignado (ocupada_por) y NO baneadas/inactivas.
         </div>
       </section>
 
+      <!-- CUENTAS -->
       <section class="card">
-        <h3 style="color:white; margin:0;">📋 Cuentas (seleccioná cuáles entran al plan)</h3>
+        <h3 style="color:white; margin:0;">📋 Cuentas</h3>
+
         <div style="overflow:auto; margin-top:12px;">
-          <table class="table" style="width:100%;">
+          <table class="table">
             <thead>
               <tr>
                 <th>Sel</th>
@@ -105,12 +103,16 @@
               </tr>
             </thead>
             <tbody id="tabla-cuentas">
-              <tr><td colspan="5" style="text-align:center;" class="muted">Cargando...</td></tr>
+              <tr>
+                <td colspan="5" class="muted" style="text-align:center;">Cargando…</td>
+              </tr>
             </tbody>
           </table>
         </div>
       </section>
+
     </div>
+
   </main>
 
   <script type="module" src="./calentamiento_gerente.js"></script>

@@ -1,27 +1,29 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta charset="UTF-8">
   <title>Calentamiento | Operador</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <link rel="stylesheet" href="../../assets/css/app.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../assets/js/supabase.js"></script>
 </head>
 
 <body class="app">
+  <!-- ⚠️ OBLIGATORIO PARA QUE CARGUE EL SIDEBAR -->
   <div id="sidebar-host"></div>
 
   <main class="main">
+
     <div class="card">
       <h1 style="color:white; margin:0;">🔥 Calentamiento</h1>
       <p class="muted" style="margin-top:6px;">
-        Tus cuentas frías asignadas y lo que toca hacer HOY (aleatorio, pero fijo para el día).
+        Tus cuentas frías asignadas y lo que toca hacer HOY (plan generado por gerencia).
       </p>
 
       <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
+        <button id="btn-refrescar" class="btn2">🔄 Recargar</button>
         <a id="btn-drive" class="btn2" target="_blank" rel="noreferrer">📂 Abrir Drive</a>
-        <button id="btn-refrescar" class="btn2" type="button">🔄 Recargar</button>
       </div>
     </div>
 
@@ -45,10 +47,15 @@
               <th>Acciones</th>
             </tr>
           </thead>
-          <tbody id="tabla-calentamiento"></tbody>
+          <tbody id="tabla-calentamiento">
+            <tr>
+              <td colspan="6" class="muted" style="text-align:center;">Cargando…</td>
+            </tr>
+          </tbody>
         </table>
       </div>
     </div>
+
   </main>
 
   <script type="module" src="./calentamiento.js"></script>
