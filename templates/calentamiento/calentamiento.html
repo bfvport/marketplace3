@@ -1,62 +1,47 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Calentamiento | Operador</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-  <link rel="stylesheet" href="../../assets/css/app.css">
+
+  <link rel="stylesheet" href="../../assets/css/app.css" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../assets/js/supabase.js"></script>
 </head>
 
-<body class="app">
-  <!-- ⚠️ OBLIGATORIO PARA QUE CARGUE EL SIDEBAR -->
-  <div id="sidebar-host"></div>
+<body>
+  <div class="layout">
+    <div id="sidebar-host"></div>
 
-  <main class="main">
+    <main class="content">
+      <div class="page-wrap">
 
-    <div class="card">
-      <h1 style="color:white; margin:0;">🔥 Calentamiento</h1>
-      <p class="muted" style="margin-top:6px;">
-        Tus cuentas frías asignadas y lo que toca hacer HOY (plan generado por gerencia).
-      </p>
+        <div class="page-head">
+          <div>
+            <h1>🔥 Calentamiento (Operador)</h1>
+            <p class="muted page-sub">
+              Acá ves tu plan del día y marcás lo que vas completando.  
+              Si sos gerente, esta pantalla no te corresponde.
+            </p>
+          </div>
 
-      <div style="display:flex; gap:10px; flex-wrap:wrap; margin-top:12px;">
-        <button id="btn-refrescar" class="btn2">🔄 Recargar</button>
-        <a id="btn-drive" class="btn2" target="_blank" rel="noreferrer">📂 Abrir Drive</a>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button id="btn-recargar" class="btn2" type="button">🔄 Recargar</button>
+          </div>
+        </div>
+
+        <section class="card">
+          <div id="estado" class="muted">Cargando...</div>
+
+          <div id="contenedor-calentamiento" style="margin-top:12px;">
+            <!-- Acá el JS pinta el plan -->
+          </div>
+        </section>
+
       </div>
-    </div>
-
-    <div class="card" style="margin-top:16px;">
-      <h2 style="color:white; margin:0;">📌 Pendientes de hoy</h2>
-      <div id="resumen" class="muted" style="margin-top:8px;">Cargando…</div>
-    </div>
-
-    <div class="card" style="margin-top:16px;">
-      <h2 style="color:white; margin:0;">👤 Tus cuentas frías</h2>
-
-      <div style="overflow:auto; margin-top:12px;">
-        <table class="table">
-          <thead>
-            <tr>
-              <th>Cuenta</th>
-              <th>Historias</th>
-              <th>Muro</th>
-              <th>Reels</th>
-              <th>Grupos</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="tabla-calentamiento">
-            <tr>
-              <td colspan="6" class="muted" style="text-align:center;">Cargando…</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-  </main>
+    </main>
+  </div>
 
   <script type="module" src="./calentamiento.js"></script>
 </body>
