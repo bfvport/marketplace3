@@ -2,10 +2,10 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
   <title>Calentamiento | Operador</title>
 
-  <link rel="stylesheet" href="../../assets/css/app.css" />
+  <link rel="stylesheet" href="../../assets/css/app.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../assets/js/supabase.js"></script>
 </head>
@@ -19,25 +19,40 @@
 
         <div class="page-head">
           <div>
-            <h1>🔥 Calentamiento (Operador)</h1>
+            <h1>🔥 Calentamiento</h1>
             <p class="muted page-sub">
-              Acá ves tu plan del día y marcás lo que vas completando.  
-              Si sos gerente, esta pantalla no te corresponde.
+              Tus cuentas frías asignadas y lo que toca hacer <strong>HOY</strong> (generado por Gerencia).
             </p>
           </div>
 
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <button id="btn-recargar" class="btn2" type="button">🔄 Recargar</button>
+            <button id="btn-refrescar" class="btn2" type="button">🔄 Recargar</button>
+            <a id="btn-drive" class="btn2" target="_blank" rel="noreferrer">📂 Abrir Drive</a>
           </div>
         </div>
 
-        <section class="card">
-          <div id="estado" class="muted">Cargando...</div>
+        <div class="card" style="margin-top:12px;">
+          <h3 style="margin:0;">📌 Pendientes de hoy</h3>
+          <div id="resumen" class="muted" style="margin-top:8px;">Cargando…</div>
+        </div>
 
-          <div id="contenedor-calentamiento" style="margin-top:12px;">
-            <!-- Acá el JS pinta el plan -->
-          </div>
-        </section>
+        <div class="table-wrap" style="margin-top:12px;">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Cuenta</th>
+                <th>Historias</th>
+                <th>Muro</th>
+                <th>Reels</th>
+                <th>Grupos</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-calentamiento">
+              <tr><td colspan="6" class="muted">Cargando…</td></tr>
+            </tbody>
+          </table>
+        </div>
 
       </div>
     </main>
