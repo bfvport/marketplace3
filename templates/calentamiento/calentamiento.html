@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <meta charset="UTF-8">
   <title>Calentamiento | Operador</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
   <link rel="stylesheet" href="../../assets/css/app.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -18,41 +18,15 @@
       <div class="page-wrap">
 
         <div class="page-head">
-          <div>
-            <h1>🔥 Calentamiento</h1>
-            <p class="muted page-sub">
-              Tus cuentas frías asignadas y lo que toca hacer <strong>HOY</strong> (generado por Gerencia).
-            </p>
-          </div>
-
-          <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <button id="btn-refrescar" class="btn2" type="button">🔄 Recargar</button>
-            <a id="btn-drive" class="btn2" target="_blank" rel="noreferrer">📂 Abrir Drive</a>
-          </div>
+          <h1>🔥 Calentamiento (Operador)</h1>
+          <p class="muted page-sub">Panel de ejecución diaria.</p>
+          <button id="btn-recargar" class="btn2">🔄 Recargar</button>
         </div>
 
-        <div class="card" style="margin-top:12px;">
-          <h3 style="margin:0;">📌 Pendientes de hoy</h3>
-          <div id="resumen" class="muted" style="margin-top:8px;">Cargando…</div>
-        </div>
-
-        <div class="table-wrap" style="margin-top:12px;">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Cuenta</th>
-                <th>Historias</th>
-                <th>Muro</th>
-                <th>Reels</th>
-                <th>Grupos</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody id="tabla-calentamiento">
-              <tr><td colspan="6" class="muted">Cargando…</td></tr>
-            </tbody>
-          </table>
-        </div>
+        <section class="card">
+          <div id="estado" class="muted">Cargando...</div>
+          <div id="contenedor-calentamiento" style="margin-top:10px;"></div>
+        </section>
 
       </div>
     </main>
