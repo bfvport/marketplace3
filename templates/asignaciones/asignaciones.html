@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Asignaciones | Marketplace Manager</title>
+  <link rel="stylesheet" href="../../assets/css/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+  <style>
+    .modal-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(2px);
+      display: none; justify-content: center; align-items: center; z-index: 1000;
+    }
+    .modal-content {
+      background: #1e293b; padding: 25px; border-radius: 12px;
+      width: 90%; max-width: 550px; border: 1px solid #334155;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      max-height: 90vh; overflow-y: auto;
+    }
+    label { display: block; margin-bottom: 4px; color: #94a3b8; font-size: 0.85rem; }
+    input, select {
+      width: 100%; padding: 8px; margin-bottom: 12px;
+      background: #0f172a; border: 1px solid #334155; color: white; border-radius: 6px;
+    }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+    .action-btn { cursor: pointer; padding: 6px 10px; border-radius: 4px; border: none; font-weight: bold; font-size: 0.8rem; transition: 0.2s; }
+    .btn-edit { background: #f59e0b; color: black; margin-right: 5px; }
+    .btn-del { background: #ef4444; color: white; }
+    .btn-edit:hover { background: #d97706; }
+    .btn-del:hover { background: #dc2626; }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <div id="sidebar-host"></div>
+    <main class="content">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h1>📅 Asignación de Tareas</h1>
+        <button id="btn-nuevo" class="btn" style="background:#3b82f6;">+ Nueva Asignación</button>
+      </div>
+
+      <section class="card">
+        <table class="table" style="width:100%; text-align:left; border-collapse:collapse;">
+          <thead>
+            <tr style="border-bottom:1px solid rgba(255,255,255,0.1); color:#94a3b8;">
+              <th style="padding:12px;">Usuario</th>
+              <th style="padding:12px;">Categoría</th>
+              <th style="padding:12px;">Fechas (Desde/Hasta)</th>
+              <th style="padding:12px;">Objetivos (MP/GR/HIS/MU/R)</th>
+              <th style="padding:12px; text-align:right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="lista-asignaciones"></tbody>
+        </table>
+      </section>
+    </main>
+  </div>
+
+  <div id="modal-asignacion" class="modal-overlay">
+    <div class="modal-content">
+      <h2 id="modal-titulo" style="margin-top:0;">Nueva Asignación</h2>
+
+      <label>Operador Responsable</label>
+      <select id="sel-usuario"></select>
+
+      <label>Categoría de Producto</label>
+      <select id="sel-categoria"></select>
+
+      <div class="grid-2">
+        <div><label>Fecha Inicio</label><input type="date" id="inp-desde"></div>
+        <div><label>Fecha Fin</label><input type="date" id="inp-hasta"></div>
+      </div>
+
+      <hr style="border:0; border-top:1px solid rgba(255,255,255,0.1); margin:15px 0;">
+      <label style="color:#60a5fa; font-weight:bold; margin-bottom:10px;">Metas Diarias (Cantidad de Posts)</label>
+
+      <div class="grid-2">
+        <div><label>🛒 Marketplace</label><input type="number" id="inp-daily-mp" value="1" min="0"></div>
+        <div><label>👥 Grupos</label><input type="number" id="inp-daily-grupos" value="0" min="0"></div>
+      </div>
+
+      <div class="grid-2">
+        <div><label>📖 Historias</label><input type="number" id="inp-daily-historia" value="0" min="0"></div>
+        <div><label>🏠 Muro</label><input type="number" id="inp-daily-muro" value="0" min="0"></div>
+      </div>
+
+      <div class="grid-2">
+        <div><label>🎬 Reels</label><input type="number" id="inp-daily-reels" value="0" min="0"></div>
+        <div></div>
+      </div>
+
+      <div style="display:flex; gap:10px; margin-top:20px;">
+        <button id="btn-guardar" class="btn" style="width:100%;">💾 Guardar Cambios</button>
+        <button id="btn-cancelar" class="btn2" style="width:100%;">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./asignaciones.js"></script>
+</body>
+</html>

@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Usuarios | Marketplace Manager</title>
+    <link rel="stylesheet" href="../../assets/css/app.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../assets/js/supabase.js"></script>
+    <style>
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px);
+            display: none; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .modal-content {
+            background: #1e293b; padding: 30px; border-radius: 12px;
+            width: 90%; max-width: 400px; border: 1px solid #334155;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+        }
+        label { display: block; margin-bottom: 6px; color: #94a3b8; font-size: 0.85rem; font-weight: 600; }
+        input, select { 
+            width: 100%; padding: 10px; margin-bottom: 20px; 
+            background: #0f172a; border: 1px solid #334155; color: white; border-radius: 6px;
+            box-sizing: border-box;
+        }
+        .action-btn { cursor: pointer; padding: 6px 12px; border-radius: 6px; border: none; font-weight: bold; transition: 0.2s; }
+        .btn-edit { background: #f59e0b; color: #000; margin-right: 8px; }
+        .btn-del { background: #ef4444; color: #fff; }
+        td { padding: 15px 10px; vertical-align: middle; border-bottom: 1px solid rgba(255,255,255,0.05); }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <div id="sidebar-host"></div>
+        <main class="content">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px;">
+                <h1>👥 Gestión de Equipo</h1>
+                <button id="btn-nuevo" class="btn" style="background:#3b82f6; font-weight:bold;">+ Nuevo Usuario</button>
+            </div>
+
+            <section class="card">
+                <table style="width:100%; text-align:left; border-collapse:collapse;">
+                    <thead>
+                        <tr style="border-bottom:2px solid #334155; color:#94a3b8; font-size: 0.9rem;">
+                            <th style="padding:12px;">Usuario</th>
+                            <th style="padding:12px;">Contraseña (Contra)</th>
+                            <th style="padding:12px;">Rol</th>
+                            <th style="padding:12px; text-align:right;">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="lista-usuarios"></tbody>
+                </table>
+            </section>
+        </main>
+    </div>
+
+    <div id="modal-usuario" class="modal-overlay">
+        <div class="modal-content">
+            <h2 id="modal-titulo" style="margin-top:0; color:white;">Usuario</h2>
+            <label>Nombre de Usuario</label>
+            <input type="text" id="inp-usuario">
+            <label>Contraseña Acceso</label>
+            <input type="text" id="inp-contra">
+            <label>Rol</label>
+            <select id="sel-rol">
+                <option value="operador">Operador</option>
+                <option value="gerente">Gerente</option>
+            </select>
+            <div style="display:flex; gap:12px;">
+                <button id="btn-guardar" class="btn" style="width:100%;">💾 Guardar</button>
+                <button id="btn-cancelar" class="btn2" style="width:100%;">Cancelar</button>
+            </div>
+        </div>
+    </div>
+    <script type="module" src="./usuarios.js"></script>
+</body>
+</html>

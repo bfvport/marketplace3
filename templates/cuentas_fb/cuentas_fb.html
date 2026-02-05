@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cuentas Facebook | Marketplace Manager</title>
+
+  <link rel="stylesheet" href="../../assets/css/app.css" />
+
+  <style>
+    /* ===== Responsive + prolijidad ===== */
+    main.content { min-width: 0; }
+    .page-wrap { max-width: 1250px; margin: 0 auto; padding: 18px 22px; }
+    .page-head { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; }
+    .page-head h1 { margin: 0; }
+    .page-sub { margin-top: 6px; }
+
+    .table-wrap{
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.18);
+      margin-top: 14px;
+    }
+
+    .table { min-width: 980px; }
+
+    @media (max-width: 700px){
+      .page-wrap{ padding: 14px; }
+      .table th, .table td{
+        padding: 8px 10px;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      #btn-nueva{ width: 100%; }
+    }
+
+    /* Modal simple (ya usás clases modal/hidden) */
+    .modal .modal-box{
+      width: min(520px, 92vw);
+      background: rgba(2,6,23,.98);
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 16px;
+      padding: 14px;
+    }
+    .modal .modal-box h3{ margin: 0 0 10px 0; }
+
+    .modal .modal-box input,
+    .modal .modal-box select{
+      width: 100%;
+      margin: 6px 0;
+    }
+
+    .modal-actions{
+      display:flex;
+      gap:10px;
+      flex-wrap:wrap;
+      margin-top: 10px;
+      justify-content:flex-end;
+    }
+
+    /* Botones (si tu app.css ya define, esto no molesta) */
+    .btn-primary{ padding: 10px 12px; border-radius: 10px; }
+
+    /* Modal FB (look más prolijo sin romper tu estilo) */
+    #fbLoginModal .box{
+      background: rgba(2,6,23,.98);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 16px;
+      padding: 14px;
+      width: 100%;
+      max-width: 420px;
+    }
+    #fbLoginModal input{
+      background: rgba(0,0,0,0.28);
+      border: 1px solid rgba(255,255,255,0.16);
+      width: 100%;
+    }
+    #fbLoginModal .row{
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="layout">
+    <div id="sidebar-host"></div>
+
+    <main class="content">
+      <div class="page-wrap">
+        <div class="page-head">
+          <div>
+            <h1>Gestión de Cuentas Facebook</h1>
+            <p class="muted page-sub">
+              <strong>Gerente</strong> administra todo. El <strong>operador</strong> ve solo sus cuentas asignadas y puede iniciar sesión.
+            </p>
+          </div>
+
+          <button id="btn-nueva" class="btn-primary">
+            ➕ Nueva Cuenta Facebook
+          </button>
+        </div>
+
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Email / Nombre</th>
+                <th>Contraseña</th>
+                <th>2FA</th>
+                <th>Estado</th>
+                <th>Calidad</th>
+                <th>Ocupada por</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+
+            <tbody id="cuentas_facebook">
+              <tr><td colspan="8" class="muted">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Modal cuenta (editar/crear/ver) -->
+        <div id="modal-cuenta" class="modal hidden">
+          <div class="modal-box">
+            <h3 id="modalTitulo">Cuenta Facebook</h3>
+
+            <input id="email" placeholder="Email" />
+            <input id="contra" placeholder="Contraseña" />
+            <input id="two_fa" placeholder="Código 2FA" />
+            <input id="nombre" placeholder="Nombre" />
+
+            <select id="estado">
+              <option value="activo">Activo</option>
+              <option value="inactivo">Inactivo</option>
+            </select>
+
+            <select id="calidad">
+              <option value="caliente">Caliente</option>
+              <option value="frio">Frío</option>
+            </select>
+
+            <label>Asignar a operador</label>
+            <select id="ocupada_por">
+              <option value="">Libre</option>
+            </select>
+
+            <div class="modal-actions">
+              <button id="cancelar" class="btn2" type="button">Cancelar</button>
+              <button id="guardar" class="btn" type="button">Guardar</button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Supabase SDK + init -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+
+  <!-- Sidebar + sesión -->
+  <script type="module">
+    import { requireSession, loadSidebar } from "../../assets/js/app.js";
+    const session = requireSession();
+    if (session) {
+      loadSidebar({ activeKey: "cuentas_fb", basePath: "../" });
+    }
+  </script>
+
+  <!-- JS principal -->
+  <script type="module" src="cuentas_fb.js"></script>
+
+  <!-- ===== MODAL INICIAR SESIÓN FACEBOOK (OPERADOR) ===== -->
+  <div id="fbLoginModal"
+       style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.60); z-index:999; align-items:center; justify-content:center; padding:16px;">
+    <div class="box">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <strong>🔐 Iniciar sesión en Facebook</strong>
+        <button class="btn2" type="button" onclick="cerrarFBModal()">✖</button>
+      </div>
+
+      <div style="margin-top:12px;">
+        <label>Email</label>
+        <div class="row">
+          <input id="fbEmail" readonly />
+          <button class="btn2" type="button" onclick="copiarFB('fbEmail')">Copiar</button>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <label>Contraseña</label>
+        <div class="row">
+          <input id="fbPass" readonly type="password" />
+          <button class="btn2" type="button" onclick="copiarFB('fbPass')">Copiar</button>
+        </div>
+      </div>
+
+      <div class="muted small" style="margin-top:10px;">
+        1) Pegá el email en Facebook<br>
+        2) Siguiente → pegá la contraseña<br>
+        3) Si pide 2FA, pedilo al gerente
+      </div>
+
+      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn" type="button" onclick="abrirMarketplace()">Abrir Marketplace</button>
+        <button class="btn2" type="button" onclick="abrirFacebook()">Abrir Facebook</button>
+      </div>
+
+      <div class="muted small" id="fbMsg" style="margin-top:8px;"></div>
+    </div>
+  </div>
+</body>
+</html>

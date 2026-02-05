@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Categorías | Marketplace Manager</title>
+
+  <link rel="stylesheet" href="../../assets/css/app.css" />
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+
+  <style>
+    .table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
+    .table th, .table td { border-bottom: 1px solid rgba(255,255,255,0.12); padding: 10px 8px; vertical-align: top; }
+    .table th { text-align:left; opacity: .85; }
+    .actions { display:flex; gap:8px; flex-wrap:wrap; }
+    .small { font-size: 12px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    .danger { border-color: rgba(239,68,68,0.55) !important; background: rgba(239,68,68,0.12) !important; }
+    .danger:hover { background: rgba(239,68,68,0.18) !important; }
+    .readonly { opacity:.85; background: rgba(255,255,255,0.06); }
+    .pill { display:inline-block; padding: 2px 8px; border: 1px solid rgba(255,255,255,0.18); border-radius: 999px; font-size: 12px; }
+    .etiqueta-chip { display: inline-block; background: rgba(59, 130, 246, 0.15); color: #93c5fd; padding: 2px 8px; border-radius: 12px; font-size: 11px; margin: 1px 2px; }
+  </style>
+</head>
+
+<body>
+  <div class="layout">
+    <div id="sidebar-host"></div>
+
+    <main class="content">
+      <div class="title">🗂️ Categorías</div>
+      <div class="muted">
+        Crear, editar, y administrar CSV por categoría (Storage bucket:
+        <span class="mono">categoria_csv</span>).
+        <span class="pill" id="sessionPill" style="margin-left:8px; display:none;"></span>
+      </div>
+
+      <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));">
+        <section class="card">
+          <div style="font-weight:800;">➕ Crear / Editar categoría</div>
+
+          <input type="hidden" id="cat_id" />
+
+          <label>Nombre *</label>
+          <input id="cat_nombre" placeholder="ropa" />
+
+          <label>Mensaje (template de descripción) *</label>
+          <textarea id="cat_mensaje" placeholder="Texto base que sugerís para publicar..."></textarea>
+
+          <label>Etiquetas (separadas por comas) *</label>
+          <textarea id="cat_etiquetas" placeholder="etiqueta1, etiqueta2, etiqueta3"></textarea>
+          <div class="muted small" style="margin-top: 4px;">
+            Ejemplo: "ropa deportiva, hombre, verano, algodón"
+          </div>
+
+          <label>Creado por (sesión)</label>
+          <input id="cat_creado_por_view" class="readonly" readonly placeholder="(sesión no encontrada)" />
+
+          <label>CSV asociado (se setea al subir CSV)</label>
+          <input id="cat_csv_nombre" class="readonly" placeholder="(sin CSV)" readonly />
+
+          <div class="row" style="margin-top:12px;">
+            <button class="btn" id="btnGuardar">Guardar</button>
+            <button class="btn2" id="btnNuevo">Nuevo</button>
+          </div>
+
+          <hr style="border:none;border-top:1px solid rgba(255,255,255,0.12); margin: 14px 0;">
+
+          <div style="font-weight:800;">📄 Plantilla CSV</div>
+          <div class="muted small">
+            Columnas: <span class="mono">titulo, descripcion, categoria, etiquetas, url_img_fijas_1, url_img_fijas_2, url_img_fijas_3, url_img_fijas_4, url_imagenes_portadas</span>
+          </div>
+
+          <div class="row" style="margin-top:10px;">
+            <button class="btn2" id="btnDescargarPlantilla">Descargar plantilla</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div style="font-weight:800;">📤 Subir CSV a Supabase (Storage)</div>
+          <div class="muted small">
+            Seleccioná una categoría y subí un CSV. Se guarda como
+            <span class="mono">categoria_csv/&lt;id&gt;/...csv</span>.
+          </div>
+
+          <label>Categoría</label>
+          <select id="selCategoria"></select>
+
+          <label>Archivo CSV</label>
+          <input id="fileCsv" type="file" accept=".csv,text/csv" />
+
+          <div class="row" style="margin-top:12px;">
+            <button class="btn" id="btnSubir">Subir CSV</button>
+            <button class="btn2" id="btnListarCsv">Ver CSV subidos</button>
+          </div>
+
+          <div style="margin-top:12px;">
+            <div style="font-weight:700; margin-bottom:6px;">🖥️ Logs</div>
+            <div class="log" id="log"></div>
+          </div>
+        </section>
+      </div>
+
+      <section class="card" style="margin-top:12px;">
+        <div style="font-weight:800;">📚 Lista de categorías</div>
+        <div class="muted small">Acciones: editar, ver CSV.</div>
+
+        <table class="table" id="tablaCats">
+          <thead>
+            <tr>
+              <th style="width:180px;">Nombre</th>
+              <th style="width:140px;">Creado por</th>
+              <th style="width:200px;">Mensaje</th>
+              <th style="width:180px;">Etiquetas</th>
+              <th style="width:220px;">CSV</th>
+              <th style="width:200px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section class="card" style="margin-top:12px; display:none;" id="csvPanel">
+        <div style="font-weight:800;">🗃️ CSV subidos (Storage)</div>
+        <div class="muted small" id="csvPanelHint"></div>
+
+        <table class="table" id="tablaCsv">
+          <thead>
+            <tr>
+              <th>Archivo</th>
+              <th style="width:220px;">Última modificación</th>
+              <th style="width:260px;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+    </main>
+  </div>
+
+  <script type="module" src="./logica.js"></script>
+</body>
+</html>

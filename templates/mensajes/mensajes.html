@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Scripts de Venta | Marketplace Manager</title>
+    <link rel="stylesheet" href="../../assets/css/app.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../assets/js/supabase.js"></script>
+    <style>
+        .msg-card {
+            background: #1e293b; border-left: 4px solid #3b82f6;
+            padding: 20px; border-radius: 8px; margin-bottom: 20px;
+            position: relative;
+        }
+        .msg-cat {
+            font-size: 0.8rem; text-transform: uppercase; 
+            color: #94a3b8; font-weight: bold; margin-bottom: 10px;
+        }
+        .msg-text {
+            white-space: pre-wrap; color: #e2e8f0; line-height: 1.6;
+            font-family: sans-serif;
+        }
+        .btn-copy {
+            position: absolute; top: 20px; right: 20px;
+            background: rgba(255,255,255,0.1); border: none; color: white;
+            padding: 5px 10px; border-radius: 4px; cursor: pointer;
+        }
+        .btn-copy:hover { background: #3b82f6; }
+    </style>
+</head>
+<body>
+    <div class="layout">
+        <div id="sidebar-host"></div>
+        <main class="content">
+            <h1>💬 Scripts de Respuesta</h1>
+            <p class="muted">Mensajes predefinidos para responder en Marketplace.</p>
+
+            <div id="loader" style="color:#60a5fa;">⏳ Cargando mensajes...</div>
+            
+            <div id="mensajes-container"></div>
+        </main>
+    </div>
+    <script type="module" src="./mensajes.js"></script>
+</body>
+</html>

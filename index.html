@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Marketplace Manager</title>
+</head>
+<body>
+  <script>
+    // Sesión simple (misma key que usamos en app.js)
+    const SESSION_KEY = "mp_session_v1";
+
+    function getSession() {
+      try { return JSON.parse(localStorage.getItem(SESSION_KEY) || "null"); }
+      catch { return null; }
+    }
+
+    const s = getSession();
+
+    if (s && s.usuario && s.rol) {
+      window.location.href = "templates/dashboard/dashboard.html";
+    } else {
+      window.location.href = "templates/login/login.html";
+    }
+  </script>
+</body>
+</html>

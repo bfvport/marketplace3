@@ -1,0 +1,248 @@
+import { requireSession, loadSidebar, fmtDateISO } from "../../assets/js/app.js";
+
+const s = requireSession();
+const sb = window.supabaseClient;
+const $ = (id) => document.getElementById(id);
+const today = fmtDateISO(new Date());
+
+// ====== RANGO "HOY" EN ARG (UTC para timestamps) ======
+function getARGDayRangeUTC() {
+    const now = new Date();
+    const arg = new Date(now.toLocaleString("en-US", { timeZone: "America/Argentina/Buenos_Aires" }));
+    const y = arg.getFullYear();
+    const m = arg.getMonth();
+    const d = arg.getDate();
+
+    // ARG ~ UTC-3
+    const startUTC = new Date(Date.UTC(y, m, d, 3, 0, 0));
+    const endUTC = new Date(Date.UTC(y, m, d, 26, 59, 59));
+
+    return { start: startUTC.toISOString(), end: endUTC.toISOString() };
+}
+
+function nowISO() {
+    return new Date().toISOString();
+}
+
+// ====== AVISOS (sistema_avisos) ======
+async function getUltimoAviso() {
+    const { data, error } = await sb
+        .from("sistema_avisos")
+        .select("id, contenido, autor, updated_at")
+        .order("updated_at", { ascending: false })
+        .limit(1);
+
+    if (error) {
+        console.error("Error leyendo sistema_avisos:", error);
+        return null;
+    }
+    return data && data.length ? data[0] : null;
+}
+
+function renderAviso(aviso) {
+    const text = $("aviso-text");
+    if (!text) return;
+
+    if (!aviso || !aviso.contenido) {
+        text.textContent = "No hay avisos por ahora.";
+        return;
+    }
+
+    const autor = aviso.autor ? `— ${aviso.autor}` : "";
+    const fecha = aviso.updated_at
+        ? new Date(aviso.updated_at).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires" })
+        : "";
+
+    text.textContent = `${aviso.contenido}\n\n${autor}${fecha ? ` · ${fecha}` : ""}`.trim();
+}
+
+async function enableAvisoEditorIfGerente() {
+    const form = $("aviso-form");
+    const input = $("aviso-input");
+    const btn = $("aviso-save");
+    if (!form || !input || !btn) return;
+
+    if (s.rol !== "gerente") {
+        form.style.display = "none";
+        return;
+    }
+
+    form.style.display = "block";
+
+    // precarga
+    const actual = await getUltimoAviso();
+    input.value = actual?.contenido || "";
+
+    btn.onclick = async () => {
+        const contenido = (input.value || "").trim();
+        if (!contenido) {
+            alert("El aviso no puede estar vacío.");
+            return;
+        }
+
+        const ultimo = await getUltimoAviso();
+
+        if (ultimo?.id) {
+            const { error } = await sb
+                .from("sistema_avisos")
+                .update({ contenido, autor: s.usuario, updated_at: nowISO() })
+                .eq("id", ultimo.id);
+
+            if (error) {
+                console.error("Error update aviso:", error);
+                alert("No se pudo publicar el aviso.");
+                return;
+            }
+        } else {
+            const { error } = await sb.from("sistema_avisos").insert({
+                contenido,
+                autor: s.usuario,
+                updated_at: nowISO(),
+            });
+
+            if (error) {
+                console.error("Error insert aviso:", error);
+                alert("No se pudo publicar el aviso.");
+                return;
+            }
+        }
+
+        const nuevo = await getUltimoAviso();
+        renderAviso(nuevo);
+        alert("Aviso publicado ✅");
+    };
+}
+
+// ====== INIT ======
+(async function init() {
+    await loadSidebar({ activeKey: "dashboard", basePath: "../" });
+
+    $("welcome-user").textContent = `Hola, ${s.usuario} 👋`;
+    $("fecha-actual").textContent = new Date().toLocaleDateString('es-AR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    // Avisos
+    const aviso = await getUltimoAviso();
+    renderAviso(aviso);
+    await enableAvisoEditorIfGerente();
+
+    // Pendientes
+    await verificarTodo();
+})();
+
+// ====== MAESTRA ======
+async function verificarTodo() {
+    const container = $("alerta-container");
+    container.innerHTML = "";
+
+    await Promise.all([
+        checkDiario(container),
+        checkCalentamiento(container),
+        checkMetricas(container)
+    ]);
+
+    if (container.innerHTML === "") {
+        container.innerHTML = `
+            <div class="card" style="border-left: 5px solid #10b981; background: rgba(16, 185, 129, 0.1);">
+                <h3 style="color:#10b981; margin:0;">✅ ¡Todo al día!</h3>
+                <p style="margin:5px 0 0 0;">No tenés tareas pendientes por ahora.</p>
+            </div>`;
+    }
+}
+
+// ====== 1) DIARIO ======
+async function checkDiario(container) {
+    const { start, end } = getARGDayRangeUTC();
+
+    let qAsig = sb.from("usuarios_asignado").select("*").lte("fecha_desde", today).gte("fecha_hasta", today);
+    if (s.rol !== "gerente") qAsig = qAsig.eq("usuario", s.usuario);
+
+    const { data: asigs, error: eA } = await qAsig;
+    if (eA) {
+        console.error("Error usuarios_asignado:", eA);
+        return;
+    }
+
+    // ✅ FIX: rango por timestamp (no eq(today))
+    let qHechos = sb.from("marketplace_actividad").select("usuario")
+        .gte("fecha_publicacion", start)
+        .lte("fecha_publicacion", end);
+
+    if (s.rol !== "gerente") qHechos = qHechos.eq("usuario", s.usuario);
+
+    const { data: hechos, error: eH } = await qHechos;
+    if (eH) {
+        console.error("Error marketplace_actividad:", eH);
+        return;
+    }
+
+    if (asigs) {
+        asigs.forEach(a => {
+            const realizados = (hechos || []).filter(h => h.usuario === a.usuario).length;
+            const falta = (a.marketplace_daily || 0) - realizados;
+
+            if (falta > 0) {
+                const msg = s.rol === "gerente" ? `El operador <b>${a.usuario}</b> debe` : "Te faltan";
+                agregarAlerta(container, "error", "⚠️ Publicaciones Pendientes",
+                    `${msg} publicar <b>${falta}</b> productos hoy${a.categoria ? ` en la categoría ${a.categoria}` : ""}.`);
+            }
+        });
+    }
+}
+
+// ====== 2) CALENTAMIENTO ======
+async function checkCalentamiento(container) {
+    let q = sb.from("cuentas_facebook").select("email, ocupada_por").eq("calidad", "frio");
+    if (s.rol !== "gerente") q = q.eq("ocupada_por", s.usuario);
+
+    const { data: frias, error } = await q;
+    if (error) return console.error("Error cuentas_facebook:", error);
+
+    if (frias && frias.length > 0) {
+        const msg = s.rol === "gerente"
+            ? `Hay <b>${frias.length}</b> cuentas frías en el equipo.`
+            : `Tenés <b>${frias.length}</b> cuentas en estado FRÍO para trabajar hoy.`;
+        agregarAlerta(container, "warning", "🔥 Calentamiento Requerido", msg);
+    }
+}
+
+// ====== 3) MÉTRICAS ======
+async function checkMetricas(container) {
+    let q = sb.from("metricas").select("created_at, usuario").order("created_at", { ascending: false }).limit(1);
+    if (s.rol !== "gerente") q = q.eq("usuario", s.usuario);
+
+    const { data: lastMetric, error } = await q;
+    if (error) return console.error("Error metricas:", error);
+
+    let diasSinCarga = 999;
+    if (lastMetric && lastMetric.length > 0) {
+        const ultimaFecha = new Date(lastMetric[0].created_at);
+        const hoy = new Date();
+        diasSinCarga = Math.floor((hoy - ultimaFecha) / (1000 * 60 * 60 * 24));
+    }
+
+    if (diasSinCarga >= 7) {
+        const texto = s.rol === "gerente"
+            ? "Alguien del equipo no carga métricas hace +7 días."
+            : `Hace <b>${diasSinCarga} días</b> que no cargas el reporte de Clicks.`;
+        agregarAlerta(container, "error", "📊 Reporte Semanal Vencido",
+            texto + " <a href='../metricas/metricas.html' style='color:#fff; text-decoration:underline;'>Ir a cargar ahora</a>");
+    }
+}
+
+// ====== UI ALERTAS ======
+function agregarAlerta(container, tipo, titulo, mensaje) {
+    const div = document.createElement("div");
+    const color = tipo === "error" ? "#ef4444" : "#f59e0b";
+    const bg = tipo === "error" ? "rgba(239, 68, 68, 0.15)" : "rgba(245, 158, 11, 0.15)";
+
+    div.className = "card";
+    div.style.borderLeft = `5px solid ${color}`;
+    div.style.background = bg;
+    div.style.padding = "15px";
+
+    div.innerHTML = `
+        <strong style="color:${color}; display:block; margin-bottom:5px;">${titulo}</strong>
+        <span style="color:#e2e8f0;">${mensaje}</span>
+    `;
+    container.appendChild(div);
+}

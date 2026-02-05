@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard | Marketplace Manager</title>
+    <link rel="stylesheet" href="../../assets/css/app.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="../../assets/js/supabase.js"></script>
+</head>
+<body>
+    <div class="layout">
+        <div id="sidebar-host"></div>
+        <main class="content">
+            
+            <div class="welcome-banner" style="margin-bottom: 25px;">
+                <h1 id="welcome-user">Cargando...</h1>
+                <p class="muted">Resumen de estado para hoy: <span id="fecha-actual" style="color:#fff;"></span></p>
+            </div>
+
+            <!-- ✅ Aviso de Gerencia (operadores lo ven / gerente lo edita) -->
+            <section class="card" id="aviso-box" style="border-left: 5px solid #3b82f6; background: rgba(59,130,246,0.10); margin-bottom: 18px;">
+                <h3 style="margin-top:0;">📣 Aviso de Gerencia</h3>
+                <pre id="aviso-text" style="white-space:pre-wrap; margin:0; color:#e2e8f0; font-family:inherit;"></pre>
+
+                <!-- Solo visible para gerente desde JS -->
+                <div id="aviso-form" style="display:none; margin-top: 12px;">
+                    <textarea id="aviso-input" rows="4" class="input" style="width:100%; resize:vertical;" placeholder="Escribí un mensaje para el equipo..."></textarea>
+                    <div style="display:flex; gap:10px; margin-top:10px; justify-content:flex-end;">
+                        <button id="aviso-save" class="btn2" style="background:#2563eb;">💾 Publicar aviso</button>
+                    </div>
+                </div>
+            </section>
+
+            <div id="alerta-container" style="display: flex; flex-direction: column; gap: 15px;">
+                <div style="text-align:center; color:#64748b;">Analizando tareas pendientes...</div>
+            </div>
+
+            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 30px;">
+                <div class="card" onclick="window.location.href='../diario/diario.html'" style="cursor:pointer; border:1px solid #334155; transition:0.2s;">
+                    <h3>📅 Ir al Diario</h3>
+                    <p class="muted">Gestionar publicaciones del día.</p>
+                </div>
+                <div class="card" onclick="window.location.href='../calentamiento/calentamiento.html'" style="cursor:pointer; border:1px solid #334155; transition:0.2s;">
+                    <h3>🔥 Ir a Calentamiento</h3>
+                    <p class="muted">Gestionar cuentas frías.</p>
+                </div>
+                <div class="card" onclick="window.location.href='../metricas/metricas.html'" style="cursor:pointer; border:1px solid #334155; transition:0.2s;">
+                    <h3>📈 Ir a Métricas</h3>
+                    <p class="muted">Cargar reporte semanal de clicks.</p>
+                </div>
+            </div>
+
+        </main>
+    </div>
+    <script type="module" src="./logica.js"></script>
+</body>
+</html>

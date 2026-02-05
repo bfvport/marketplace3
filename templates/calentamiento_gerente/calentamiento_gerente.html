@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Calentamiento | Gerente</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <link rel="stylesheet" href="../../assets/css/app.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+</head>
+
+<body>
+  <div class="layout">
+    <div id="sidebar-host"></div>
+
+    <main class="content">
+      <div class="page-wrap">
+
+        <div class="page-head">
+          <h1>🔥 Calentamiento (Gerencia)</h1>
+          <p class="muted page-sub">Configuración y estrategia.</p>
+
+          <button id="btn-guardar" class="btn-primary">💾 Guardar</button>
+          <button id="btn-generar" class="btn2">🎲 Generar 7 días</button>
+        </div>
+
+        <section class="card">
+          <h3>Configuración</h3>
+
+          <input id="meta_historias" placeholder="Meta historias">
+          <input id="meta_muro" placeholder="Meta muro">
+          <input id="meta_reels" placeholder="Meta reels">
+          <input id="meta_grupos" placeholder="Meta grupos">
+
+          <div id="estado" class="muted" style="margin-top:10px;">
+            Cargando...
+          </div>
+        </section>
+
+        <section class="card" style="margin-top:10px;">
+          <h3>Plan generado</h3>
+          <div id="contenedor-plan" class="muted">—</div>
+        </section>
+
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="./calentamiento_gerente.js"></script>
+</body>
+</html>
+

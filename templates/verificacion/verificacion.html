@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Verificación | Marketplace Manager</title>
+
+  <!-- Estilos globales -->
+  <link rel="stylesheet" href="../../assets/css/app.css" />
+
+  <!-- Supabase -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+
+  <style>
+    .layout { display: flex; min-height: 100vh; }
+    #sidebar-host { flex: 0 0 auto; }
+
+    main.content {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .veri-wrap{
+      padding: 18px 22px;
+      max-width: 1200px;
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .veri-title{ font-size: 28px; font-weight: 800; margin: 0 0 6px 0; }
+    .veri-sub{ margin: 0 0 16px 0; color: rgba(226,232,240,0.75); font-size: 13px; }
+
+    .veri-card{
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 16px;
+      padding: 14px;
+    }
+
+    .veri-filters{
+      display: grid;
+      grid-template-columns: 1.1fr 1fr 1fr auto;
+      gap: 12px;
+      align-items: end;
+    }
+
+    .veri-table-wrap{
+      margin-top: 14px;
+      max-height: 58vh;
+      overflow: auto;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.20);
+    }
+
+    table.veri-table{
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 920px;
+    }
+
+    .veri-table th,
+    .veri-table td{
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      font-size: 13px;
+      color: #e2e8f0;
+      white-space: nowrap;
+    }
+
+    .veri-table thead th{
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: rgba(2,6,23,.92);
+      backdrop-filter: blur(6px);
+    }
+
+    #btn-aplicar{
+      height: 42px;
+      padding: 10px 14px;
+      border-radius: 12px;
+      border: 1px solid rgba(99,102,241,0.5);
+      background: rgba(99,102,241,0.18);
+      color: #e2e8f0;
+      cursor: pointer;
+    }
+    #btn-aplicar:hover{ background: rgba(99,102,241,0.26); }
+
+    .link-btn{
+      color: #60a5fa;
+      text-decoration: none;
+      font-weight: 800;
+    }
+    .link-btn:hover{ text-decoration: underline; }
+
+    @media (max-width: 900px){
+      .veri-filters{ grid-template-columns: 1fr; }
+      #btn-aplicar{ width: 100%; }
+      table.veri-table{ min-width: 800px; }
+    }
+    
+  </style>
+</head>
+
+<body>
+  <div class="layout">
+    <!-- Sidebar -->
+    <div id="sidebar-host"></div>
+
+    <main class="content">
+      <div class="veri-wrap">
+        <div class="veri-title">🔎 Verificación</div>
+        <div class="veri-sub">Solo gerente. Acá se ven links de RRSS + Marketplace.</div>
+
+        <section class="veri-card">
+          <div class="veri-filters">
+            <div>
+              <label for="f-fecha">Fecha</label>
+              <input id="f-fecha" type="date"/>
+            </div>
+
+            <div>
+              <label for="f-operador">Operador</label>
+              <select id="f-operador">
+                <option value="">Todos los operadores</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="f-tipo">Tipo</label>
+              <select id="f-tipo">
+                <option value="">Todos los tipos</option>
+                <option value="historias">Historias</option>
+                <option value="muro">Muro</option>
+                <option value="reels">Reels</option>
+                <option value="grupos">Grupos</option>
+                <option value="marketplace">Marketplace</option>
+              </select>
+            </div>
+
+            <button id="btn-aplicar" type="button">Aplicar</button>
+          </div>
+
+          <div class="veri-table-wrap">
+            <table class="veri-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Usuario</th>
+                  <th>Cuenta</th>
+                  <th>Tipo</th>
+                  <th>Link</th>
+                  <th>Fuente</th>
+                </tr>
+              </thead>
+
+              <!-- ✅ ESTE ID ES EL QUE USA EL JS -->
+              <tbody id="veri-tbody">
+                <tr><td colspan="6">Cargando…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="./verificacion.js"></script>
+</body>
+</html>
