@@ -80,15 +80,11 @@ async function cargarTabla() {
       <td style="padding:12px; color:#60a5fa;">${item.categoria}</td>
       <td style="padding:12px; font-size:0.9rem;">${item.fecha_desde} / ${item.fecha_hasta}</td>
       <td style="padding:12px; font-size:0.85rem; font-family:monospace; color:#94a3b8;">
-        MP:${item.marketplace_daily} | GR:${item.grupos_daily} | HIS:${item.historia_daily} | MU:${item.muro_daily} | R:${item.reels_daily ?? 0}
+        MP:${item.marketplace_daily} | GR:${item.grupos_daily} | HIS:${item.historia_daily} | MU:${item.muro_daily} | R:${item.reels_daily ?? 0} | TT:${item.tiktok_daily ?? 0}
       </td>
       <td style="padding:12px; text-align:right;">
-        <button class="action-btn btn-edit" style="background:#f59e0b; margin-right:5px;" data-obj='${JSON.stringify(
-          item
-        )}'>✏️</button>
-        <button class="action-btn btn-del" style="background:#ef4444; color:white;" data-id="${
-          item.id
-        }">🗑️</button>
+        <button class="action-btn btn-edit" style="background:#f59e0b; margin-right:5px;" data-obj='${JSON.stringify(item)}'>✏️</button>
+        <button class="action-btn btn-del" style="background:#ef4444; color:white;" data-id="${item.id}">🗑️</button>
       </td>
     `;
     tbody.appendChild(tr);
@@ -119,6 +115,7 @@ function abrirModalCrear() {
   $("inp-daily-historia").value = 0;
   $("inp-daily-muro").value = 0;
   $("inp-daily-reels").value = 0;
+  $("inp-daily-tiktok").value = 0;
 
   $("modal-asignacion").style.display = "flex";
 }
@@ -138,6 +135,7 @@ function abrirModalEditar(item) {
   $("inp-daily-historia").value = item.historia_daily ?? 0;
   $("inp-daily-muro").value = item.muro_daily ?? 0;
   $("inp-daily-reels").value = item.reels_daily ?? 0;
+  $("inp-daily-tiktok").value = item.tiktok_daily ?? 0;
 
   $("modal-asignacion").style.display = "flex";
 }
@@ -161,6 +159,7 @@ async function guardarAsignacion() {
     historia_daily: parseInt($("inp-daily-historia").value) || 0,
     muro_daily: parseInt($("inp-daily-muro").value) || 0,
     reels_daily: parseInt($("inp-daily-reels").value) || 0,
+    tiktok_daily: parseInt($("inp-daily-tiktok").value) || 0,
   };
 
   if (!usuario || !categoria) return alert("Faltan datos obligatorios");

@@ -1,57 +1,101 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <title>Dashboard | Marketplace Manager</title>
-    <link rel="stylesheet" href="../../assets/css/app.css">
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="../../assets/js/supabase.js"></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard | Marketplace Manager</title>
+
+  <link rel="stylesheet" href="../../assets/css/app.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+
+  <style>
+    .cards {
+      display:grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap:16px;
+    }
+    .card-kpi {
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:14px;
+      padding:16px;
+      background:rgba(255,255,255,.03);
+    }
+    .kpi-title {
+      font-size:13px;
+      color:#94a3b8;
+      margin-bottom:6px;
+    }
+    .kpi-value {
+      font-size:28px;
+      font-weight:800;
+    }
+    .kpi-warn { color:#fbbf24; }
+    .kpi-bad { color:#ef4444; }
+    .kpi-ok { color:#22c55e; }
+    .hint { font-size:12px; color:#94a3b8; margin-top:6px; }
+    .alert {
+      border-left:4px solid #f59e0b;
+      background:rgba(245,158,11,.1);
+      padding:12px;
+      border-radius:8px;
+      margin-bottom:10px;
+    }
+    .alert.bad {
+      border-left-color:#ef4444;
+      background:rgba(239,68,68,.1);
+    }
+    .alert.ok {
+      border-left-color:#22c55e;
+      background:rgba(34,197,94,.1);
+    }
+  </style>
 </head>
+
 <body>
-    <div class="layout">
-        <div id="sidebar-host"></div>
-        <main class="content">
-            
-            <div class="welcome-banner" style="margin-bottom: 25px;">
-                <h1 id="welcome-user">Cargando...</h1>
-                <p class="muted">Resumen de estado para hoy: <span id="fecha-actual" style="color:#fff;"></span></p>
-            </div>
+<div class="layout">
+  <div id="sidebar-host"></div>
 
-            <!-- ✅ Aviso de Gerencia (operadores lo ven / gerente lo edita) -->
-            <section class="card" id="aviso-box" style="border-left: 5px solid #3b82f6; background: rgba(59,130,246,0.10); margin-bottom: 18px;">
-                <h3 style="margin-top:0;">📣 Aviso de Gerencia</h3>
-                <pre id="aviso-text" style="white-space:pre-wrap; margin:0; color:#e2e8f0; font-family:inherit;"></pre>
+  <main class="content">
+    <h1>📊 Dashboard</h1>
+    <p class="muted">Resumen operativo del día y pendientes.</p>
 
-                <!-- Solo visible para gerente desde JS -->
-                <div id="aviso-form" style="display:none; margin-top: 12px;">
-                    <textarea id="aviso-input" rows="4" class="input" style="width:100%; resize:vertical;" placeholder="Escribí un mensaje para el equipo..."></textarea>
-                    <div style="display:flex; gap:10px; margin-top:10px; justify-content:flex-end;">
-                        <button id="aviso-save" class="btn2" style="background:#2563eb;">💾 Publicar aviso</button>
-                    </div>
-                </div>
-            </section>
+    <!-- KPIs -->
+    <div class="cards">
+      <div class="card-kpi">
+        <div class="kpi-title">Publicaciones pendientes hoy</div>
+        <div class="kpi-value kpi-bad" id="kpi-pendientes">–</div>
+        <div class="hint">Marketplace + RRSS + TikTok</div>
+      </div>
 
-            <div id="alerta-container" style="display: flex; flex-direction: column; gap: 15px;">
-                <div style="text-align:center; color:#64748b;">Analizando tareas pendientes...</div>
-            </div>
+      <div class="card-kpi">
+        <div class="kpi-title">Publicaciones realizadas hoy</div>
+        <div class="kpi-value kpi-ok" id="kpi-hechas">–</div>
+        <div class="hint">Total cargado</div>
+      </div>
 
-            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 30px;">
-                <div class="card" onclick="window.location.href='../diario/diario.html'" style="cursor:pointer; border:1px solid #334155; transition:0.2s;">
-                    <h3>📅 Ir al Diario</h3>
-                    <p class="muted">Gestionar publicaciones del día.</p>
-                </div>
-                <div class="card" onclick="window.location.href='../calentamiento/calentamiento.html'" style="cursor:pointer; border:1px solid #334155; transition:0.2s;">
-                    <h3>🔥 Ir a Calentamiento</h3>
-                    <p class="muted">Gestionar cuentas frías.</p>
-                </div>
-                <div class="card" onclick="window.location.href='../metricas/metricas.html'" style="cursor:pointer; border:1px solid #334155; transition:0.2s;">
-                    <h3>📈 Ir a Métricas</h3>
-                    <p class="muted">Cargar reporte semanal de clicks.</p>
-                </div>
-            </div>
+      <div class="card-kpi">
+        <div class="kpi-title">Días restantes para CSV</div>
+        <div class="kpi-value kpi-warn" id="kpi-dias-csv">–</div>
+        <div class="hint">Entrega del CSV asignado</div>
+      </div>
 
-        </main>
+      <div class="card-kpi">
+        <div class="kpi-title">TikTok pendientes hoy</div>
+        <div class="kpi-value kpi-bad" id="kpi-tt">–</div>
+        <div class="hint">Meta diaria TikTok</div>
+      </div>
     </div>
-    <script type="module" src="./logica.js"></script>
+
+    <!-- ALERTAS -->
+    <section class="card" style="margin-top:18px;">
+      <h3>⚠️ Avisos importantes</h3>
+      <div id="alertas"></div>
+    </section>
+
+  </main>
+</div>
+
+<script type="module" src="./logica.js"></script>
 </body>
 </html>

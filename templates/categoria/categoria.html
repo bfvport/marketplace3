@@ -34,6 +34,7 @@
       <div class="muted">
         Crear, editar, y administrar CSV por categoría (Storage bucket:
         <span class="mono">categoria_csv</span>).
+        <span class="pill" style="margin-left:8px;">CSV liviano (Drive-first)</span>
         <span class="pill" id="sessionPill" style="margin-left:8px; display:none;"></span>
       </div>
 
@@ -70,11 +71,17 @@
 
           <div style="font-weight:800;">📄 Plantilla CSV</div>
           <div class="muted small">
-            Columnas: <span class="mono">titulo, descripcion, categoria, etiquetas, url_img_fijas_1, url_img_fijas_2, url_img_fijas_3, url_img_fijas_4, url_imagenes_portadas</span>
+            Columnas: <span class="mono">titulo, categoria, etiquetas</span>
+            <span class="pill" style="margin-left:8px;">imágenes + descripción viven en Drive</span>
+          </div>
+
+          <div class="muted small" style="margin-top:8px;">
+            Recomendado: generá el CSV desde <b>Creador de CSV</b> (más rápido y sin errores).
           </div>
 
           <div class="row" style="margin-top:10px;">
             <button class="btn2" id="btnDescargarPlantilla">Descargar plantilla</button>
+            <a class="btn" href="../csv_creator/csv_creator.html" style="text-decoration:none;">Ir al Creador de CSV</a>
           </div>
         </section>
 

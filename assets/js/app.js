@@ -33,6 +33,21 @@ export function fmtDateISO(d = new Date()){
   const pad = (n) => String(n).padStart(2,"0");
   return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 }
+// Fecha en horario Argentina (corte 00:00)
+export function fmtDateAR(d = new Date()) {
+  const tz = "America/Argentina/Buenos_Aires";
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+
+  const get = (t) => parts.find(p => p.type === t)?.value;
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
 export function nowISO(){ return new Date().toISOString(); }
 
 // --- CARGA DEL SIDEBAR Y LÓGICA DE NAVEGACIÓN ---

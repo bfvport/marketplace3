@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Creador de CSV | Marketplace Manager</title>
+
+  <link rel="stylesheet" href="../../assets/css/app.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+
+  <style>
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .table { width:100%; border-collapse: collapse; margin-top: 10px; }
+    .table th, .table td { border-bottom: 1px solid rgba(255,255,255,0.12); padding: 10px 8px; vertical-align: top; }
+    .table th { text-align:left; opacity: .85; }
+    .actions { display:flex; gap: 8px; flex-wrap:wrap; }
+    input, textarea, select{
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.22);
+      color: #e5e7eb;
+      outline: none;
+    }
+    textarea{ min-height: 120px; resize: vertical; }
+    .muted { opacity: .75; }
+    .btn-danger{
+      border-color: rgba(239,68,68,0.55) !important;
+      background: rgba(239,68,68,0.12) !important;
+    }
+    .btn-danger:hover{ background: rgba(239,68,68,0.18) !important; }
+    .pill{
+      display:inline-block;
+      padding: 2px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.18);
+      font-size: 12px;
+      opacity: .9;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="layout">
+    <div id="sidebar-host"></div>
+
+    <main class="content">
+      <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+        <div class="title">🧾 Creador de CSV</div>
+        <span class="pill">Columnas: <span class="mono">titulo,categoria,etiquetas</span></span>
+      </div>
+
+      <div class="muted" style="margin-bottom:10px;">
+        Esta página genera y sube CSV al bucket <span class="mono">categoria_csv</span> y lo asocia a la categoría.
+        <b>Imágenes y descripción van por Drive.</b>
+      </div>
+
+      <section class="card">
+        <div class="grid2">
+          <div>
+            <label>Categoría *</label>
+            <select id="selCategoria"></select>
+            <div class="muted" style="margin-top:6px;">
+              Etiquetas por defecto de la categoría (BD): <span class="mono" id="catTags">-</span>
+            </div>
+          </div>
+
+          <div>
+            <label>Acciones</label>
+            <div class="actions" style="margin-top:6px;">
+              <button class="btn2" id="btnAddRow">+ Agregar fila</button>
+              <button class="btn2" id="btnFillDefaultTags">Usar etiquetas por defecto en vacías</button>
+              <button class="btn2 btn-danger" id="btnClear">Vaciar todo</button>
+            </div>
+          </div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.12); margin: 14px 0;">
+
+        <div class="grid2">
+          <div>
+            <label>Pegar títulos (uno por línea)</label>
+            <textarea id="bulkTitles" placeholder="Producto 1&#10;Producto 2&#10;Producto 3"></textarea>
+            <div class="actions" style="margin-top:10px;">
+              <button class="btn2" id="btnImportTitles">Importar títulos</button>
+              <button class="btn2" id="btnClearBulk">Limpiar pegado</button>
+            </div>
+          </div>
+
+          <div>
+            <label>Preview CSV (generado)</label>
+            <textarea id="csvPreview" class="mono" readonly placeholder="Acá vas a ver el CSV generado..."></textarea>
+            <div class="actions" style="margin-top:10px;">
+              <button class="btn2" id="btnBuild">Generar preview</button>
+              <button class="btn2" id="btnDownload">Descargar CSV</button>
+              <button class="btn" id="btnUpload">Subir y asociar</button>
+            </div>
+          </div>
+        </div>
+
+        <hr style="border:none;border-top:1px solid rgba(255,255,255,0.12); margin: 14px 0;">
+
+        <div style="font-weight:800;">📋 Filas</div>
+        <table class="table" id="tablaRows">
+          <thead>
+            <tr>
+              <th style="width:50px;">#</th>
+              <th>Título *</th>
+              <th style="width:260px;">Etiquetas (coma-separadas)</th>
+              <th style="width:140px;">Acción</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+
+        <div style="margin-top:12px;">
+          <div style="font-weight:700; margin-bottom:6px;">🖥️ Logs</div>
+          <div class="log" id="log"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./csv_creator.js"></script>
+</body>
+</html>

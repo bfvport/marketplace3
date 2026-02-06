@@ -1,9 +1,9 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>📔 Diario de Publicaciones | Marketplace Manager</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Diario | Marketplace Manager</title>
 
   <link rel="stylesheet" href="../../assets/css/app.css" />
 
@@ -11,37 +11,89 @@
   <script src="../../assets/js/supabase.js"></script>
 
   <style>
-    .table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 13px; }
-    .table th, .table td { border-bottom: 1px solid rgba(255,255,255,0.12); padding: 10px 8px; vertical-align: top; }
-    .table th { text-align:left; opacity: .85; }
-    .actions { display:flex; gap:8px; flex-wrap:wrap; }
-    .small { font-size: 12px; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
-    .pill { display:inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; margin: 0 4px; }
-    .pill-info { background: rgba(59, 130, 246, 0.15); color: #93c5fd; }
-    .pill-success { background: rgba(34, 197, 94, 0.15); color: #86efac; }
-    .pill-warning { background: rgba(234, 179, 8, 0.15); color: #fde047; }
-    .pill-danger { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
-    .counter { font-size: 24px; font-weight: bold; text-align: center; margin: 10px 0; }
-    .counter-label { font-size: 12px; opacity: 0.8; }
-    .image-preview { display: inline-block; margin: 5px; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; overflow: hidden; }
-    .image-preview img { width: 80px; height: 80px; object-fit: cover; }
-    .image-preview.used { opacity: 0.5; border-color: #ef4444 !important; }
-    .image-preview.used img { filter: grayscale(100%); }
-    .card-section { margin-bottom: 20px; }
-    .row-inputs { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
-    .row-inputs input, .row-inputs textarea { flex: 1; }
-    .row-inputs textarea { min-height: 80px; resize: vertical; }
-    .copied-feedback { color: #4ade80; font-size: 11px; margin-left: 5px; }
-    .required::after { content: " *"; color: #ef4444; }
-    .btn.active { background: rgba(34, 197, 94, 0.2) !important; border-color: #22c55e !important; }
-    .content-border { border-left: 4px solid #3b82f6; padding-left: 10px; transition: all 0.3s ease; }
-    .content-border.used { border-left-color: #ef4444; opacity: 0.6; }
-    .content-border.selected { border-left-color: #22c55e; }
-    .stats-container { display: flex; gap: 15px; margin-top: 10px; flex-wrap: wrap; }
-    .stats-item { background: rgba(255,255,255,0.05); padding: 8px 12px; border-radius: 6px; }
-    .content-used-badge { display: inline-block; background: #ef4444; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 8px; }
-    .content-available-badge { display: inline-block; background: #22c55e; color: white; padding: 2px 6px; border-radius: 10px; font-size: 10px; margin-left: 8px; }
+    .card-section { margin-bottom: 16px; }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .grid-3 {
+      display:grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 12px;
+    }
+
+    .muted { opacity: .75; }
+
+    .pill-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+
+    .btn-drive {
+      margin-top: 12px;
+      padding: 12px 18px;
+      border-radius: 10px;
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      background: linear-gradient(135deg, #1e3a8a, #2563eb);
+      color: #fff;
+      font-weight: 700;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      width: 100%;
+    }
+    .btn-drive:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(37, 99, 235, 0.35);
+    }
+    .btn-drive:active { transform: scale(0.98); }
+
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+    .table { width: 100%; border-collapse: collapse; }
+    .table th, .table td {
+      padding: 10px;
+      border-bottom: 1px solid rgba(255,255,255,.08);
+      text-align: left;
+      vertical-align: middle;
+    }
+    .actions { display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
+
+    input, textarea, select {
+      width: 100%;
+      padding: 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.22);
+      color: #e5e7eb;
+      outline: none;
+    }
+    textarea { min-height: 110px; resize: vertical; }
+
+    .copy-grid {
+      display:grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: start;
+      margin-bottom: 10px;
+    }
+
+    .logbox {
+      background: rgba(0,0,0,.25);
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 12px;
+      padding: 12px;
+      max-height: 220px;
+      overflow:auto;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .hintline{
+      margin-top:8px;
+      font-size:13px;
+      color: rgba(226,232,240,0.78);
+    }
   </style>
 </head>
 
@@ -50,200 +102,180 @@
     <div id="sidebar-host"></div>
 
     <main class="content">
-      <!-- Información del usuario y categoría -->
-      <div class="title">📔 Diario de Publicaciones</div>
-      
-      <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); margin-bottom: 20px;">
-        <div class="card">
-          <div style="font-weight:800;">👤 Información del Operador</div>
-          <div id="userInfo" class="muted">Cargando información del usuario...</div>
-        </div>
-        
-        <div class="card">
-          <div style="font-weight:800;">📂 Categoría Asignada</div>
-          <div id="categoriaInfo" class="muted">Cargando categoría...</div>
-        </div>
-        
-        <div class="card">
-          <div style="font-weight:800;">📊 Progreso Diario</div>
-          <div class="counter">
-            <span id="contadorPublicaciones">0</span>/<span id="metaPublicaciones">0</span>
-          </div>
-          <div class="counter-label">Publicaciones realizadas / Meta diaria</div>
-          <div class="stats-container">
-            <div class="stats-item">
-              <span class="muted small">Cuentas:</span>
-              <strong id="contadorCuentas">0</strong>
-            </div>
-            <div class="stats-item">
-              <span class="muted small">Completadas:</span>
-              <strong id="contadorCompletadas">0</strong>
-            </div>
-          </div>
-        </div>
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+        <h1>📒 Diario</h1>
+        <div class="muted" id="pill-hoy"></div>
       </div>
 
-      <!-- Cuentas de Facebook asignadas -->
       <section class="card card-section">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div style="font-weight:800;">📱 Cuentas de Facebook Asignadas</div>
-          <div class="muted small" id="cuentasInfo">Cargando cuentas...</div>
+        <h3 style="margin:0 0 8px;">👤 Usuario</h3>
+        <div id="userInfo" class="muted">Cargando...</div>
+      </section>
+
+      <section class="card card-section" id="driveSection">
+        <h3 style="margin:0 0 6px;">📁 Contenido del día (Drive)</h3>
+        <p class="muted" id="driveFecha" style="margin:0;">
+          Descargá imágenes/videos desde Drive según la fecha de hoy.
+        </p>
+        <button id="btnAbrirDrive" class="btn-drive">Abrir carpeta de Drive</button>
+        <div class="hintline">
+          Drive es la única fuente de medios. El sistema solo guarda links + métricas.
         </div>
-        <div class="muted small">Seleccioná una cuenta para comenzar a publicar</div>
-        
+      </section>
+
+      <section class="card card-section">
+        <h3 style="margin:0 0 8px;">🏷️ Asignación activa</h3>
+        <div id="categoriaInfo" class="muted">Cargando...</div>
+
+        <div class="pill-row" id="pillsMetas">
+          <span class="pill pill-info">Meta total día: <strong id="metaTotalDia">0</strong></span>
+          <span class="pill pill-success">Hechas hoy: <strong id="contadorPublicaciones">0</strong></span>
+          <span class="pill pill-warning">Pendientes hoy: <strong id="pendientesHoy">0</strong></span>
+        </div>
+
+        <div id="pillsDetalle" class="pill-row" style="margin-top:10px;"></div>
+      </section>
+
+      <section class="card card-section">
+        <h3 style="margin:0 0 10px;">🧭 Qué estás registrando</h3>
+        <div class="grid-3">
+          <div>
+            <label class="muted">Plataforma</label>
+            <select id="plataformaSel">
+              <option value="marketplace">Marketplace</option>
+              <option value="facebook">Facebook</option>
+              <option value="tiktok">TikTok</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="muted">Tipo RRSS (solo Facebook)</label>
+            <select id="tipoSel">
+              <option value="">(no aplica)</option>
+              <option value="muro">Muro</option>
+              <option value="grupo">Grupo</option>
+              <option value="historia">Historia</option>
+              <option value="reel">Reel</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="muted">Cuenta (según plataforma)</label>
+            <input id="cuentaSeleccionadaView" type="text" disabled placeholder="Seleccioná una cuenta..." />
+          </div>
+        </div>
+
+        <div class="hintline">
+          Marketplace/TikTok guardan <span class="mono">plataforma</span> y link. Facebook además guarda <span class="mono">tipo_rrss</span>.
+        </div>
+      </section>
+
+      <section class="card card-section">
+        <h3 style="margin:0 0 10px;">👤 Cuentas asignadas</h3>
         <table class="table" id="tablaCuentas">
           <thead>
-            <tr>
-              <th style="width:250px;">Email de la cuenta</th>
-              <th style="width:150px;">Estado</th>
-              <th style="width:120px;">Publicadas hoy</th>
-              <th style="width:150px;">Acciones</th>
+            <tr class="muted">
+              <th>Cuenta</th>
+              <th>Plataforma</th>
+              <th>Hoy</th>
+              <th style="text-align:right;">Acciones</th>
             </tr>
           </thead>
-          <tbody>
-            <tr><td colspan="4" class="muted">Cargando cuentas...</td></tr>
-          </tbody>
+          <tbody></tbody>
+        </table>
+        <div class="hintline muted">
+          Si no aparecen cuentas: el gerente debe asignarlas en “Cuentas”.
+        </div>
+      </section>
+
+      <section class="card card-section" id="contenidoContainer" style="display:none;">
+        <h3 style="margin:0 0 10px;">📝 Contenido para publicar</h3>
+
+        <div id="csvInfo" class="muted" style="margin-bottom: 10px;"></div>
+
+        <div class="copy-grid">
+          <div>
+            <label class="muted">Título</label>
+            <input id="tituloInput" type="text" placeholder="Título..." />
+          </div>
+          <button class="btn2" id="btnCopiarTitulo" style="height:44px; margin-top:22px;">Copiar</button>
+        </div>
+
+        <div class="copy-grid">
+          <div>
+            <label class="muted">Descripción (de categoría)</label>
+            <textarea id="descripcionInput" placeholder="Descripción base..."></textarea>
+          </div>
+          <button class="btn2" id="btnCopiarDescripcion" style="height:44px; margin-top:22px;">Copiar</button>
+        </div>
+
+        <div class="grid-2">
+          <div class="copy-grid" style="margin:0;">
+            <div>
+              <label class="muted">Categoría</label>
+              <input id="categoriaInput" type="text" placeholder="Categoría..." />
+            </div>
+            <button class="btn2" id="btnCopiarCategoria" style="height:44px; margin-top:22px;">Copiar</button>
+          </div>
+
+          <div class="copy-grid" style="margin:0;">
+            <div>
+              <label class="muted">Etiquetas (categoría + CSV)</label>
+              <input id="etiquetasInput" type="text" placeholder="Etiquetas..." />
+            </div>
+            <button class="btn2" id="btnCopiarEtiquetas" style="height:44px; margin-top:22px;">Copiar</button>
+          </div>
+        </div>
+
+        <hr style="border:0; border-top:1px solid rgba(255,255,255,.10); margin:16px 0;" />
+
+        <h3 style="margin:0 0 10px;">✅ Guardar publicación</h3>
+
+        <!-- Hidden inputs usados por el JS -->
+        <input id="cuentaUsadaInput" type="hidden" />
+        <input id="tituloUsadoInput" type="hidden" />
+        <input id="descripcionUsadaInput" type="hidden" />
+        <input id="categoriaUsadaInput" type="hidden" />
+        <input id="etiquetasUsadasInput" type="hidden" />
+
+        <div class="grid-2">
+          <div>
+            <label class="muted" id="linkLabel">Link de la publicación</label>
+            <input id="linkPublicacionInput" type="url" placeholder="https://..." />
+          </div>
+          <div>
+            <label class="muted">Notas (opcional)</label>
+            <input id="notaInput" type="text" placeholder="Ej: variante, detalle, etc." />
+          </div>
+        </div>
+
+        <div style="display:flex; gap:10px; margin-top: 12px;">
+          <button class="btn" id="btnGuardarPublicacion" style="flex:1;">Guardar</button>
+          <button class="btn2" id="btnLimpiarFormulario">Limpiar</button>
+        </div>
+      </section>
+
+      <section class="card card-section">
+        <h3 style="margin:0 0 10px;">📚 Historial de hoy</h3>
+        <table class="table" id="tablaHistorial">
+          <thead>
+            <tr class="muted">
+              <th>Hora</th>
+              <th>Plataforma</th>
+              <th>Tipo</th>
+              <th>Cuenta</th>
+              <th>Link</th>
+              <th style="text-align:right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
         </table>
       </section>
 
-      <!-- Contenido del CSV para publicar -->
       <section class="card card-section">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <div style="font-weight:800;">📄 Contenido para Publicar</div>
-          <div class="muted small" id="csvInfo">Seleccioná una cuenta para comenzar</div>
-        </div>
-        
-        <div class="stats-container" id="estadisticasContenido" style="display: none;">
-          <!-- Las estadísticas se cargarán aquí -->
-        </div>
-        
-        <div id="contenidoContainer" style="display: none; margin-top: 15px;">
-          <!-- Contenido actual con estado visual -->
-          <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
-            <div>
-              <label class="required">Título</label>
-              <div class="row-inputs">
-                <input type="text" id="tituloInput" readonly class="content-border" style="background: rgba(255,255,255,0.06);">
-                <button class="btn2" id="btnCopiarTitulo">Copiar</button>
-              </div>
-              
-              <label class="required">Descripción</label>
-              <div class="row-inputs" style="align-items: flex-start;">
-                <textarea id="descripcionInput" readonly class="content-border" style="background: rgba(255,255,255,0.06); height: 120px;"></textarea>
-                <button class="btn2" id="btnCopiarDescripcion">Copiar</button>
-              </div>
-              
-              <label class="required">Categoría (Facebook)</label>
-              <div class="row-inputs">
-                <input type="text" id="categoriaInput" readonly style="background: rgba(255,255,255,0.06);">
-                <button class="btn2" id="btnCopiarCategoria">Copiar</button>
-              </div>
-              
-              <label class="required">Etiquetas (desde categoría)</label>
-              <div class="row-inputs">
-                <input type="text" id="etiquetasInput" readonly style="background: rgba(255,255,255,0.06);">
-                <button class="btn2" id="btnCopiarEtiquetas">Copiar</button>
-              </div>
-            </div>
-            
-            <div>
-              <label>Imágenes Fijas (1-4)</label>
-              <div id="imagenesFijasContainer" style="margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 10px; min-height: 100px;">
-                <!-- Las imágenes se cargarán aquí -->
-              </div>
-              
-              <label class="required">Imagen de Portada</label>
-              <div id="portadaContainer" style="margin-bottom: 15px; min-height: 100px;">
-                <!-- La portada se cargará aquí -->
-              </div>
-              
-              <div style="margin-top: 20px; display: flex; gap: 10px; flex-wrap: wrap;">
-                <button class="btn2" id="btnDescargarTodasImagenes">⬇️ Descargar todas las imágenes</button>
-                <button class="btn2" id="btnCambiarContenido">🔄 Cambiar contenido</button>
-              </div>
-              <div class="muted small" style="margin-top: 5px;">
-                Descarga las 5 imágenes (4 fijas + 1 portada) | Cambia a otro contenido disponible
-              </div>
-            </div>
-          </div>
-        </div>
+        <h3 style="margin:0 0 10px;">🧾 Log</h3>
+        <div id="log" class="logbox"></div>
       </section>
-
-      <!-- Formulario para guardar publicación -->
-      <section class="card card-section">
-        <div style="font-weight:800;">💾 Guardar Publicación</div>
-        <div class="muted small" style="margin-bottom: 15px;">
-          Completá el link de Marketplace y guardá la publicación
-        </div>
-        
-        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;">
-          <div>
-            <label class="required">Cuenta Facebook usada</label>
-            <input type="text" id="cuentaUsadaInput" readonly style="background: rgba(255,255,255,0.06);">
-            
-            <label class="required">Título usado</label>
-            <input type="text" id="tituloUsadoInput" readonly style="background: rgba(255,255,255,0.06);">
-            
-            <label class="required">Descripción usada</label>
-            <textarea id="descripcionUsadaInput" readonly style="background: rgba(255,255,255,0.06); height: 100px;"></textarea>
-          </div>
-          
-          <div>
-            <label class="required">Categoría usada</label>
-            <input type="text" id="categoriaUsadaInput" readonly style="background: rgba(255,255,255,0.06);">
-            
-            <label>Etiquetas usadas</label>
-            <input type="text" id="etiquetasUsadasInput" readonly style="background: rgba(255,255,255,0.06);">
-            
-            <label class="required">URL Imagen Portada</label>
-            <input type="text" id="urlPortadaInput" readonly style="background: rgba(255,255,255,0.06);">
-            
-            <label class="required">🔗 Link de Marketplace *</label>
-            <input type="text" id="marketplaceLinkInput" placeholder="https://www.facebook.com/marketplace/item/...">
-            <div class="muted small" style="color: #f59e0b; margin-top: 5px;">
-              Este campo es <strong>OBLIGATORIO</strong> para guardar la publicación
-            </div>
-            
-            <div style="margin-top: 20px; display: flex; gap: 10px;">
-              <button class="btn" id="btnGuardarPublicacion">💾 Guardar Publicación</button>
-              <button class="btn2" id="btnLimpiarLink">Limpiar Link</button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Historial de publicaciones de hoy -->
-      <section class="card">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-          <div style="font-weight:800;">📋 Historial de Publicaciones de Hoy</div>
-          <div class="muted small" id="historialInfo"></div>
-        </div>
-        <div class="historial-scroll">
-          <table class="table" id="tablaHistorial">
-            <thead>
-              <tr>
-               <th style="width:150px;">Hora</th>
-               <th style="width:200px;">Cuenta Facebook</th>
-               <th>Título</th>
-               <th style="width:200px;">Link Marketplace</th>
-               <th style="width:100px;">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr><td colspan="5" class="muted">Cargando historial...</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- Logs -->
-      <div style="margin-top: 20px;">
-        <div style="font-weight:700; margin-bottom:8px; display: flex; justify-content: space-between; align-items: center;">
-          <span>🖥️ Logs del Sistema</span>
-          <button class="btn2" id="btnLimpiarLogs" style="font-size: 11px;">Limpiar logs</button>
-        </div>
-        <div class="log" id="log"></div>
-      </div>
     </main>
   </div>
 

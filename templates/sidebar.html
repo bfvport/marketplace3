@@ -13,7 +13,10 @@
     <a href="../publicaciones/publicaciones.html" data-nav="publicaciones">📥 Recursos (Fotos)</a>
     <a href="../metricas/metricas.html" data-nav="metricas">📈 Métricas</a>
     <a href="../mensajes/mensajes.html" data-nav="mensajes">💬 Mensajes</a>
-    <a href="../cuentas_fb/cuentas_fb.html"  data-nav="cuentas">👤 Cuentas Facebook</a>
+
+    <!-- ✅ NUEVO LINK UNIFICADO -->
+    <a href="../cuentas/cuentas.html" data-nav="cuentas">👤 Cuentas</a>
+
     <!-- OPERADOR ONLY -->
     <a href="../calentamiento/calentamiento.html" data-only="operador" data-nav="calentamiento">🔥 Calentamiento</a>
     <a href="../soporte/reporte_error.html" data-only="operador" data-nav="reporte_error">🛠️ Reportar error</a>
@@ -21,13 +24,11 @@
     <!-- GERENTE ONLY -->
     <a href="../gestionar_publicaciones/gestionar.html" data-only="gerente" data-nav="gestionar_publicaciones">📸 Gestionar Recursos</a>
     <a href="../categoria/categoria.html" data-only="gerente" data-nav="categoria">🗂️ Categorías</a>
-  
+    <a href="../csv_creator/csv_creator.html" data-only="gerente" data-nav="csv_creator">🧾 Creador de CSV</a>
     <a href="../asignaciones/asignaciones.html" data-only="gerente" data-nav="asignaciones">📌 Asignaciones</a>
     <a href="../actividad/actividad.html" data-only="gerente" data-nav="actividad">📊 Actividad</a>
     <a href="../usuarios/usuarios.html" data-only="gerente" data-nav="usuarios">👤 Usuarios</a>
     <a href="../verificacion/verificacion.html" data-only="gerente" data-nav="verificacion">🔎 Verificación</a>
-
-    
     <a href="../soporte/reportes.html" data-only="gerente" data-nav="reportes_errores">🧾 Reportes de errores</a>
   </nav>
 
@@ -37,7 +38,6 @@
 </aside>
 
 <script>
-  // Sidebar auto-filtrado por rol SIN tocar app.js
   (function () {
     const SESSION_KEY = "mp_session_v1";
 
@@ -47,21 +47,18 @@
     }
 
     const s = getSession();
-    const rol = (s && s.rol) ? s.rol : "operador"; // fallback seguro
+    const rol = (s && s.rol) ? s.rol : "operador";
 
-    // Pintar usuario/rol (si loadSidebar también lo hace, esto no molesta)
     const u = document.getElementById("sb-usuario");
     const r = document.getElementById("sb-rol");
     if (u) u.textContent = (s && s.usuario) ? s.usuario : "-";
     if (r) r.textContent = rol;
 
-    // Ocultar links por rol
     document.querySelectorAll("[data-only]").forEach(el => {
       const only = el.getAttribute("data-only");
       if (only && only !== rol) el.style.display = "none";
     });
 
-    // Logout (sin depender de app.js)
     const btn = document.getElementById("btn-logout");
     if (btn) {
       btn.onclick = () => {

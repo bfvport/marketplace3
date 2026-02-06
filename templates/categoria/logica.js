@@ -175,11 +175,11 @@ async function guardarCategoria(sb, session) {
 
       const { data, error } = await sb
         .from(TABLE)
-        .insert([{ 
-          nombre, 
-          mensaje, 
+        .insert([{
+          nombre,
+          mensaje,
           etiquetas,
-          creado_por: session.usuario 
+          creado_por: session.usuario
         }])
         .select("id, nombre, mensaje, etiquetas, csv_nombre, creado_por")
         .single();
@@ -197,8 +197,7 @@ async function guardarCategoria(sb, session) {
         .eq("id", Number(id));
 
       if (error) {
-        // Manejo específico del error de foreign key
-        if (error.message.includes("violates foreign key constraint") && 
+        if (error.message.includes("violates foreign key constraint") &&
             error.message.includes("usuarios_asignado_categoria_fkey")) {
           throw new Error("❌ No se puede actualizar: esta categoría está asignada a usuarios. Primero desasignala.");
         }
@@ -334,52 +333,37 @@ async function listarCsvDeCategoria() {
 function descargarPlantilla() {
   const headers = [
     "titulo",
-    "descripcion", 
     "categoria",
-    "etiquetas",
-    "url_img_fijas_1",
-    "url_img_fijas_2", 
-    "url_img_fijas_3",
-    "url_img_fijas_4",
-    "url_imagenes_portadas"
+    "etiquetas"
   ];
-  
-  // Crear fila de ejemplo con datos de muestra
+
   const ejemplo = [
     "Producto Ejemplo",
-    "Descripción del producto",
     "nombre-de-la-categoria",
-    '"etiqueta1, etiqueta2, etiqueta3"',
-    "https://ejemplo.com/img1.jpg",
-    "https://ejemplo.com/img2.jpg",
-    "https://ejemplo.com/img3.jpg",
-    "https://ejemplo.com/img4.jpg",
-    "https://ejemplo.com/portada.jpg"
+    "\"etiqueta1, etiqueta2, etiqueta3\""
   ];
-  
+
   const csv = headers.join(",") + "\n" + ejemplo.join(",") + "\n";
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "plantilla_categoria_con_4_imagenes.csv";
+  a.download = "plantilla_categoria.csv";
   document.body.appendChild(a);
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  log("⬇️ Plantilla descargada (con 4 columnas de imágenes fijas).");
+  log("⬇️ Plantilla descargada (CSV liviano: titulo, categoria, etiquetas).");
   log("📝 Las etiquetas con comas deben ir entre comillas dobles: \"etiqueta1, etiqueta2\"");
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
-  // 1) sesión
   const session = getSession();
   setSessionPill(session);
 
-  // 2) sidebar (tu sidebar está en templates/sidebar.html, desde templates/categoria/ => basePath "../")
-  await loadSidebar({ activeKey: "categorias", basePath: "../" });
+  // ✅ importante: coincide con data-nav="categoria" del sidebar
+  await loadSidebar({ activeKey: "categoria", basePath: "../" });
 
-  // 3) espera supabase
   const client = await waitSupabaseClient(2000);
   if (!client) {
     log("❌ No encuentro window.supabaseClient. Revisá que ../../assets/js/supabase.js lo seteé ANTES del module.");
@@ -387,7 +371,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
   log("✅ Supabase client OK.");
 
-  // 4) init UI
   clearForm(session);
 
   $("#btnGuardar")?.addEventListener("click", () => guardarCategoria(client, session));
@@ -396,7 +379,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   $("#btnListarCsv")?.addEventListener("click", listarCsvDeCategoria);
   $("#btnDescargarPlantilla")?.addEventListener("click", descargarPlantilla);
 
-  // 5) cargar lista
   try {
     await refreshUI(client);
     log("✅ Categorías cargadas.");

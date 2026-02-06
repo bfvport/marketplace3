@@ -5,21 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Verificación | Marketplace Manager</title>
 
-  <!-- Estilos globales -->
   <link rel="stylesheet" href="../../assets/css/app.css" />
 
-  <!-- Supabase -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../assets/js/supabase.js"></script>
 
   <style>
     .layout { display: flex; min-height: 100vh; }
     #sidebar-host { flex: 0 0 auto; }
-
-    main.content {
-      flex: 1 1 auto;
-      min-width: 0;
-    }
+    main.content { flex: 1 1 auto; min-width: 0; }
 
     .veri-wrap{
       padding: 18px 22px;
@@ -27,7 +21,6 @@
       width: 100%;
       margin: 0 auto;
     }
-
     .veri-title{ font-size: 28px; font-weight: 800; margin: 0 0 6px 0; }
     .veri-sub{ margin: 0 0 16px 0; color: rgba(226,232,240,0.75); font-size: 13px; }
 
@@ -40,7 +33,7 @@
 
     .veri-filters{
       display: grid;
-      grid-template-columns: 1.1fr 1fr 1fr auto;
+      grid-template-columns: 1.1fr 1fr 1fr 1fr auto;
       gap: 12px;
       align-items: end;
     }
@@ -57,7 +50,7 @@
     table.veri-table{
       width: 100%;
       border-collapse: collapse;
-      min-width: 920px;
+      min-width: 980px;
     }
 
     .veri-table th,
@@ -95,24 +88,33 @@
     }
     .link-btn:hover{ text-decoration: underline; }
 
-    @media (max-width: 900px){
+    .pill{
+      display:inline-block;
+      padding: 2px 10px;
+      border-radius: 999px;
+      border:1px solid rgba(255,255,255,0.16);
+      font-size:12px;
+      opacity:.9;
+    }
+
+    @media (max-width: 980px){
       .veri-filters{ grid-template-columns: 1fr; }
       #btn-aplicar{ width: 100%; }
-      table.veri-table{ min-width: 800px; }
+      table.veri-table{ min-width: 900px; }
     }
-    
   </style>
 </head>
 
 <body>
   <div class="layout">
-    <!-- Sidebar -->
     <div id="sidebar-host"></div>
 
     <main class="content">
       <div class="veri-wrap">
         <div class="veri-title">🔎 Verificación</div>
-        <div class="veri-sub">Solo gerente. Acá se ven links de RRSS + Marketplace.</div>
+        <div class="veri-sub">
+          Solo gerente. Verifica publicaciones con <span class="pill">Plataforma</span> + <span class="pill">Tipo RRSS</span> + link.
+        </div>
 
         <section class="veri-card">
           <div class="veri-filters">
@@ -129,14 +131,23 @@
             </div>
 
             <div>
-              <label for="f-tipo">Tipo</label>
-              <select id="f-tipo">
-                <option value="">Todos los tipos</option>
-                <option value="historias">Historias</option>
-                <option value="muro">Muro</option>
-                <option value="reels">Reels</option>
-                <option value="grupos">Grupos</option>
+              <label for="f-plataforma">Plataforma</label>
+              <select id="f-plataforma">
+                <option value="">Todas</option>
                 <option value="marketplace">Marketplace</option>
+                <option value="facebook">Facebook</option>
+                <option value="tiktok">TikTok</option>
+              </select>
+            </div>
+
+            <div>
+              <label for="f-tipo">Tipo RRSS</label>
+              <select id="f-tipo">
+                <option value="">Todos</option>
+                <option value="muro">Muro</option>
+                <option value="grupo">Grupo</option>
+                <option value="historia">Historia</option>
+                <option value="reel">Reel</option>
               </select>
             </div>
 
@@ -150,15 +161,15 @@
                   <th>Fecha</th>
                   <th>Usuario</th>
                   <th>Cuenta</th>
+                  <th>Plataforma</th>
                   <th>Tipo</th>
                   <th>Link</th>
                   <th>Fuente</th>
                 </tr>
               </thead>
 
-              <!-- ✅ ESTE ID ES EL QUE USA EL JS -->
               <tbody id="veri-tbody">
-                <tr><td colspan="6">Cargando…</td></tr>
+                <tr><td colspan="7">Cargando…</td></tr>
               </tbody>
             </table>
           </div>

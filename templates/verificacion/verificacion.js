@@ -2,17 +2,16 @@ import { requireSession, loadSidebar } from "../../assets/js/app.js";
 
 const sb = window.supabaseClient;
 
-// Tablas reales según tu DB
+// Tablas reales del proyecto
 const TABLE_RRSS = "publicaciones_rrss";
-const TABLE_MP   = "marketplace_actividad";
+const TABLE_ACT  = "marketplace_actividad";
 
-const $fecha    = document.getElementById("f-fecha");
-const $operador = document.getElementById("f-operador");
-const $tipo     = document.getElementById("f-tipo");
-const $btn      = document.getElementById("btn-aplicar");
-
-// ✅ FIX: este ES el tbody del HTML
-const $tbody    = document.getElementById("veri-tbody");
+const $fecha     = document.getElementById("f-fecha");
+const $operador  = document.getElementById("f-operador");
+const $plataforma= document.getElementById("f-plataforma");
+const $tipo      = document.getElementById("f-tipo");
+const $btn       = document.getElementById("btn-aplicar");
+const $tbody     = document.getElementById("veri-tbody");
 
 function toISODate(d){
   const pad = (n) => String(n).padStart(2,"0");
@@ -29,7 +28,35 @@ function esc(x){
 }
 
 function setMsg(msg){
-  $tbody.innerHTML = `<tr><td colspan="6">${esc(msg)}</td></tr>`;
+  $tbody.innerHTML = `<tr><td colspan="7">${esc(msg)}</td></tr>`;
+}
+
+function normalizeTipoRRSS(t){
+  const v = String(t || "").toLowerCase().trim();
+  if (v === "grupos") return "grupo";
+  if (v === "historias") return "historia";
+  if (v === "reels") return "reel";
+  return v;
+}
+
+function prettyPlataforma(p){
+  const v = String(p || "").toLowerCase();
+  if (v === "marketplace") return "Marketplace";
+  if (v === "facebook") return "Facebook";
+  if (v === "tiktok") return "TikTok";
+  return v || "-";
+}
+
+function prettyTipo(t){
+  const v = normalizeTipoRRSS(t);
+  if (!v) return "-";
+  if (v === "muro") return "Muro";
+  if (v === "grupo") return "Grupo";
+  if (v === "historia") return "Historia";
+  if (v === "reel") return "Reel";
+  if (v === "marketplace") return "Marketplace";
+  if (v === "tiktok") return "TikTok";
+  return v;
 }
 
 function rowHTML(r){
@@ -42,7 +69,8 @@ function rowHTML(r){
       <td>${esc(r.fecha || "-")}</td>
       <td>${esc(r.usuario || "-")}</td>
       <td>${esc(r.cuenta || "-")}</td>
-      <td>${esc(r.tipo || "-")}</td>
+      <td>${esc(prettyPlataforma(r.plataforma))}</td>
+      <td>${esc(prettyTipo(r.tipo))}</td>
       <td>${link}</td>
       <td>${esc(r.fuente || "-")}</td>
     </tr>
@@ -70,21 +98,37 @@ async function loadOperators(){
   $operador.value = current || "";
 }
 
-async function fetchRRSS({ fecha, operador, tipo }){
-  // Si el filtro está en marketplace, no traemos RRSS
-  if (tipo === "marketplace") return [];
+/**
+ * RRSS histórico (tabla publicaciones_rrss)
+ * - plataforma fija: facebook
+ * - tipo viene en columna "tipo"
+ */
+async function fetchRRSS({ fecha, operador, plataforma, tipo }) {
+  // Si filtro plataforma está y no es facebook, no traemos RRSS
+  if (plataforma && plataforma !== "facebook") return [];
 
   let q = sb
     .from(TABLE_RRSS)
     .select("usuario, cuenta_fb, tipo, link, fecha")
     .order("fecha", { ascending: false })
-    .limit(400);
+    .limit(600);
 
   if (fecha) q = q.eq("fecha", fecha);
   if (operador) q = q.eq("usuario", operador);
 
-  // Si eligió historias/muro/reels/grupos, filtramos por tipo
-  if (tipo && tipo !== "marketplace") q = q.eq("tipo", tipo);
+  // tipo RRSS
+  if (tipo) {
+    // En tu tabla a veces aparece "historias/grupos/reels"
+    // Normalizamos sin romper: probamos con el que venga
+    const raw = String(tipo);
+    const alt =
+      raw === "grupo" ? "grupos" :
+      raw === "historia" ? "historias" :
+      raw === "reel" ? "reels" : raw;
+
+    // Traemos cualquiera de las dos variantes
+    q = q.in("tipo", [raw, alt]);
+  }
 
   const { data, error } = await q;
   if (error){
@@ -93,63 +137,92 @@ async function fetchRRSS({ fecha, operador, tipo }){
   }
 
   return (data || []).map(x => ({
-    fuente: "RRSS",
+    fuente: "publicaciones_rrss",
     fecha: (x.fecha || "").slice(0,10),
     usuario: x.usuario,
     cuenta: x.cuenta_fb,
-    tipo: (x.tipo || "").toString(),
+    plataforma: "facebook",
+    tipo: normalizeTipoRRSS(x.tipo),
     link: x.link
   }));
 }
 
-async function fetchMarketplace({ fecha, operador, tipo }){
-  // Si eligió un tipo distinto a marketplace, no traemos marketplace
-  if (tipo && tipo !== "marketplace") return [];
-
+/**
+ * Actividad nueva (marketplace_actividad)
+ * - usa plataforma + tipo_rrss + link_publicacion (si existe)
+ * - fallback: marketplace_link_publicacion
+ */
+async function fetchActividad({ fecha, operador, plataforma, tipo }) {
   let q = sb
-    .from(TABLE_MP)
-    .select("usuario, facebook_account_usada, fecha_publicacion, marketplace_link_publicacion, created_at")
+    .from(TABLE_ACT)
+    .select("usuario, facebook_account_usada, fecha_publicacion, created_at, plataforma, tipo_rrss, link_publicacion, marketplace_link_publicacion")
     .order("fecha_publicacion", { ascending: false })
-    .limit(400);
+    .limit(800);
 
   if (operador) q = q.eq("usuario", operador);
 
-  // Filtrado por día (fecha_publicacion es timestamp)
+  // filtro por rango (funciona si fecha_publicacion es timestamp)
+  // si fuese date, igual suele funcionar bien con gte/lte en texto ISO
   if (fecha){
     const start = `${fecha}T00:00:00`;
     const end   = `${fecha}T23:59:59`;
     q = q.gte("fecha_publicacion", start).lte("fecha_publicacion", end);
   }
 
+  // filtro plataforma (nuevo)
+  if (plataforma) q = q.eq("plataforma", plataforma);
+
+  // filtro tipo_rrss (solo aplica a facebook)
+  if (tipo) q = q.eq("tipo_rrss", tipo);
+
   const { data, error } = await q;
   if (error){
-    console.error("Marketplace error:", error);
+    console.error("Actividad error:", error);
     return [];
   }
 
-  return (data || []).map(x => ({
-    fuente: "Marketplace",
-    fecha: String((x.fecha_publicacion || x.created_at || "")).slice(0,10),
-    usuario: x.usuario,
-    cuenta: x.facebook_account_usada,
-    tipo: "marketplace",
-    link: x.marketplace_link_publicacion
-  }));
+  return (data || []).map(x => {
+    const plat = x.plataforma || "marketplace";
+    const link = x.link_publicacion || x.marketplace_link_publicacion || null;
+
+    let tipoMostrar = x.tipo_rrss || "";
+    if (plat === "marketplace") tipoMostrar = "marketplace";
+    if (plat === "tiktok") tipoMostrar = "tiktok";
+
+    return {
+      fuente: "marketplace_actividad",
+      fecha: String((x.fecha_publicacion || x.created_at || "")).slice(0,10),
+      usuario: x.usuario,
+      cuenta: x.facebook_account_usada || "-",
+      plataforma: plat,
+      tipo: tipoMostrar,
+      link
+    };
+  });
+}
+
+function enforceTipoEnabled(){
+  const plat = $plataforma.value || "";
+  // Solo Facebook usa tipo_rrss
+  const enabled = (plat === "" || plat === "facebook");
+  $tipo.disabled = !enabled;
+  if (!enabled) $tipo.value = "";
 }
 
 async function render(){
   const fecha = $fecha?.value || "";
   const operador = $operador?.value || "";
+  const plataforma = $plataforma?.value || "";
   const tipo = $tipo?.value || "";
 
   setMsg("Cargando…");
 
-  const [rrss, mp] = await Promise.all([
-    fetchRRSS({ fecha, operador, tipo }),
-    fetchMarketplace({ fecha, operador, tipo })
+  const [rrss, act] = await Promise.all([
+    fetchRRSS({ fecha, operador, plataforma, tipo }),
+    fetchActividad({ fecha, operador, plataforma, tipo })
   ]);
 
-  const rows = [...rrss, ...mp].sort((a, b) =>
+  const rows = [...rrss, ...act].sort((a, b) =>
     (b.fecha || "").localeCompare(a.fecha || "")
   );
 
@@ -175,9 +248,14 @@ async function init(){
   $fecha.value = toISODate(new Date());
 
   await loadOperators();
+  enforceTipoEnabled();
   await render();
 
   $btn.addEventListener("click", render);
+  $plataforma.addEventListener("change", () => {
+    enforceTipoEnabled();
+    render();
+  });
 }
 
 init();
