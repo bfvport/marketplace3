@@ -5,6 +5,15 @@ const sb = window.supabaseClient;
 
 const $ = (q) => document.querySelector(q);
 
+const ROLE = String(s.rol || "")
+  .trim()
+  .toLowerCase(); // ✅ FIX: "Operador", "operador ", etc.
+
+function isGerente() {
+  // ✅ Si en tu sistema el gerente también se llama "admin", lo contemplamos
+  return ROLE === "gerente" || ROLE === "admin";
+}
+
 function log(msg) {
   const el = $("#log");
   if (!el) return;
@@ -15,6 +24,24 @@ function log(msg) {
 
 function boolFromSelect(v) {
   return String(v) === "true";
+}
+
+function showOnlyGerenteUI() {
+  document.querySelectorAll(".only-gerente").forEach((el) => (el.style.display = ""));
+  document.querySelectorAll(".only-operador").forEach((el) => (el.style.display = "none"));
+}
+
+function showOnlyOperadorUI() {
+  // ✅ Mata TODO lo de gerente sí o sí
+  document.querySelectorAll(".only-gerente").forEach((el) => (el.style.display = "none"));
+  document.querySelectorAll(".only-operador").forEach((el) => (el.style.display = ""));
+
+  // ✅ Por si quedara algo renderizado de antes, limpiamos tablas “globales”
+  const tbAll = $("#tbodyCuentas");
+  if (tbAll) tbAll.innerHTML = "";
+
+  const panelAsig = $("#panelAsignadas");
+  if (panelAsig) panelAsig.style.display = "none";
 }
 
 function clearForm() {
@@ -43,7 +70,7 @@ async function loadOperadores() {
 
   if (error) throw error;
 
-  const ops = (data || []).filter(u => u.rol === "operador");
+  const ops = (data || []).filter((u) => String(u.rol || "").trim().toLowerCase() === "operador");
   const sel = $("#selOperador");
   sel.innerHTML = "";
 
@@ -96,7 +123,7 @@ function renderCuentasAll(cuentas) {
     tbody.appendChild(tr);
   }
 
-  tbody.querySelectorAll("[data-edit]").forEach(btn => {
+  tbody.querySelectorAll("[data-edit]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const id = Number(btn.getAttribute("data-edit"));
       const { data, error } = await sb.from("cuentas").select("*").eq("id", id).single();
@@ -106,7 +133,7 @@ function renderCuentasAll(cuentas) {
     });
   });
 
-  tbody.querySelectorAll("[data-del]").forEach(btn => {
+  tbody.querySelectorAll("[data-del]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const id = Number(btn.getAttribute("data-del"));
       const ok = confirm("¿Eliminar cuenta? (Se borran asignaciones relacionadas)");
@@ -132,7 +159,7 @@ async function renderSelectCuentasActivas() {
 
   if (error) throw error;
 
-  for (const c of (data || [])) {
+  for (const c of data || []) {
     const opt = document.createElement("option");
     opt.value = String(c.id);
     const extra = c.handle ? ` (${c.handle})` : "";
@@ -223,7 +250,7 @@ async function verAsignadas() {
     tbody.appendChild(tr);
   }
 
-  tbody.querySelectorAll("[data-un]").forEach(btn => {
+  tbody.querySelectorAll("[data-un]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const id = Number(btn.getAttribute("data-un"));
       const ok = confirm("¿Quitar asignación?");
@@ -236,7 +263,6 @@ async function verAsignadas() {
   });
 }
 
-/* ✅ OPERADOR: solo ve SUS cuentas asignadas */
 async function loadMisCuentas() {
   const tbody = $("#tbodyMisCuentas");
   tbody.innerHTML = `<tr><td colspan="4" class="muted2">Cargando…</td></tr>`;
@@ -252,9 +278,7 @@ async function loadMisCuentas() {
     return;
   }
 
-  const rows = (data || [])
-    .map(r => r.cuentas ? r.cuentas : null)
-    .filter(Boolean);
+  const rows = (data || []).map((r) => r.cuentas).filter(Boolean);
 
   if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="4" class="muted2">No tenés cuentas asignadas.</td></tr>`;
@@ -274,7 +298,6 @@ async function loadMisCuentas() {
   }
 }
 
-/* ✅ GERENTE: refresca todo */
 async function refreshGerente() {
   const cuentas = await fetchCuentasAll();
   renderCuentasAll(cuentas);
@@ -284,12 +307,9 @@ async function refreshGerente() {
 document.addEventListener("DOMContentLoaded", async () => {
   await loadSidebar({ activeKey: "cuentas", basePath: "../" });
 
-  // Mostrar panel según rol
-  if (s.rol === "gerente") {
-    document.querySelectorAll(".only-gerente").forEach(el => (el.style.display = ""));
-    document.querySelectorAll(".only-operador").forEach(el => (el.style.display = "none"));
+  if (isGerente()) {
+    showOnlyGerenteUI();
 
-    // Events gerente
     $("#btnGuardar")?.addEventListener("click", guardarCuenta);
     $("#btnNuevo")?.addEventListener("click", () => { clearForm(); log("🆕 Form limpio."); });
     $("#btnAsignar")?.addEventListener("click", asignarCuenta);
@@ -304,9 +324,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     return;
   }
 
-  // OPERADOR
-  document.querySelectorAll(".only-gerente").forEach(el => (el.style.display = "none"));
-  document.querySelectorAll(".only-operador").forEach(el => (el.style.display = ""));
+  // ✅ OPERADOR
+  showOnlyOperadorUI();
 
   $("#btnRefrescarOperador")?.addEventListener("click", loadMisCuentas);
   await loadMisCuentas();
