@@ -2,131 +2,270 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <title>Cuentas</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Cuentas | Marketplace Manager</title>
 
   <link rel="stylesheet" href="../../assets/css/app.css" />
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../../assets/js/supabase.js"></script>
 
   <style>
-    .only-gerente { display:none; }
-    .only-operador { display:none; }
+    main.content { min-width: 0; }
+    .page-wrap { max-width: 1250px; margin: 0 auto; padding: 18px 22px; }
+    .page-head { display:flex; justify-content:space-between; align-items:flex-end; gap:12px; flex-wrap:wrap; }
+    .page-head h1 { margin: 0; }
+    .page-sub { margin-top: 6px; }
 
-    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
-    .card { background:rgba(0,0,0,.18); border:1px solid rgba(255,255,255,.12); border-radius:14px; padding:14px; }
-    .table { width:100%; border-collapse:collapse; }
-    .table th,.table td { padding:10px; border-bottom:1px solid rgba(255,255,255,.08); text-align:left; }
-    .actions { display:flex; gap:8px; justify-content:flex-end; }
-
-    input,select {
-      width:100%; padding:10px; border-radius:10px;
-      border:1px solid rgba(255,255,255,.14);
-      background:rgba(0,0,0,.22); color:#e5e7eb;
+    .chips { display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+    .chip {
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(0,0,0,0.18);
+      padding: 6px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      user-select: none;
+      font-weight: 700;
+      color: rgba(255,255,255,0.85);
     }
-    option { background:#0b1220; color:#e5e7eb; }
+    .chip.active{
+      background: rgba(59,130,246,0.22);
+      border-color: rgba(59,130,246,0.45);
+      color: white;
+    }
 
-    .pill { padding:2px 10px; border-radius:999px; border:1px solid rgba(255,255,255,.2); font-size:12px; }
-    .mono { font-family:monospace; font-size:12px; }
-    .muted { opacity:.7; }
+    .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:16px; margin-top:14px; }
+    @media (max-width: 980px){ .grid-2 { grid-template-columns: 1fr; } }
+
+    .card {
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(0,0,0,0.18);
+      padding: 14px;
+      box-shadow: 0 18px 60px rgba(0,0,0,0.35);
+    }
+    .card h3{ margin:0 0 10px 0; }
+    .muted2 { color: rgba(255,255,255,0.65); }
+
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .row > * { flex: 1 1 170px; }
+
+    .table-wrap{
+      width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(0,0,0,0.18);
+      margin-top: 14px;
+    }
+    .table { min-width: 980px; }
+
+    .pill{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 800;
+      font-size: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+    }
+    .pill.fb{ background: rgba(59,130,246,0.20); border-color: rgba(59,130,246,0.45); }
+    .pill.ig{ background: rgba(236,72,153,0.18); border-color: rgba(236,72,153,0.35); }
+    .pill.tt{ background: rgba(34,197,94,0.14); border-color: rgba(34,197,94,0.28); }
+    .pill.ot{ background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.15); }
+
+    .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+
+    .log {
+      margin-top: 12px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 12px;
+      padding: 10px;
+      height: 120px;
+      overflow: auto;
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      color: rgba(255,255,255,0.85);
+    }
+
+    /* Modal Login FB (operador) */
+    #fbLoginModal{
+      display:none; position:fixed; inset:0; background:rgba(0,0,0,.60);
+      z-index:999; align-items:center; justify-content:center; padding:16px;
+    }
+    #fbLoginModal .box{
+      background: rgba(2,6,23,.98);
+      border: 1px solid rgba(255,255,255,.14);
+      border-radius: 16px;
+      padding: 14px;
+      width: 100%;
+      max-width: 420px;
+    }
+    #fbLoginModal input{
+      background: rgba(0,0,0,0.28);
+      border: 1px solid rgba(255,255,255,0.16);
+      width: 100%;
+    }
+    #fbLoginModal .row2{ display:flex; gap:8px; align-items:center; }
   </style>
 </head>
 
 <body>
-<div class="layout">
-  <div id="sidebar-host"></div>
+  <div class="layout">
+    <div id="sidebar-host"></div>
 
-  <main class="content">
-    <h1>👤 Cuentas</h1>
-    <p class="muted">Facebook · Instagram · TikTok — todo en un solo lugar</p>
+    <main class="content">
+      <div class="page-wrap">
+        <div class="page-head">
+          <div>
+            <h1>Cuentas</h1>
+            <p class="muted2 page-sub">Facebook · Instagram · TikTok — todo en un solo lugar</p>
 
-    <!-- GERENTE -->
-    <div class="grid2 only-gerente">
-      <div class="card">
-        <h3>➕ Crear / Editar cuenta</h3>
-        <input type="hidden" id="cuenta_id">
+            <div class="chips">
+              <div class="chip active" data-pl="all">Todas</div>
+              <div class="chip" data-pl="facebook">Facebook</div>
+              <div class="chip" data-pl="instagram">Instagram</div>
+              <div class="chip" data-pl="tiktok">TikTok</div>
+            </div>
+          </div>
 
-        <label>Plataforma</label>
-        <select id="plataforma">
-          <option value="facebook">Facebook</option>
-          <option value="instagram">Instagram</option>
-          <option value="tiktok">TikTok</option>
-        </select>
+          <div class="row" style="flex:0 0 auto;">
+            <button id="btnRefresh" class="btn2">🔄 Refrescar</button>
+          </div>
+        </div>
 
-        <label>Nombre visible</label>
-        <input id="nombre_visible" placeholder="FB Ventas Norte">
+        <!-- SOLO GERENTE -->
+        <div id="panelGerente" class="grid-2" style="display:none;">
+          <div class="card">
+            <h3>➕ Crear / Editar cuenta</h3>
+            <div class="row">
+              <select id="plataforma">
+                <option value="facebook">Facebook</option>
+                <option value="instagram">Instagram</option>
+                <option value="tiktok">TikTok</option>
+              </select>
+              <input id="nombre_visible" placeholder="Nombre visible (ej: IG - Ventas Norte)" />
+              <input id="usuario_handle" placeholder="Handle / usuario (opcional)" />
+              <input id="url" placeholder="URL (opcional)" />
+              <select id="activo">
+                <option value="true">Activo</option>
+                <option value="false">Inactivo</option>
+              </select>
+            </div>
 
-        <label>Usuario / handle</label>
-        <input id="usuario_handle" placeholder="@ventasnorte">
+            <!-- FB legacy: email/contra/2FA/estado/calidad -->
+            <div id="fbLegacyFields" class="row" style="margin-top:10px;">
+              <input id="fb_email" placeholder="Email (solo FB legacy)" />
+              <input id="fb_contra" placeholder="Contraseña (solo FB legacy)" />
+              <input id="fb_twofa" placeholder="2FA (solo FB legacy)" />
+              <select id="fb_estado">
+                <option value="activo">Activo</option>
+                <option value="inactivo">Inactivo</option>
+              </select>
+              <select id="fb_calidad">
+                <option value="caliente">Caliente</option>
+                <option value="frio">Frío</option>
+              </select>
+            </div>
 
-        <label>URL</label>
-        <input id="url" placeholder="https://">
+            <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap;">
+              <button id="btnGuardarCuenta" class="btn">Guardar</button>
+              <button id="btnNuevaCuenta" class="btn2">Nuevo</button>
+              <div class="muted2" id="editInfo" style="align-self:center;"></div>
+            </div>
 
-        <label>Activo</label>
-        <select id="activo">
-          <option value="true">Sí</option>
-          <option value="false">No</option>
-        </select>
+            <div class="muted2" style="margin-top:10px;">
+              Tip: Facebook sigue usando <b>cuentas_facebook</b> (legacy). IG/TikTok van a <b>cuentas</b>.
+            </div>
+          </div>
 
-        <div class="actions">
-          <button class="btn2" id="btnNuevo">Nuevo</button>
-          <button class="btn" id="btnGuardar">Guardar</button>
+          <div class="card">
+            <h3>📌 Asignar cuenta a operador</h3>
+            <div class="row">
+              <select id="selOperador"></select>
+              <select id="selCuenta"></select>
+              <button id="btnAsignar" class="btn">Asignar</button>
+            </div>
+            <div class="muted2" style="margin-top:10px;">
+              El operador SOLO ve lo que se le asigna acá.
+            </div>
+          </div>
+        </div>
+
+        <!-- LISTA -->
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Plataforma</th>
+                <th>Cuenta</th>
+                <th>Estado</th>
+                <th>Asignada a</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="tbodyCuentas">
+              <tr><td colspan="5" class="muted2">Cargando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div id="log" class="log"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Supabase SDK + init -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
+
+  <!-- Sidebar + sesión -->
+  <script type="module">
+    import { requireSession, loadSidebar } from "../../assets/js/app.js";
+    const session = requireSession();
+    if (session) loadSidebar({ activeKey: "cuentas", basePath: "../" });
+  </script>
+
+  <!-- JS principal -->
+  <script type="module" src="logica.js"></script>
+
+  <!-- ===== MODAL INICIAR SESIÓN FACEBOOK (OPERADOR) ===== -->
+  <div id="fbLoginModal">
+    <div class="box">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <strong>🔐 Iniciar sesión en Facebook</strong>
+        <button class="btn2" type="button" onclick="cerrarFBModal()">✖</button>
+      </div>
+
+      <div style="margin-top:12px;">
+        <label>Email</label>
+        <div class="row2">
+          <input id="fbEmail" readonly />
+          <button class="btn2" type="button" onclick="copiarFB('fbEmail')">Copiar</button>
         </div>
       </div>
 
-      <div class="card">
-        <h3>📌 Asignar a operador</h3>
-
-        <label>Operador</label>
-        <select id="selOperador"></select>
-
-        <label>Cuenta</label>
-        <select id="selCuenta"></select>
-
-        <div class="actions">
-          <button class="btn" id="btnAsignar">Asignar</button>
+      <div style="margin-top:10px;">
+        <label>Contraseña</label>
+        <div class="row2">
+          <input id="fbPass" readonly type="password" />
+          <button class="btn2" type="button" onclick="copiarFB('fbPass')">Copiar</button>
         </div>
-
-        <div id="log" class="mono muted"></div>
       </div>
+
+      <div class="muted2" style="margin-top:10px;">
+        1) Pegá el email<br>
+        2) Siguiente → pegá la contraseña<br>
+        3) Si pide 2FA, pedilo al gerente
+      </div>
+
+      <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn" type="button" onclick="abrirMarketplace()">Abrir Marketplace</button>
+        <button class="btn2" type="button" onclick="abrirFacebook()">Abrir Facebook</button>
+      </div>
+
+      <div class="muted2" id="fbMsg" style="margin-top:8px;"></div>
     </div>
-
-    <!-- LISTA COMPLETA (GERENTE) -->
-    <div class="card only-gerente" style="margin-top:14px;">
-      <h3>📚 Todas las cuentas</h3>
-      <table class="table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Plataforma</th>
-            <th>Nombre</th>
-            <th>Usuario</th>
-            <th>Activo</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="tbodyCuentas"></tbody>
-      </table>
-    </div>
-
-    <!-- OPERADOR -->
-    <div class="card only-operador" style="margin-top:14px;">
-      <h3>👀 Mis cuentas asignadas</h3>
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Plataforma</th>
-            <th>Nombre</th>
-            <th>Usuario</th>
-          </tr>
-        </thead>
-        <tbody id="tbodyMisCuentas"></tbody>
-      </table>
-    </div>
-
-  </main>
-</div>
-
-<script type="module" src="logica.js"></script>
+  </div>
 </body>
 </html>
