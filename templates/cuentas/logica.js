@@ -55,9 +55,8 @@ async function loadOperadores() {
   }
 }
 
-async function fetchCuentas() {
+async function fetchCuentasAll() {
   let q = sb.from("cuentas").select("*").order("id", { ascending: false });
-
   const fp = $("#fPlataforma").value;
   if (fp) q = q.eq("plataforma", fp);
 
@@ -66,7 +65,7 @@ async function fetchCuentas() {
   return data || [];
 }
 
-function renderCuentas(cuentas) {
+function renderCuentasAll(cuentas) {
   const tbody = $("#tbodyCuentas");
   tbody.innerHTML = "";
 
@@ -115,18 +114,18 @@ function renderCuentas(cuentas) {
       const { error } = await sb.from("cuentas").delete().eq("id", id);
       if (error) return log(`❌ Error al eliminar: ${error.message}`);
       log("🗑️ Cuenta eliminada.");
-      await refreshAll();
+      await refreshGerente();
     });
   });
 }
 
-async function renderSelectCuentas() {
+async function renderSelectCuentasActivas() {
   const sel = $("#selCuenta");
   sel.innerHTML = "";
 
   const { data, error } = await sb
     .from("cuentas")
-    .select("id, plataforma, nombre, activo")
+    .select("id, plataforma, nombre, handle, activo")
     .eq("activo", true)
     .order("plataforma", { ascending: true })
     .order("nombre", { ascending: true });
@@ -136,7 +135,8 @@ async function renderSelectCuentas() {
   for (const c of (data || [])) {
     const opt = document.createElement("option");
     opt.value = String(c.id);
-    opt.textContent = `${c.plataforma.toUpperCase()} — ${c.nombre}`;
+    const extra = c.handle ? ` (${c.handle})` : "";
+    opt.textContent = `${c.plataforma.toUpperCase()} — ${c.nombre}${extra}`;
     sel.appendChild(opt);
   }
 }
@@ -165,7 +165,7 @@ async function guardarCuenta() {
   }
 
   clearForm();
-  await refreshAll();
+  await refreshGerente();
 }
 
 async function asignarCuenta() {
@@ -195,7 +195,7 @@ async function verAsignadas() {
 
   const { data, error } = await sb
     .from("cuentas_asignadas")
-    .select("id, cuenta_id, cuentas(plataforma, nombre)")
+    .select("id, cuenta_id, cuentas(plataforma, nombre, handle)")
     .eq("usuario", usuario)
     .order("id", { ascending: false });
 
@@ -211,9 +211,10 @@ async function verAsignadas() {
 
   for (const r of data) {
     const c = r.cuentas || {};
+    const extra = c.handle ? ` <span class="mono">(${escapeHtml(c.handle)})</span>` : "";
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td><b>${escapeHtml(c.nombre || "-")}</b></td>
+      <td><b>${escapeHtml(c.nombre || "-")}</b>${extra}</td>
       <td><span class="pill">${escapeHtml(c.plataforma || "-")}</span></td>
       <td class="actions">
         <button class="btn danger" data-un="${r.id}">Quitar</button>
@@ -235,34 +236,78 @@ async function verAsignadas() {
   });
 }
 
-async function refreshAll() {
-  const cuentas = await fetchCuentas();
-  renderCuentas(cuentas);
-  await renderSelectCuentas();
+/* ✅ OPERADOR: solo ve SUS cuentas asignadas */
+async function loadMisCuentas() {
+  const tbody = $("#tbodyMisCuentas");
+  tbody.innerHTML = `<tr><td colspan="4" class="muted2">Cargando…</td></tr>`;
+
+  const { data, error } = await sb
+    .from("cuentas_asignadas")
+    .select("id, cuentas(plataforma, nombre, handle, activo)")
+    .eq("usuario", s.usuario)
+    .order("id", { ascending: false });
+
+  if (error) {
+    tbody.innerHTML = `<tr><td colspan="4" class="muted2">Error: ${escapeHtml(error.message)}</td></tr>`;
+    return;
+  }
+
+  const rows = (data || [])
+    .map(r => r.cuentas ? r.cuentas : null)
+    .filter(Boolean);
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="4" class="muted2">No tenés cuentas asignadas.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = "";
+  for (const c of rows) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><span class="pill">${escapeHtml(c.plataforma)}</span></td>
+      <td><b>${escapeHtml(c.nombre)}</b></td>
+      <td class="mono">${escapeHtml(c.handle || "-")}</td>
+      <td>${c.activo ? "✅" : "⛔"}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+/* ✅ GERENTE: refresca todo */
+async function refreshGerente() {
+  const cuentas = await fetchCuentasAll();
+  renderCuentasAll(cuentas);
+  await renderSelectCuentasActivas();
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
   await loadSidebar({ activeKey: "cuentas", basePath: "../" });
 
-  if (s.rol !== "gerente") {
-    // operador solo ve lista (sin crear/editar/asignar)
-    // pero no rompo nada: solo deshabilito botones
-    $("#btnGuardar").disabled = true;
-    $("#btnNuevo").disabled = true;
-    $("#btnAsignar").disabled = true;
-    $("#btnVerAsignadas").disabled = true;
-    log("🔒 Vista operador: solo lectura.");
+  // Mostrar panel según rol
+  if (s.rol === "gerente") {
+    document.querySelectorAll(".only-gerente").forEach(el => (el.style.display = ""));
+    document.querySelectorAll(".only-operador").forEach(el => (el.style.display = "none"));
+
+    // Events gerente
+    $("#btnGuardar")?.addEventListener("click", guardarCuenta);
+    $("#btnNuevo")?.addEventListener("click", () => { clearForm(); log("🆕 Form limpio."); });
+    $("#btnAsignar")?.addEventListener("click", asignarCuenta);
+    $("#btnVerAsignadas")?.addEventListener("click", verAsignadas);
+    $("#btnRefrescar")?.addEventListener("click", refreshGerente);
+    $("#fPlataforma")?.addEventListener("change", refreshGerente);
+
+    await loadOperadores();
+    await refreshGerente();
+    clearForm();
+    log("✅ Panel gerente listo.");
+    return;
   }
 
-  $("#btnGuardar")?.addEventListener("click", guardarCuenta);
-  $("#btnNuevo")?.addEventListener("click", () => { clearForm(); log("🆕 Form limpio."); });
-  $("#btnAsignar")?.addEventListener("click", asignarCuenta);
-  $("#btnVerAsignadas")?.addEventListener("click", verAsignadas);
-  $("#btnRefrescar")?.addEventListener("click", refreshAll);
-  $("#fPlataforma")?.addEventListener("change", refreshAll);
+  // OPERADOR
+  document.querySelectorAll(".only-gerente").forEach(el => (el.style.display = "none"));
+  document.querySelectorAll(".only-operador").forEach(el => (el.style.display = ""));
 
-  await loadOperadores();
-  await refreshAll();
-  clearForm();
-  log("✅ Cuentas listas.");
+  $("#btnRefrescarOperador")?.addEventListener("click", loadMisCuentas);
+  await loadMisCuentas();
 });
