@@ -1,29 +1,17 @@
 import { requireSession, loadSidebar, escapeHtml } from "../../assets/js/app.js";
 
 const s = requireSession();
-const sb = window.supabaseClient;
-
 const $ = (q) => document.querySelector(q);
 
-const ROLE = String(s.rol || "")
-  .trim()
-  .toLowerCase(); // ✅ FIX: "Operador", "operador ", etc.
-
-function isGerente() {
-  // ✅ Si en tu sistema el gerente también se llama "admin", lo contemplamos
-  return ROLE === "gerente" || ROLE === "admin";
-}
+const ROLE = String(s.rol || "").trim().toLowerCase();
+const isGerente = () => ROLE === "gerente" || ROLE === "admin";
 
 function log(msg) {
   const el = $("#log");
   if (!el) return;
   const t = new Date().toTimeString().slice(0, 8);
-  el.innerHTML += `[${t}] ${escapeHtml(msg)}<br>`;
+  el.innerHTML += `[${escapeHtml(t)}] ${escapeHtml(msg)}<br>`;
   el.scrollTop = el.scrollHeight;
-}
-
-function boolFromSelect(v) {
-  return String(v) === "true";
 }
 
 function showOnlyGerenteUI() {
@@ -32,16 +20,25 @@ function showOnlyGerenteUI() {
 }
 
 function showOnlyOperadorUI() {
-  // ✅ Mata TODO lo de gerente sí o sí
   document.querySelectorAll(".only-gerente").forEach((el) => (el.style.display = "none"));
   document.querySelectorAll(".only-operador").forEach((el) => (el.style.display = ""));
-
-  // ✅ Por si quedara algo renderizado de antes, limpiamos tablas “globales”
   const tbAll = $("#tbodyCuentas");
   if (tbAll) tbAll.innerHTML = "";
-
   const panelAsig = $("#panelAsignadas");
   if (panelAsig) panelAsig.style.display = "none";
+}
+
+async function waitSupabaseClient(timeoutMs = 4000) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (window.supabaseClient) return window.supabaseClient;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return null;
+}
+
+function boolFromSelect(v) {
+  return String(v) === "true";
 }
 
 function clearForm() {
@@ -62,7 +59,10 @@ function fillForm(c) {
   $("#activo").value = String(!!c.activo);
 }
 
-async function loadOperadores() {
+/* =========================
+   GERENTE
+========================= */
+async function loadOperadores(sb) {
   const { data, error } = await sb
     .from("usuarios")
     .select("usuario, rol")
@@ -82,7 +82,7 @@ async function loadOperadores() {
   }
 }
 
-async function fetchCuentasAll() {
+async function fetchCuentasAll(sb) {
   let q = sb.from("cuentas").select("*").order("id", { ascending: false });
   const fp = $("#fPlataforma").value;
   if (fp) q = q.eq("plataforma", fp);
@@ -119,9 +119,12 @@ function renderCuentasAll(cuentas) {
         <button class="btn danger" data-del="${c.id}">Eliminar</button>
       </td>
     `;
-
     tbody.appendChild(tr);
   }
+}
+
+async function wireListActions(sb) {
+  const tbody = $("#tbodyCuentas");
 
   tbody.querySelectorAll("[data-edit]").forEach((btn) => {
     btn.addEventListener("click", async () => {
@@ -141,12 +144,12 @@ function renderCuentasAll(cuentas) {
       const { error } = await sb.from("cuentas").delete().eq("id", id);
       if (error) return log(`❌ Error al eliminar: ${error.message}`);
       log("🗑️ Cuenta eliminada.");
-      await refreshGerente();
+      await refreshGerente(sb);
     });
   });
 }
 
-async function renderSelectCuentasActivas() {
+async function renderSelectCuentasActivas(sb) {
   const sel = $("#selCuenta");
   sel.innerHTML = "";
 
@@ -163,12 +166,12 @@ async function renderSelectCuentasActivas() {
     const opt = document.createElement("option");
     opt.value = String(c.id);
     const extra = c.handle ? ` (${c.handle})` : "";
-    opt.textContent = `${c.plataforma.toUpperCase()} — ${c.nombre}${extra}`;
+    opt.textContent = `${String(c.plataforma).toUpperCase()} — ${c.nombre}${extra}`;
     sel.appendChild(opt);
   }
 }
 
-async function guardarCuenta() {
+async function guardarCuenta(sb) {
   const id = ($("#cuenta_id").value || "").trim();
   const plataforma = ($("#plataforma").value || "").trim();
   const nombre = ($("#nombre").value || "").trim();
@@ -192,10 +195,10 @@ async function guardarCuenta() {
   }
 
   clearForm();
-  await refreshGerente();
+  await refreshGerente(sb);
 }
 
-async function asignarCuenta() {
+async function asignarCuenta(sb) {
   const usuario = ($("#selOperador").value || "").trim();
   const cuenta_id = Number($("#selCuenta").value || "0");
 
@@ -203,17 +206,12 @@ async function asignarCuenta() {
   if (!cuenta_id) return log("❌ Falta cuenta.");
 
   const { error } = await sb.from("cuentas_asignadas").insert([{ usuario, cuenta_id }]);
-  if (error) {
-    if (String(error.message || "").toLowerCase().includes("duplicate")) {
-      return log("⚠️ Esa cuenta ya está asignada a ese operador.");
-    }
-    return log(`❌ Error asignando: ${error.message}`);
-  }
+  if (error) return log(`❌ Error asignando: ${error.message}`);
 
   log("✅ Asignación creada.");
 }
 
-async function verAsignadas() {
+async function verAsignadas(sb) {
   const usuario = ($("#selOperador").value || "").trim();
   if (!usuario) return log("❌ Elegí un operador.");
 
@@ -243,9 +241,7 @@ async function verAsignadas() {
     tr.innerHTML = `
       <td><b>${escapeHtml(c.nombre || "-")}</b>${extra}</td>
       <td><span class="pill">${escapeHtml(c.plataforma || "-")}</span></td>
-      <td class="actions">
-        <button class="btn danger" data-un="${r.id}">Quitar</button>
-      </td>
+      <td class="actions"><button class="btn danger" data-un="${r.id}">Quitar</button></td>
     `;
     tbody.appendChild(tr);
   }
@@ -258,12 +254,22 @@ async function verAsignadas() {
       const { error } = await sb.from("cuentas_asignadas").delete().eq("id", id);
       if (error) return log(`❌ Error quitando: ${error.message}`);
       log("🧹 Asignación eliminada.");
-      await verAsignadas();
+      await verAsignadas(sb);
     });
   });
 }
 
-async function loadMisCuentas() {
+async function refreshGerente(sb) {
+  const cuentas = await fetchCuentasAll(sb);
+  renderCuentasAll(cuentas);
+  await wireListActions(sb);
+  await renderSelectCuentasActivas(sb);
+}
+
+/* =========================
+   OPERADOR
+========================= */
+async function loadMisCuentas(sb) {
   const tbody = $("#tbodyMisCuentas");
   tbody.innerHTML = `<tr><td colspan="4" class="muted2">Cargando…</td></tr>`;
 
@@ -298,35 +304,38 @@ async function loadMisCuentas() {
   }
 }
 
-async function refreshGerente() {
-  const cuentas = await fetchCuentasAll();
-  renderCuentasAll(cuentas);
-  await renderSelectCuentasActivas();
-}
-
 document.addEventListener("DOMContentLoaded", async () => {
   await loadSidebar({ activeKey: "cuentas", basePath: "../" });
 
-  if (isGerente()) {
-    showOnlyGerenteUI();
+  // ✅ Mostramos UI por rol primero (para que nunca quede blanco)
+  if (isGerente()) showOnlyGerenteUI();
+  else showOnlyOperadorUI();
 
-    $("#btnGuardar")?.addEventListener("click", guardarCuenta);
-    $("#btnNuevo")?.addEventListener("click", () => { clearForm(); log("🆕 Form limpio."); });
-    $("#btnAsignar")?.addEventListener("click", asignarCuenta);
-    $("#btnVerAsignadas")?.addEventListener("click", verAsignadas);
-    $("#btnRefrescar")?.addEventListener("click", refreshGerente);
-    $("#fPlataforma")?.addEventListener("change", refreshGerente);
-
-    await loadOperadores();
-    await refreshGerente();
-    clearForm();
-    log("✅ Panel gerente listo.");
+  const sb = await waitSupabaseClient(5000);
+  if (!sb) {
+    if (isGerente()) log("❌ SupabaseClient no cargó. Revisá assets/js/supabase.js");
     return;
   }
 
-  // ✅ OPERADOR
-  showOnlyOperadorUI();
+  try {
+    if (isGerente()) {
+      $("#btnGuardar")?.addEventListener("click", () => guardarCuenta(sb));
+      $("#btnNuevo")?.addEventListener("click", () => { clearForm(); log("🆕 Form limpio."); });
+      $("#btnAsignar")?.addEventListener("click", () => asignarCuenta(sb));
+      $("#btnVerAsignadas")?.addEventListener("click", () => verAsignadas(sb));
+      $("#btnRefrescar")?.addEventListener("click", () => refreshGerente(sb));
+      $("#fPlataforma")?.addEventListener("change", () => refreshGerente(sb));
 
-  $("#btnRefrescarOperador")?.addEventListener("click", loadMisCuentas);
-  await loadMisCuentas();
+      await loadOperadores(sb);
+      await refreshGerente(sb);
+      clearForm();
+      log("✅ Panel gerente listo.");
+    } else {
+      $("#btnRefrescarOperador")?.addEventListener("click", () => loadMisCuentas(sb));
+      await loadMisCuentas(sb);
+    }
+  } catch (e) {
+    if (isGerente()) log(`❌ Error: ${e.message}`);
+    console.error(e);
+  }
 });
