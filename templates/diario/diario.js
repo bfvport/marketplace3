@@ -3,9 +3,16 @@ import { getSession, loadSidebar, escapeHtml, fmtDateAR } from "../../assets/js/
 const $ = (sel) => document.querySelector(sel);
 
 // ============================
-// Constantes (BD)
+// Constantes
 // ============================
-const TABLA_CUENTAS = "cuentas_facebook";
+
+// Legacy Facebook (NO SE TOCA, se reutiliza)
+const TABLA_CUENTAS_FB = "cuentas_facebook";
+
+// Nuevas (IG/TikTok/etc)
+const TABLA_CUENTAS = "cuentas";
+const TABLA_CUENTAS_ASIGNADAS = "cuentas_asignadas";
+
 const TABLA_USUARIOS_ASIGNADO = "usuarios_asignado";
 const TABLA_MARKETPLACE_ACTIVIDAD = "marketplace_actividad";
 const TABLA_CATEGORIA = "categoria";
@@ -21,16 +28,20 @@ const DRIVE_URL =
 let session = null;
 let supabaseClient = null;
 let usuarioActual = null;
+
+// Unificadas (FB + IG/TikTok)
 let cuentasAsignadas = [];
+
 let categoriaAsignada = null;
-let etiquetasCategoria = ""; // Etiquetas desde BD
+let etiquetasCategoria = ""; // Etiquetas desde la BD
+
 let csvData = [];
-let contenidoUsado = new Set(); // IDs de contenido ya usado (por titulo+categoria)
+let contenidoUsado = new Set(); // IDs de contenido ya usado
 let cuentaSeleccionada = null;
 let publicacionesHoy = 0;
 
 // ============================
-// Utilidades UI
+// Utilidades
 // ============================
 function log(msg) {
   const el = $("#log");
@@ -46,7 +57,6 @@ function disable(sel, v) {
 }
 
 function showCopiedFeedback(button) {
-  if (!button) return;
   const originalText = button.textContent;
   button.textContent = "✓ Copiado";
   button.style.background = "rgba(34, 197, 94, 0.2)";
@@ -59,88 +69,13 @@ function showCopiedFeedback(button) {
 // ============================
 // Supabase client
 // ============================
-async function waitSupabaseClient(timeoutMs = 2500) {
+async function waitSupabaseClient(timeoutMs = 2000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     if (window.supabaseClient) return window.supabaseClient;
     await new Promise((r) => setTimeout(r, 50));
   }
   return null;
-}
-
-// ============================
-// Hash / CSV helpers
-// ============================
-function hashString(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return hash.toString();
-}
-
-function normalizeTags(input) {
-  // Si ya es array
-  if (Array.isArray(input)) {
-    return input.map((s) => String(s).trim()).filter(Boolean);
-  }
-  const s = String(input || "").trim();
-  if (!s) return [];
-  return s
-    .split(/[,;|]/g)
-    .map((t) => t.trim())
-    .filter(Boolean);
-}
-
-function parseCSVLine(line) {
-  const result = [];
-  let current = "";
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"') inQuotes = !inQuotes;
-    else if (char === "," && !inQuotes) {
-      result.push(current);
-      current = "";
-    } else current += char;
-  }
-
-  result.push(current);
-  return result;
-}
-
-function parseCSV(text) {
-  const lines = text.split("\n");
-  if (lines.length < 2) return [];
-
-  const headers = lines[0].split(",").map((h) => h.trim());
-  const data = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    if (!lines[i].trim()) continue;
-
-    const values = parseCSVLine(lines[i]);
-    const row = {};
-
-    for (let j = 0; j < headers.length; j++) {
-      let value = values[j] || "";
-      if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
-      row[headers[j]] = value.trim();
-    }
-
-    // ✅ ID por titulo + categoria (CSV nuevo NO depende de descripcion)
-    const titulo = row.titulo || "";
-    const categoria = row.categoria || "";
-    row._id = hashString(`${titulo}||${categoria}`);
-    row._index = i - 1;
-    row._usado = false;
-
-    data.push(row);
-  }
-
-  return data;
 }
 
 // ============================
@@ -157,14 +92,11 @@ async function cargarInformacionUsuario() {
     if (error) throw error;
 
     usuarioActual = data;
-    const box = $("#userInfo");
-    if (box) {
-      box.innerHTML = `
-        <div><strong>Usuario:</strong> ${escapeHtml(data.usuario)}</div>
-        <div><strong>Rol:</strong> ${escapeHtml(data.rol || "No especificado")}</div>
-        <div><strong>Email:</strong> ${escapeHtml(data.email || "No especificado")}</div>
-      `;
-    }
+    $("#userInfo").innerHTML = `
+      <div><strong>Usuario:</strong> ${escapeHtml(data.usuario)}</div>
+      <div><strong>Rol:</strong> ${escapeHtml(data.rol || "No especificado")}</div>
+      <div><strong>Email:</strong> ${escapeHtml(data.email || "No especificado")}</div>
+    `;
 
     log(`✅ Usuario cargado: ${data.usuario}`);
   } catch (e) {
@@ -173,41 +105,129 @@ async function cargarInformacionUsuario() {
 }
 
 // ============================
-// Cuentas Facebook asignadas
+// CUENTAS (FB + IG/TikTok)
 // ============================
-async function cargarCuentasFacebook() {
+
+/**
+ * Para NO tocar BD de actividad, usamos SIEMPRE facebook_account_usada como "identificador"
+ * - Facebook legacy: email (ej: "foo@bar.com")
+ * - Nuevas: "<plataforma>:<id>" (ej: "instagram:12")
+ *
+ * Así el gerente ve todo en la misma tabla marketplace_actividad sin romper nada.
+ */
+function makeCuentaIdent(plataforma, id) {
+  const p = String(plataforma || "").toLowerCase().trim();
+  return `${p}:${String(id)}`;
+}
+
+async function cargarCuentasLegacyFacebook() {
+  const { data, error } = await supabaseClient
+    .from(TABLA_CUENTAS_FB)
+    .select("email, ocupada_por, estado")
+    .eq("ocupada_por", session.usuario);
+
+  if (error) throw error;
+
+  // Normalizamos al modelo unificado
+  return (data || []).map((c) => ({
+    // Campos legacy que ya usa el diario.html
+    email: c.email,                 // se muestra
+    estado: c.estado || "desconocido",
+
+    // Campos unificados
+    plataforma: "facebook",
+    cuenta_id: null,
+    ident: c.email,                 // IMPORTANTÍSIMO: se guarda así en actividad
+  }));
+}
+
+async function cargarCuentasNuevasAsignadas() {
+  // join: cuentas_asignadas -> cuentas
+  const { data, error } = await supabaseClient
+    .from(TABLA_CUENTAS_ASIGNADAS)
+    .select(
+      `
+      cuenta_id,
+      cuentas:cuenta_id (
+        id,
+        plataforma,
+        nombre_visible,
+        usuario_handle,
+        url,
+        activo
+      )
+    `
+    )
+    .eq("usuario", session.usuario);
+
+  if (error) throw error;
+
+  return (data || [])
+    .map((r) => r.cuentas)
+    .filter(Boolean)
+    .map((c) => ({
+      // Lo mostramos en la columna "email" para no tocar el HTML
+      email: c.nombre_visible || c.usuario_handle || `Cuenta ${c.id}`,
+      estado: c.activo ? "activa" : "inactiva",
+
+      plataforma: String(c.plataforma || "otra").toLowerCase(),
+      cuenta_id: c.id,
+      ident: makeCuentaIdent(c.plataforma, c.id),
+
+      handle: c.usuario_handle || null,
+      url: c.url || null,
+    }));
+}
+
+async function contarPublicacionesHoyPorIdent(ident) {
+  const hoy = fmtDateAR();
+
+  const { count, error } = await supabaseClient
+    .from(TABLA_MARKETPLACE_ACTIVIDAD)
+    .select("*", { count: "exact", head: true })
+    .eq("facebook_account_usada", ident)
+    .gte("fecha_publicacion", hoy + "T00:00:00")
+    .lte("fecha_publicacion", hoy + "T23:59:59");
+
+  if (error) throw error;
+  return count || 0;
+}
+
+async function cargarCuentas() {
   try {
-    const { data, error } = await supabaseClient
-      .from(TABLA_CUENTAS)
-      .select("email, ocupada_por, estado")
-      .eq("ocupada_por", session.usuario);
+    // 1) FB legacy
+    const fb = await cargarCuentasLegacyFacebook();
 
-    if (error) throw error;
+    // 2) Nuevas (IG/TikTok/etc)
+    let nuevas = [];
+    try {
+      nuevas = await cargarCuentasNuevasAsignadas();
+    } catch (e) {
+      // Si todavía no existe la tabla o hay permisos, no rompemos el diario.
+      log(`⚠️ No pude cargar cuentas nuevas (IG/TikTok): ${e.message}`);
+      nuevas = [];
+    }
 
-    cuentasAsignadas = data || [];
+    cuentasAsignadas = [...fb, ...nuevas];
 
-    // Contar publicaciones de hoy por cuenta (día Argentina)
-    const hoy = fmtDateAR();
+    // Contar publicaciones de hoy por cuenta (usamos ident siempre)
     for (const cuenta of cuentasAsignadas) {
-      const { count } = await supabaseClient
-        .from(TABLA_MARKETPLACE_ACTIVIDAD)
-        .select("*", { count: "exact", head: true })
-        .eq("facebook_account_usada", cuenta.email)
-        .gte("fecha_publicacion", hoy + "T00:00:00")
-        .lte("fecha_publicacion", hoy + "T23:59:59");
-
-      cuenta.publicacionesHoy = count || 0;
+      try {
+        cuenta.publicacionesHoy = await contarPublicacionesHoyPorIdent(cuenta.ident);
+      } catch (e) {
+        cuenta.publicacionesHoy = 0;
+      }
     }
 
     renderTablaCuentas();
-    log(`✅ ${cuentasAsignadas.length} cuenta(s) cargada(s)`);
+    log(`✅ ${cuentasAsignadas.length} cuenta(s) cargada(s) (FB + otras)`);
   } catch (e) {
     log(`❌ Error cargando cuentas: ${e.message}`);
   }
 }
 
 // ============================
-// Asignación categoría + etiquetas
+// Asignación categoría
 // ============================
 async function cargarAsignacionCategoria() {
   try {
@@ -225,13 +245,8 @@ async function cargarAsignacionCategoria() {
       if (error.code === "PGRST116") {
         log("⚠️ No tenés asignación activa para hoy");
         categoriaAsignada = null;
-
-        const box = $("#categoriaInfo");
-        if (box) box.innerHTML = `<div class="muted">No tenés asignación activa para hoy.</div>`;
-
-        const metaEl = $("#metaPublicaciones");
-        if (metaEl) metaEl.textContent = "0";
-
+        $("#categoriaInfo").innerHTML = `<div class="muted">No tenés asignación activa para hoy.</div>`;
+        $("#metaPublicaciones").textContent = "0";
         return;
       }
       throw error;
@@ -239,7 +254,7 @@ async function cargarAsignacionCategoria() {
 
     categoriaAsignada = data;
 
-    // Detalles de categoría (incluye etiquetas y csv_nombre)
+    // Detalles de categoría (incluye etiquetas)
     const { data: catData, error: catError } = await supabaseClient
       .from(TABLA_CATEGORIA)
       .select("nombre, csv_nombre, etiquetas")
@@ -251,21 +266,16 @@ async function cargarAsignacionCategoria() {
     categoriaAsignada.detalles = catData;
     etiquetasCategoria = catData.etiquetas || "";
 
-    const box = $("#categoriaInfo");
-    if (box) {
-      box.innerHTML = `
-        <div><strong>Categoría:</strong> ${escapeHtml(data.categoria)}</div>
-        <div><strong>Etiquetas base:</strong> ${escapeHtml(catData.etiquetas || "Sin etiquetas")}</div>
-        <div><strong>Publicaciones diarias por cuenta:</strong> ${data.marketplace_daily}</div>
-        <div><strong>Período:</strong> ${new Date(data.fecha_desde).toLocaleDateString("es-AR")} al ${new Date(
-        data.fecha_hasta
-      ).toLocaleDateString("es-AR")}</div>
-      `;
-    }
+    $("#categoriaInfo").innerHTML = `
+      <div><strong>Categoría:</strong> ${escapeHtml(data.categoria)}</div>
+      <div><strong>Etiquetas:</strong> ${escapeHtml(catData.etiquetas || "Sin etiquetas")}</div>
+      <div><strong>Publicaciones diarias por cuenta:</strong> ${data.marketplace_daily}</div>
+      <div><strong>Período:</strong> ${new Date(data.fecha_desde).toLocaleDateString("es-AR")} al ${new Date(
+      data.fecha_hasta
+    ).toLocaleDateString("es-AR")}</div>
+    `;
 
-    const metaEl = $("#metaPublicaciones");
-    if (metaEl) metaEl.textContent = String(data.marketplace_daily ?? 0);
-
+    $("#metaPublicaciones").textContent = String(data.marketplace_daily ?? 0);
     log(`✅ Categoría asignada: ${data.categoria}`);
   } catch (e) {
     log(`❌ Error cargando asignación: ${e.message}`);
@@ -273,7 +283,7 @@ async function cargarAsignacionCategoria() {
 }
 
 // ============================
-// CSV categoría (3 columnas)
+// CSV categoría (compat CSV nuevo 3 columnas)
 // ============================
 async function cargarCSVDeCategoria() {
   if (!categoriaAsignada?.detalles?.csv_nombre) {
@@ -303,11 +313,83 @@ async function cargarCSVDeCategoria() {
   }
 }
 
-// ✅ Marca usado por titulo + categoria
+function normalizeTags(input) {
+  if (Array.isArray(input)) {
+    return input.map((s) => String(s).trim()).filter(Boolean);
+  }
+
+  const s = String(input || "").trim();
+  if (!s) return [];
+
+  return s
+    .split(/[,;|]/g)
+    .map((t) => t.trim())
+    .filter(Boolean);
+}
+
+function parseCSV(text) {
+  const lines = text.split("\n");
+  if (lines.length < 2) return [];
+
+  const headers = lines[0].split(",").map((h) => h.trim());
+  const data = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+
+    const values = parseCSVLine(lines[i]);
+    const row = {};
+
+    for (let j = 0; j < headers.length; j++) {
+      let value = values[j] || "";
+      if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+      row[headers[j]] = value.trim();
+    }
+
+    // ✅ ID por titulo + categoria (CSV nuevo)
+    row._id = hashString((row.titulo || "") + "||" + (row.categoria || ""));
+    row._index = i - 1;
+    row._usado = false;
+
+    data.push(row);
+  }
+
+  return data;
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = "";
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+
+    if (char === '"') inQuotes = !inQuotes;
+    else if (char === "," && !inQuotes) {
+      result.push(current);
+      current = "";
+    } else current += char;
+  }
+
+  result.push(current);
+  return result;
+}
+
+function hashString(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash.toString();
+}
+
 async function identificarContenidoUsado() {
   const hoy = fmtDateAR();
 
   try {
+    // ✅ ahora buscamos por titulo + categoria (no descripcion)
     const { data, error } = await supabaseClient
       .from(TABLA_MARKETPLACE_ACTIVIDAD)
       .select("titulo, categoria")
@@ -320,7 +402,7 @@ async function identificarContenidoUsado() {
     contenidoUsado.clear();
 
     for (const item of data || []) {
-      const id = hashString(`${item.titulo || ""}||${item.categoria || ""}`);
+      const id = hashString((item.titulo || "") + "||" + (item.categoria || ""));
       contenidoUsado.add(id);
 
       const index = csvData.findIndex((row) => row._id === id);
@@ -336,10 +418,7 @@ function mostrarEstadisticasContenido() {
   const total = csvData.length;
   const disponible = total - usado;
 
-  const box = $("#csvInfo");
-  if (!box) return;
-
-  box.innerHTML = `
+  $("#csvInfo").innerHTML = `
     <div style="display:flex; gap:15px; margin-top:5px; flex-wrap:wrap;">
       <span class="pill pill-success">Disponible: ${disponible}</span>
       <span class="pill pill-warning">Usado hoy: ${usado}</span>
@@ -362,32 +441,31 @@ function seleccionarContenidoAutomatico() {
 
   const randomIndex = Math.floor(Math.random() * disponibles.length);
   const contenido = disponibles[randomIndex];
+  contenido._seleccionado = true;
 
   actualizarContenidoFila(contenido);
 
-  log(`✅ Contenido seleccionado: "${(contenido.titulo || "Sin título").substring(0, 30)}..."`);
+  log(`✅ Contenido seleccionado: "${contenido.titulo?.substring(0, 30) || "Sin título"}..."`);
   return contenido;
 }
 
 function actualizarContenidoFila(fila) {
   if (!fila) return;
 
-  // ✅ CSV nuevo: descripcion puede NO existir. No bloqueamos.
   $("#tituloInput").value = fila.titulo || "";
-  $("#descripcionInput").value = fila.descripcion || ""; // puede ser ""
+
+  // ✅ Descripcion puede NO venir en CSV nuevo
+  $("#descripcionInput").value = fila.descripcion || "";
+
   $("#categoriaInput").value = fila.categoria || "";
   $("#etiquetasInput").value = etiquetasCategoria || "";
 
-  // Campos “usados” para guardado
   $("#tituloUsadoInput").value = fila.titulo || "";
-  $("#descripcionUsadaInput").value = fila.descripcion || ""; // puede ser ""
+  $("#descripcionUsadaInput").value = fila.descripcion || ""; // puede quedar ""
   $("#categoriaUsadaInput").value = fila.categoria || "";
   $("#etiquetasUsadasInput").value = etiquetasCategoria || "";
 }
 
-// ============================
-// Historial hoy (para operador)
-// ============================
 async function cargarHistorialHoy() {
   try {
     const hoy = fmtDateAR();
@@ -403,8 +481,7 @@ async function cargarHistorialHoy() {
     if (error) throw error;
 
     publicacionesHoy = (data || []).length;
-    const c = $("#contadorPublicaciones");
-    if (c) c.textContent = String(publicacionesHoy);
+    $("#contadorPublicaciones").textContent = String(publicacionesHoy);
 
     renderTablaHistorial(data || []);
     log(`✅ Historial cargado: ${publicacionesHoy} publicación(es) hoy`);
@@ -414,7 +491,7 @@ async function cargarHistorialHoy() {
 }
 
 // ============================
-// Render tabla cuentas
+// Render cuentas (sin tocar HTML: usamos "email" como nombre)
 // ============================
 function renderTablaCuentas() {
   const tbody = $("#tablaCuentas tbody");
@@ -431,12 +508,20 @@ function renderTablaCuentas() {
     const tr = document.createElement("tr");
 
     const tdEmail = document.createElement("td");
-    tdEmail.innerHTML = `<span class="mono">${escapeHtml(cuenta.email)}</span>`;
+    // Mostramos plataforma como pill dentro del mismo td (no tocamos columnas)
+    tdEmail.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+        <span class="mono" style="font-weight:800; color:#e5e7eb;">${escapeHtml(cuenta.email)}</span>
+        <span class="pill pill-info">${escapeHtml(cuenta.plataforma || "otra")}</span>
+      </div>
+      ${cuenta.handle ? `<div class="muted mono" style="margin-top:2px;">${escapeHtml(cuenta.handle)}</div>` : ""}
+    `;
     tr.appendChild(tdEmail);
 
     const tdEstado = document.createElement("td");
     const estadoPill = document.createElement("span");
-    estadoPill.className = `pill ${cuenta.estado === "activa" ? "pill-success" : "pill-warning"}`;
+    const isActiva = cuenta.estado === "activa";
+    estadoPill.className = `pill ${isActiva ? "pill-success" : "pill-warning"}`;
     estadoPill.textContent = cuenta.estado || "desconocido";
     tdEstado.appendChild(estadoPill);
     tr.appendChild(tdEstado);
@@ -457,9 +542,9 @@ function renderTablaCuentas() {
     tdAcciones.className = "actions";
 
     const btnSeleccionar = document.createElement("button");
-    btnSeleccionar.className = cuentaSeleccionada?.email === cuenta.email ? "btn active" : "btn";
-    btnSeleccionar.textContent =
-      cuentaSeleccionada?.email === cuenta.email ? "✓ Seleccionada" : "Seleccionar";
+    // Selección por ident (estable)
+    btnSeleccionar.className = cuentaSeleccionada?.ident === cuenta.ident ? "btn active" : "btn";
+    btnSeleccionar.textContent = cuentaSeleccionada?.ident === cuenta.ident ? "✓ Seleccionada" : "Seleccionar";
     btnSeleccionar.onclick = () => seleccionarCuenta(cuenta);
     btnSeleccionar.disabled = completado;
 
@@ -470,9 +555,7 @@ function renderTablaCuentas() {
   }
 }
 
-// ============================
 // Render historial
-// ============================
 function renderTablaHistorial(historial) {
   const tbody = $("#tablaHistorial tbody");
   if (!tbody) return;
@@ -493,16 +576,18 @@ function renderTablaHistorial(historial) {
     tr.appendChild(tdFecha);
 
     const tdCuenta = document.createElement("td");
+    // Acá puede ser email (FB) o "instagram:12"
     tdCuenta.innerHTML = `<span class="mono">${escapeHtml(item.facebook_account_usada || "-")}</span>`;
     tr.appendChild(tdCuenta);
 
     const tdLink = document.createElement("td");
-    const link = item.marketplace_link_publicacion || item.link_publicacion || "";
-    if (link) {
-      const short = String(link).slice(0, 60);
-      tdLink.innerHTML = `<a href="${escapeHtml(link)}" target="_blank" style="color:#60a5fa;">${escapeHtml(
-        short
-      )}${link.length > 60 ? "..." : ""}</a>`;
+    if (item.marketplace_link_publicacion) {
+      const short = String(item.marketplace_link_publicacion).slice(0, 60);
+      tdLink.innerHTML = `<a href="${escapeHtml(
+        item.marketplace_link_publicacion
+      )}" target="_blank" style="color:#60a5fa;">${escapeHtml(short)}${
+        item.marketplace_link_publicacion.length > 60 ? "..." : ""
+      }</a>`;
     } else {
       tdLink.textContent = "Sin link";
     }
@@ -515,7 +600,7 @@ function renderTablaHistorial(historial) {
     btnCopiar.className = "btn2";
     btnCopiar.textContent = "Copiar link";
     btnCopiar.onclick = () => {
-      navigator.clipboard.writeText(link || "");
+      navigator.clipboard.writeText(item.marketplace_link_publicacion || "");
       log("📋 Link copiado al portapapeles");
     };
 
@@ -526,22 +611,17 @@ function renderTablaHistorial(historial) {
   }
 }
 
-// ============================
 // Seleccionar cuenta
-// ============================
 function seleccionarCuenta(cuenta) {
   cuentaSeleccionada = cuenta;
 
   renderTablaCuentas();
 
-  const cont = $("#contenidoContainer");
-  if (cont) cont.style.display = "block";
+  $("#contenidoContainer").style.display = "block";
 
-  const cuentaUsada = $("#cuentaUsadaInput");
-  if (cuentaUsada) cuentaUsada.value = cuenta.email;
-
-  const cuentaView = $("#cuentaSeleccionadaView");
-  if (cuentaView) cuentaView.value = cuenta.email;
+  // Para no tocar HTML, dejamos estos inputs con algo legible
+  $("#cuentaUsadaInput").value = cuenta.email;
+  $("#cuentaSeleccionadaView").value = cuenta.email;
 
   // Cargar CSV si no está cargado
   if (csvData.length === 0 && categoriaAsignada) {
@@ -550,12 +630,10 @@ function seleccionarCuenta(cuenta) {
     seleccionarContenidoAutomatico();
   }
 
-  log(`✅ Cuenta seleccionada: ${cuenta.email}`);
+  log(`✅ Cuenta seleccionada: ${cuenta.email} (${cuenta.plataforma})`);
 }
 
-// ============================
-// Guardar publicación (OPERADOR)
-// ============================
+// Guardar publicación
 async function guardarPublicacion() {
   if (!cuentaSeleccionada) {
     log("❌ Seleccioná una cuenta primero");
@@ -576,21 +654,20 @@ async function guardarPublicacion() {
   }
 
   const titulo = ($("#tituloUsadoInput").value || "").trim();
-  const descripcion = ($("#descripcionUsadaInput").value || "").trim(); // ✅ puede quedar vacío
+  const descripcion = ($("#descripcionUsadaInput").value || "").trim(); // puede quedar ""
   const categoria = ($("#categoriaUsadaInput").value || "").trim();
 
-  // ✅ con CSV nuevo, SOLO exigimos título + categoría
+  // ✅ CSV nuevo: descripcion no es obligatoria
   if (!titulo || !categoria) {
-    log("❌ Faltan campos obligatorios (Título y Categoría).");
+    log("❌ Faltan campos obligatorios (Título y Categoría)");
     return;
   }
 
-  // ✅ Buscar contenido en el CSV por ID (titulo+categoria)
-  const contenidoId = hashString(`${titulo}||${categoria}`);
+  // ✅ Encontrar contenido actual por ID (titulo+categoria)
+  const contenidoId = hashString(titulo + "||" + categoria);
   const contenidoActual = csvData.find((row) => row._id === contenidoId);
-
   if (!contenidoActual) {
-    log("❌ No se encontró el contenido actual en el CSV (titulo+categoria).");
+    log("❌ No se encontró el contenido actual en el CSV (titulo+categoria)");
     return;
   }
 
@@ -603,58 +680,53 @@ async function guardarPublicacion() {
   disable("#btnGuardarPublicacion", true);
 
   try {
-    const payloadBase = {
-      usuario: session.usuario,
-      facebook_account_usada: cuentaSeleccionada.email,
-      fecha_publicacion: new Date().toISOString(),
-      marketplace_link_publicacion: link,
-
-      // Contenido
-      titulo,
-      descripcion: descripcion || "",
-      categoria,
-
-      // Extra (si existen columnas, suma; si no existen, no molesta)
-      plataforma: "marketplace",
-      tipo_rrss: null,
-      link_publicacion: link,
-    };
-
-    // 1) Intento guardar etiquetas como ARRAY (si la columna es text[])
-    const etiquetasArray = normalizeTags(etiquetasCategoria);
-    let insertError = null;
+    // Intento 1: etiquetas como array (si la columna es text[])
+    let errorInsert = null;
 
     {
       const { error } = await supabaseClient.from(TABLA_MARKETPLACE_ACTIVIDAD).insert([
-        { ...payloadBase, etiquetas_usadas: etiquetasArray },
+        {
+          usuario: session.usuario,
+          // SIEMPRE guardamos ident acá (email en FB, o instagram:12 en nuevas)
+          facebook_account_usada: cuentaSeleccionada.ident,
+          fecha_publicacion: new Date().toISOString(), // timestamp real
+          marketplace_link_publicacion: link,
+          titulo,
+          descripcion: descripcion || "",
+          categoria,
+          etiquetas_usadas: normalizeTags(etiquetasCategoria),
+        },
       ]);
-      insertError = error || null;
+      errorInsert = error || null;
     }
 
-    // 2) Si falla por tipo, reintento guardando como STRING (si la columna es text)
-    if (insertError) {
-      const etiquetasText = String(etiquetasCategoria || "").trim();
-
+    // Intento 2: etiquetas como string (si la columna es text)
+    if (errorInsert) {
       const { error } = await supabaseClient.from(TABLA_MARKETPLACE_ACTIVIDAD).insert([
-        { ...payloadBase, etiquetas_usadas: etiquetasText },
+        {
+          usuario: session.usuario,
+          facebook_account_usada: cuentaSeleccionada.ident,
+          fecha_publicacion: new Date().toISOString(),
+          marketplace_link_publicacion: link,
+          titulo,
+          descripcion: descripcion || "",
+          categoria,
+          etiquetas_usadas: String(etiquetasCategoria || "").trim(),
+        },
       ]);
-
       if (error) throw error;
     }
 
-    // Marcamos usado
     contenidoActual._usado = true;
     contenidoUsado.add(contenidoActual._id);
 
-    log("✅ Publicación guardada correctamente (el gerente ya la puede ver para revisar).");
+    log("✅ Publicación guardada correctamente (el gerente ya la puede revisar)");
     $("#marketplaceLinkInput").value = "";
 
-    // Refrescar UI
     await cargarHistorialHoy();
-    await cargarCuentasFacebook();
+    await cargarCuentas(); // refresca contadores y estado
     mostrarEstadisticasContenido();
 
-    // Siguiente contenido
     const nuevo = seleccionarContenidoAutomatico();
     if (!nuevo) log("ℹ️ Ya usaste todo el contenido disponible para hoy");
   } catch (e) {
@@ -665,9 +737,7 @@ async function guardarPublicacion() {
   }
 }
 
-// ============================
 // Eventos
-// ============================
 function setupEventListeners() {
   $("#btnAbrirDrive")?.addEventListener("click", () => window.open(DRIVE_URL, "_blank"));
 
@@ -697,19 +767,11 @@ function setupEventListeners() {
     $("#marketplaceLinkInput").value = "";
     log("🧹 Link limpiado");
   });
-
-  // Botón "cambiar contenido"
-  $("#btnCambiarContenido")?.addEventListener("click", () => {
-    seleccionarContenidoAutomatico();
-  });
 }
 
-// ============================
 // Init
-// ============================
 document.addEventListener("DOMContentLoaded", async () => {
   session = getSession();
-
   if (!session?.usuario) {
     const el = $("#log");
     if (el) el.innerHTML = "❌ No hay sesión activa. Volvé al login.";
@@ -718,14 +780,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   await loadSidebar({ activeKey: "diario", basePath: "../" });
 
-  supabaseClient = await waitSupabaseClient(2500);
+  supabaseClient = await waitSupabaseClient(2000);
   if (!supabaseClient) {
     log("❌ No se pudo conectar con Supabase");
     return;
   }
 
   const hoy = fmtDateAR();
-
   const pill = $("#pill-hoy");
   if (pill) pill.textContent = `Hoy (AR): ${hoy}`;
 
@@ -739,8 +800,8 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   await cargarInformacionUsuario();
   await cargarAsignacionCategoria();
-  await cargarCuentasFacebook();
+  await cargarCuentas();        // ✅ ahora trae FB + IG/TikTok
   await cargarHistorialHoy();
 
-  log("✅ Diario listo (operador puede cargar links y gerente los revisa).");
+  log("✅ Sistema de diario listo (FB + IG/TikTok)");
 });

@@ -1,300 +1,133 @@
-import { requireSession, loadSidebar, escapeHtml } from "/assets/js/app.js";
+import { getSession, loadSidebar, escapeHtml } from "../../assets/js/app.js";
 
-const s = requireSession();
+const $ = q => document.querySelector(q);
+const session = getSession();
 const sb = window.supabaseClient;
-const $ = (q) => document.querySelector(q);
 
-const ROLE = String(s?.rol || "").trim().toLowerCase();
-const isGerente = () => ROLE === "gerente" || ROLE === "admin";
+const isGerente = session?.rol === "gerente" || session?.rol === "admin";
 
-function showOnlyGerenteUI() {
-  document.querySelectorAll(".only-gerente").forEach((el) => (el.style.display = ""));
-  document.querySelectorAll(".only-operador").forEach((el) => (el.style.display = "none"));
-}
-
-function showOnlyOperadorUI() {
-  document.querySelectorAll(".only-gerente").forEach((el) => (el.style.display = "none"));
-  document.querySelectorAll(".only-operador").forEach((el) => (el.style.display = ""));
-}
-
-function log(msg) {
+function log(msg){
   const el = $("#log");
-  if (!el) return;
-  const t = new Date().toTimeString().slice(0, 8);
-  el.innerHTML += `[${escapeHtml(t)}] ${escapeHtml(msg)}<br>`;
-  el.scrollTop = el.scrollHeight;
+  if(el) el.innerHTML += msg + "<br>";
 }
 
-function boolFromSelect(v) { return String(v) === "true"; }
-
-function clearForm() {
-  $("#cuenta_id").value = "";
-  $("#plataforma").value = "facebook";
-  $("#nombre").value = "";
-  $("#handle").value = "";
-  $("#url").value = "";
-  $("#activo").value = "true";
+function showByRole(){
+  document.querySelectorAll(".only-gerente").forEach(el => el.style.display = isGerente ? "" : "none");
+  document.querySelectorAll(".only-operador").forEach(el => el.style.display = isGerente ? "none" : "");
 }
 
-function fillForm(c) {
-  $("#cuenta_id").value = String(c.id);
-  $("#plataforma").value = c.plataforma;
-  $("#nombre").value = c.nombre || "";
-  $("#handle").value = c.handle || "";
-  $("#url").value = c.url || "";
-  $("#activo").value = String(!!c.activo);
-}
-
-async function loadOperadores() {
-  const { data, error } = await sb
-    .from("usuarios")
-    .select("usuario, rol")
-    .order("usuario", { ascending: true });
-  if (error) throw error;
-
-  const ops = (data || []).filter(u => String(u.rol || "").trim().toLowerCase() === "operador");
+async function cargarOperadores(){
+  const { data } = await sb.from("usuarios").select("usuario, rol");
   const sel = $("#selOperador");
   sel.innerHTML = "";
-  for (const o of ops) {
-    const opt = document.createElement("option");
-    opt.value = o.usuario;
-    opt.textContent = o.usuario;
-    sel.appendChild(opt);
-  }
+  data.filter(u=>u.rol==="operador").forEach(u=>{
+    const o=document.createElement("option");
+    o.value=u.usuario; o.textContent=u.usuario;
+    sel.appendChild(o);
+  });
 }
 
-async function renderSelectCuentasActivas() {
-  const sel = $("#selCuenta");
-  sel.innerHTML = "";
-
-  const { data, error } = await sb
-    .from("cuentas")
-    .select("id, plataforma, nombre, handle, activo")
-    .eq("activo", true)
-    .order("plataforma", { ascending: true })
-    .order("nombre", { ascending: true });
-  if (error) throw error;
-
-  for (const c of data || []) {
-    const opt = document.createElement("option");
-    opt.value = String(c.id);
-    const extra = c.handle ? ` (${c.handle})` : "";
-    opt.textContent = `${String(c.plataforma).toUpperCase()} — ${c.nombre}${extra}`;
-    sel.appendChild(opt);
-  }
-}
-
-async function fetchCuentasAll() {
-  let q = sb.from("cuentas").select("*").order("id", { ascending: false });
-  const fp = $("#fPlataforma").value;
-  if (fp) q = q.eq("plataforma", fp);
-
-  const { data, error } = await q;
-  if (error) throw error;
-  return data || [];
-}
-
-function renderCuentasAll(cuentas) {
+async function cargarCuentas(){
+  const { data } = await sb.from("cuentas").select("*").order("id");
   const tbody = $("#tbodyCuentas");
   tbody.innerHTML = "";
 
-  if (!cuentas.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="muted2">No hay cuentas cargadas.</td></tr>`;
-    return;
-  }
-
-  for (const c of cuentas) {
-    const url = c.url
-      ? `<a href="${escapeHtml(c.url)}" target="_blank" rel="noopener">${escapeHtml(c.url)}</a>`
-      : `<span style="opacity:.7">-</span>`;
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><span class="pill">${escapeHtml(c.plataforma)}</span></td>
-      <td><b>${escapeHtml(c.nombre)}</b></td>
-      <td class="mono">${escapeHtml(c.handle || "-")}</td>
-      <td>${url}</td>
-      <td>${c.activo ? "✅" : "⛔"}</td>
+  data.forEach(c=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td class="mono">${c.id}</td>
+      <td><span class="pill">${c.plataforma}</span></td>
+      <td><b>${escapeHtml(c.nombre_visible)}</b></td>
+      <td class="mono">${escapeHtml(c.usuario_handle||"-")}</td>
+      <td>${c.activo?"✅":"⛔"}</td>
       <td class="actions">
         <button class="btn2" data-edit="${c.id}">Editar</button>
-        <button class="btn danger" data-del="${c.id}">Eliminar</button>
-      </td>
-    `;
+      </td>`;
     tbody.appendChild(tr);
-  }
-
-  tbody.querySelectorAll("[data-edit]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const id = Number(btn.getAttribute("data-edit"));
-      const { data, error } = await sb.from("cuentas").select("*").eq("id", id).single();
-      if (error) return log(`❌ No pude cargar cuenta: ${error.message}`);
-      fillForm(data);
-      log(`✏️ Editando: ${data.nombre}`);
-    });
   });
 
-  tbody.querySelectorAll("[data-del]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const id = Number(btn.getAttribute("data-del"));
-      if (!confirm("¿Eliminar cuenta? (Se borran asignaciones relacionadas)")) return;
-      const { error } = await sb.from("cuentas").delete().eq("id", id);
-      if (error) return log(`❌ Error al eliminar: ${error.message}`);
-      log("🗑️ Cuenta eliminada.");
-      await refreshGerente();
-    });
+  tbody.querySelectorAll("[data-edit]").forEach(btn=>{
+    btn.onclick=async()=>{
+      const id=btn.dataset.edit;
+      const { data } = await sb.from("cuentas").select("*").eq("id",id).single();
+      $("#cuenta_id").value=data.id;
+      $("#plataforma").value=data.plataforma;
+      $("#nombre_visible").value=data.nombre_visible;
+      $("#usuario_handle").value=data.usuario_handle||"";
+      $("#url").value=data.url||"";
+      $("#activo").value=String(data.activo);
+    };
+  });
+
+  // select asignar
+  const sel=$("#selCuenta");
+  sel.innerHTML="";
+  data.filter(c=>c.activo).forEach(c=>{
+    const o=document.createElement("option");
+    o.value=c.id;
+    o.textContent=`${c.plataforma.toUpperCase()} - ${c.nombre_visible}`;
+    sel.appendChild(o);
   });
 }
 
-async function guardarCuenta() {
-  const id = ($("#cuenta_id").value || "").trim();
-  const plataforma = ($("#plataforma").value || "").trim();
-  const nombre = ($("#nombre").value || "").trim();
-  const handle = ($("#handle").value || "").trim();
-  const url = ($("#url").value || "").trim();
-  const activo = boolFromSelect($("#activo").value);
+async function guardarCuenta(){
+  const payload={
+    plataforma: $("#plataforma").value,
+    nombre_visible: $("#nombre_visible").value,
+    usuario_handle: $("#usuario_handle").value||null,
+    url: $("#url").value||null,
+    activo: $("#activo").value==="true"
+  };
 
-  if (!nombre) return log("❌ Falta nombre.");
-
-  const payload = { plataforma, nombre, handle: handle || null, url: url || null, activo };
-
-  if (!id) {
-    const { error } = await sb.from("cuentas").insert([payload]);
-    if (error) return log(`❌ Insert: ${error.message}`);
-    log("✅ Cuenta creada.");
-  } else {
-    const { error } = await sb.from("cuentas").update(payload).eq("id", Number(id));
-    if (error) return log(`❌ Update: ${error.message}`);
-    log("✅ Cuenta actualizada.");
+  const id=$("#cuenta_id").value;
+  if(id){
+    await sb.from("cuentas").update(payload).eq("id",id);
+    log("✏️ Cuenta actualizada");
+  }else{
+    await sb.from("cuentas").insert([payload]);
+    log("✅ Cuenta creada");
   }
-
-  clearForm();
-  await refreshGerente();
+  $("#cuenta_id").value="";
+  await cargarCuentas();
 }
 
-async function asignarCuenta() {
-  const usuario = ($("#selOperador").value || "").trim();
-  const cuenta_id = Number($("#selCuenta").value || "0");
-  if (!usuario || !cuenta_id) return log("❌ Falta operador o cuenta.");
-
-  const { error } = await sb.from("cuentas_asignadas").insert([{ usuario, cuenta_id }]);
-  if (error) return log(`❌ Asignar: ${error.message}`);
-  log("✅ Asignación creada.");
+async function asignarCuenta(){
+  const usuario=$("#selOperador").value;
+  const cuenta_id=$("#selCuenta").value;
+  await sb.from("cuentas_asignadas").insert([{usuario,cuenta_id}]);
+  log("📌 Cuenta asignada");
 }
 
-async function verAsignadas() {
-  const usuario = ($("#selOperador").value || "").trim();
-  if (!usuario) return log("❌ Elegí un operador.");
-
-  $("#panelAsignadas").style.display = "block";
-  $("#asignadasHint").innerHTML = `Operador: <b>${escapeHtml(usuario)}</b>`;
-
-  const { data, error } = await sb
+async function cargarMisCuentas(){
+  const { data } = await sb
     .from("cuentas_asignadas")
-    .select("id, cuentas(plataforma, nombre, handle)")
-    .eq("usuario", usuario)
-    .order("id", { ascending: false });
+    .select("cuentas(plataforma,nombre_visible,usuario_handle)")
+    .eq("usuario", session.usuario);
 
-  if (error) return log(`❌ Ver asignadas: ${error.message}`);
-
-  const tbody = $("#tbodyAsignadas");
-  tbody.innerHTML = "";
-
-  if (!(data || []).length) {
-    tbody.innerHTML = `<tr><td colspan="3" class="muted2">Sin cuentas asignadas.</td></tr>`;
-    return;
-  }
-
-  for (const r of data) {
-    const c = r.cuentas || {};
-    const extra = c.handle ? ` <span class="mono">(${escapeHtml(c.handle)})</span>` : "";
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><b>${escapeHtml(c.nombre || "-")}</b>${extra}</td>
-      <td><span class="pill">${escapeHtml(c.plataforma || "-")}</span></td>
-      <td class="actions"><button class="btn danger" data-un="${r.id}">Quitar</button></td>
-    `;
+  const tbody=$("#tbodyMisCuentas");
+  tbody.innerHTML="";
+  data.forEach(r=>{
+    const c=r.cuentas;
+    const tr=document.createElement("tr");
+    tr.innerHTML=`
+      <td><span class="pill">${c.plataforma}</span></td>
+      <td><b>${escapeHtml(c.nombre_visible)}</b></td>
+      <td class="mono">${escapeHtml(c.usuario_handle||"-")}</td>`;
     tbody.appendChild(tr);
-  }
-
-  tbody.querySelectorAll("[data-un]").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      const id = Number(btn.getAttribute("data-un"));
-      if (!confirm("¿Quitar asignación?")) return;
-      const { error } = await sb.from("cuentas_asignadas").delete().eq("id", id);
-      if (error) return log(`❌ Quitar: ${error.message}`);
-      log("🧹 Asignación eliminada.");
-      await verAsignadas();
-    });
   });
 }
 
-async function refreshGerente() {
-  const cuentas = await fetchCuentasAll();
-  renderCuentasAll(cuentas);
-  await renderSelectCuentasActivas();
-}
+document.addEventListener("DOMContentLoaded", async ()=>{
+  await loadSidebar({ activeKey:"cuentas", basePath:"../" });
+  showByRole();
 
-async function loadMisCuentas() {
-  const tbody = $("#tbodyMisCuentas");
-  tbody.innerHTML = `<tr><td colspan="4" class="muted2">Cargando…</td></tr>`;
-
-  const { data, error } = await sb
-    .from("cuentas_asignadas")
-    .select("id, cuentas(plataforma, nombre, handle, activo)")
-    .eq("usuario", s.usuario)
-    .order("id", { ascending: false });
-
-  if (error) {
-    tbody.innerHTML = `<tr><td colspan="4" class="muted2">Error: ${escapeHtml(error.message)}</td></tr>`;
-    return;
-  }
-
-  const rows = (data || []).map(r => r.cuentas).filter(Boolean);
-
-  if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="4" class="muted2">No tenés cuentas asignadas.</td></tr>`;
-    return;
-  }
-
-  tbody.innerHTML = "";
-  for (const c of rows) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><span class="pill">${escapeHtml(c.plataforma)}</span></td>
-      <td><b>${escapeHtml(c.nombre)}</b></td>
-      <td class="mono">${escapeHtml(c.handle || "-")}</td>
-      <td>${c.activo ? "✅" : "⛔"}</td>
-    `;
-    tbody.appendChild(tr);
-  }
-}
-
-document.addEventListener("DOMContentLoaded", async () => {
-  await loadSidebar({ activeKey: "cuentas", basePath: "/templates/" });
-
-  if (!sb) {
-    // si esto pasa, tu /assets/js/supabase.js no está cargando
-    alert("SupabaseClient no está cargado (revisá /assets/js/supabase.js).");
-    return;
-  }
-
-  if (isGerente()) {
-    showOnlyGerenteUI();
-
-    $("#btnGuardar")?.addEventListener("click", guardarCuenta);
-    $("#btnNuevo")?.addEventListener("click", () => { clearForm(); log("🆕 Form limpio."); });
-    $("#btnAsignar")?.addEventListener("click", asignarCuenta);
-    $("#btnVerAsignadas")?.addEventListener("click", verAsignadas);
-    $("#btnRefrescar")?.addEventListener("click", refreshGerente);
-    $("#fPlataforma")?.addEventListener("change", refreshGerente);
-
-    await loadOperadores();
-    await refreshGerente();
-    clearForm();
-    log("✅ Panel gerente listo.");
-  } else {
-    showOnlyOperadorUI();
-    $("#btnRefrescarOperador")?.addEventListener("click", loadMisCuentas);
-    await loadMisCuentas();
+  if(isGerente){
+    await cargarOperadores();
+    await cargarCuentas();
+    $("#btnGuardar").onclick=guardarCuenta;
+    $("#btnNuevo").onclick=()=>$("#cuenta_id").value="";
+    $("#btnAsignar").onclick=asignarCuenta;
+  }else{
+    await cargarMisCuentas();
   }
 });
