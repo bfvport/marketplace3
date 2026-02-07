@@ -2,71 +2,37 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Cuentas | Marketplace Manager</title>
 
-  <!-- ✅ RUTAS ABSOLUTAS (evita MIME text/html por 404) -->
-  <link rel="stylesheet" href="/assets/css/base.css">
-  <link rel="stylesheet" href="/assets/css/catalog.css">
+  <link rel="stylesheet" href="../../assets/css/app.css" />
 
-  <style>
-    .page { padding: 18px; }
-    .card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 14px; }
-    .row { display:flex; gap:12px; flex-wrap:wrap; align-items:center; }
-    .grow { flex:1; min-width: 220px; }
-    .muted { opacity: .75; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
-    table { width:100%; border-collapse: collapse; }
-    th, td { padding: 10px 10px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: top; }
-    th { text-align:left; font-size: 12px; letter-spacing: .05em; text-transform: uppercase; opacity:.8; }
-    .pill { display:inline-flex; align-items:center; gap:6px; padding: 4px 10px; border-radius: 999px; font-size: 12px; border: 1px solid rgba(255,255,255,0.10); }
-    .pill-success { color: #22c55e; background: rgba(34,197,94,0.08); }
-    .pill-warning { color: #f59e0b; background: rgba(245,158,11,0.08); }
-    .pill-info { color:#60a5fa; background: rgba(96,165,250,0.08); }
-    .btn2 { padding: 8px 12px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.04); color: #e5e7eb; cursor:pointer; }
-    .btn2:hover { background: rgba(255,255,255,0.06); }
-    .actions { display:flex; gap:8px; flex-wrap:wrap; }
-    .logbox { height: 180px; overflow:auto; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 10px; }
-    .hide { display:none !important; }
-  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../../assets/js/supabase.js"></script>
 </head>
+
 <body>
-  <!-- ✅ requisito del proyecto -->
   <div id="sidebar-host"></div>
 
-  <main class="page">
-    <div class="card">
-      <div class="row">
-        <div class="grow">
-          <h2 style="margin:0;">Gestión de cuentas sociales</h2>
-          <div class="muted" style="margin-top:6px;">
-            Facebook se lee desde <span class="mono">cuentas_facebook</span>.
-            IG/TikTok desde <span class="mono">cuentas</span> + <span class="mono">cuentas_asignadas</span>.
-          </div>
-        </div>
-        <div class="actions">
-          <button id="btnRefrescar" class="btn2">Refrescar</button>
-        </div>
+  <main class="content" style="padding:18px;">
+    <section class="card">
+      <h2 style="margin:0 0 8px;">Gestión de cuentas sociales</h2>
+      <div class="muted">
+        Facebook se lee desde <span class="mono">cuentas_facebook</span>.
+        IG/TikTok desde <span class="mono">cuentas</span> + <span class="mono">cuentas_asignadas</span>.
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:14px;">
+      <h3 style="margin:0 0 10px;">Cuentas</h3>
+      <div class="muted" style="margin-bottom:10px;">
+        El gerente ve contraseñas y 2FA. El operador ve solo cuentas asignadas (sin datos sensibles).
       </div>
 
-      <hr style="border:none;border-top:1px solid rgba(255,255,255,0.08);margin:14px 0;">
-      <div id="userInfo" class="muted"></div>
-    </div>
-
-    <div class="card" style="margin-top:14px;">
-      <div class="row">
-        <div class="grow">
-          <h3 style="margin:0;">Cuentas</h3>
-          <div class="muted" style="margin-top:6px;">
-            El gerente ve contraseñas y 2FA. El operador ve solo cuentas asignadas (sin datos sensibles).
-          </div>
-        </div>
-      </div>
-
-      <div style="overflow:auto; margin-top:12px;">
-        <table id="tablaCuentas">
+      <div style="overflow:auto;">
+        <table class="table" id="tablaCuentas">
           <thead>
-            <tr>
+            <tr class="muted">
               <th>Plataforma</th>
               <th>Nombre</th>
               <th>Correo</th>
@@ -80,18 +46,14 @@
           <tbody></tbody>
         </table>
       </div>
-    </div>
+    </section>
 
-    <div class="card" style="margin-top:14px;">
-      <h3 style="margin:0 0 10px 0;">Log</h3>
-      <div id="log" class="logbox mono"></div>
-    </div>
+    <section class="card" style="margin-top:14px;">
+      <h3 style="margin:0 0 10px;">Log</h3>
+      <div id="log" class="logbox"></div>
+    </section>
   </main>
 
-  <!-- Si ya tenés supabaseClient global, esto no molesta -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <!-- ✅ RUTA ABSOLUTA AL MODULE -->
-  <script type="module" src="/templates/cuentas/cuentas.js"></script>
+  <script type="module" src="./logica.js"></script>
 </body>
 </html>
