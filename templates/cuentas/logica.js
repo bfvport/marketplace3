@@ -19,7 +19,7 @@ function log(msg) {
   el.scrollTop = el.scrollHeight;
 }
 
-async function waitSupabaseClient(timeoutMs = 2000) {
+async function waitSupabaseClient(timeoutMs = 2500) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     if (window.supabaseClient) return window.supabaseClient;
@@ -50,31 +50,15 @@ function isGerente() {
 }
 
 function setSensitiveColumnsVisible(show) {
-  document.querySelectorAll(".col-sensible").forEach((el) => {
-    el.classList.toggle("hide", !show);
-  });
+  document.querySelectorAll(".col-sensible").forEach((el) => el.classList.toggle("hide", !show));
 }
 
-function pillEstado(estado) {
-  const e = String(estado || "").toLowerCase();
-  if (e === "activa" || e === "activo") return `<span class="pill pill-success">activa</span>`;
-  if (e === "inactiva") return `<span class="pill pill-warning">inactiva</span>`;
-  if (e === "bloqueada") return `<span class="pill pill-warning">bloqueada</span>`;
-  if (e === "pausada") return `<span class="pill pill-warning">pausada</span>`;
-  return `<span class="pill pill-info">${escapeHtml(estado || "—")}</span>`;
+function pill(text, type = "info") {
+  const cls = type === "success" ? "pill pill-success" : type === "warning" ? "pill pill-warning" : "pill pill-info";
+  return `<span class="${cls}">${escapeHtml(text)}</span>`;
 }
 
-function pillPlataforma(p) {
-  const pl = String(p || "otra").toLowerCase();
-  return `<span class="pill pill-info">${escapeHtml(pl)}</span>`;
-}
-
-// =======================
-// CARGA FACEBOOK
-// =======================
 async function fetchCuentasFacebook() {
-  // Gerente: ve todas
-  // Operador: ve solo las que ocupa (ocupada_por)
   let q = supabaseClient
     .from(TABLA_CUENTAS_FB)
     .select("id, nombre, email, contra, two_fa, ocupada_por, estado");
@@ -96,29 +80,17 @@ async function fetchCuentasFacebook() {
   }));
 }
 
-// =======================
-// CARGA IG / TIKTOK (cuentas + cuentas_asignadas)
-// =======================
 async function fetchCuentasSociales() {
-  // Queremos mostrar quién la ocupa según cuentas_asignadas.
-  // Gerente: todas las cuentas + su asignación (si existe)
-  // Operador: solo las asignadas a él
-  //
-  // Nota: tu tabla "cuentas" no tiene correo/password/2fa. Mostramos "—" por ahora.
-
   if (isGerente()) {
     const { data, error } = await supabaseClient
       .from(TABLA_CUENTAS)
-      .select(`
-        id, plataforma, nombre, handle, url, activo,
-        cuentas_asignadas:cuentas_asignadas ( usuario )
-      `)
+      .select(`id, plataforma, nombre, handle, url, activo, cuentas_asignadas:cuentas_asignadas ( usuario )`)
       .order("id", { ascending: true });
 
     if (error) throw error;
 
     return (data || []).map((c) => {
-      const asign = Array.isArray(c.cuentas_asignadas) && c.cuentas_asignadas.length > 0
+      const asign = Array.isArray(c.cuentas_asignadas) && c.cuentas_asignadas.length
         ? c.cuentas_asignadas.map(a => a.usuario).filter(Boolean).join(", ")
         : "libre";
 
@@ -135,14 +107,9 @@ async function fetchCuentasSociales() {
     });
   }
 
-  // Operador: traer solo las asignadas a él
   const { data, error } = await supabaseClient
     .from(TABLA_CUENTAS_ASIGNADAS)
-    .select(`
-      usuario,
-      cuenta_id,
-      cuentas:cuenta_id ( id, plataforma, nombre, handle, url, activo )
-    `)
+    .select(`usuario, cuenta_id, cuentas:cuenta_id ( id, plataforma, nombre, handle, url, activo )`)
     .eq("usuario", session.usuario)
     .order("cuenta_id", { ascending: true });
 
@@ -163,63 +130,44 @@ async function fetchCuentasSociales() {
     }));
 }
 
-// =======================
-// RENDER
-// =======================
 function renderTabla(rows) {
   const tbody = $("#tablaCuentas tbody");
   tbody.innerHTML = "";
 
-  if (!rows || rows.length === 0) {
+  if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="8" class="muted">No hay cuentas para mostrar</td></tr>`;
     return;
   }
 
   for (const r of rows) {
     const tr = document.createElement("tr");
-
     tr.innerHTML = `
-      <td>${pillPlataforma(r.plataforma)}</td>
-      <td>
-        <div style="font-weight:800;color:#e5e7eb;">${escapeHtml(r.nombre)}</div>
-      </td>
+      <td>${pill(r.plataforma)}</td>
+      <td><strong>${escapeHtml(r.nombre)}</strong></td>
       <td class="mono">${escapeHtml(r.correo || "—")}</td>
       <td class="mono col-sensible">${escapeHtml(r.password || "—")}</td>
       <td class="mono col-sensible">${escapeHtml(r.twofa || "—")}</td>
       <td class="mono">${escapeHtml(r.ocupada_por || "libre")}</td>
-      <td>${pillEstado(r.estado)}</td>
+      <td>${r.estado === "activa" ? pill("activa","success") : pill(r.estado || "—","warning")}</td>
       <td>
         ${
           r.link_o_handle && r.link_o_handle !== "—"
-            ? `<a href="${escapeHtml(r.link_o_handle)}" target="_blank" style="color:#60a5fa;">${escapeHtml(r.link_o_handle.slice(0, 50))}${r.link_o_handle.length > 50 ? "…" : ""}</a>`
+            ? `<a href="${escapeHtml(r.link_o_handle)}" target="_blank" style="color:#60a5fa;">${escapeHtml(String(r.link_o_handle).slice(0, 60))}${String(r.link_o_handle).length > 60 ? "…" : ""}</a>`
             : `<span class="muted">—</span>`
         }
-        ${r.link_o_handle && !String(r.link_o_handle).startsWith("http") ? `<div class="sub muted mono">${escapeHtml(r.link_o_handle)}</div>` : ""}
       </td>
     `;
-
     tbody.appendChild(tr);
   }
 }
 
-// =======================
-// MAIN LOAD
-// =======================
 async function cargarTodo() {
   log("⏳ Cargando cuentas…");
-
-  // 1) Facebook
   const fb = await fetchCuentasFacebook();
-
-  // 2) IG/TikTok/etc
   const social = await fetchCuentasSociales();
-
-  // Unificar lista
   const rows = [...fb, ...social];
 
-  // Mostrar / ocultar columnas sensibles
   setSensitiveColumnsVisible(isGerente());
-
   renderTabla(rows);
   log(`✅ Listo: ${rows.length} cuenta(s)`);
 }
@@ -231,9 +179,10 @@ document.addEventListener("DOMContentLoaded", async () => {
     return;
   }
 
+  // ✅ sidebar siempre
   await loadSidebar({ activeKey: "cuentas", basePath: "../" });
 
-  supabaseClient = await waitSupabaseClient(2000);
+  supabaseClient = await waitSupabaseClient(2500);
   if (!supabaseClient) {
     log("❌ No se pudo conectar con Supabase");
     return;
@@ -248,10 +197,6 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   $("#btnRefrescar")?.addEventListener("click", async () => {
-    try {
-      await cargarTodo();
-    } catch (e) {
-      log(`❌ Error refrescando: ${e.message}`);
-    }
+    try { await cargarTodo(); } catch (e) { log(`❌ ${e.message}`); }
   });
 });

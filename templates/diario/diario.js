@@ -205,13 +205,16 @@ async function cargarCuentasLegacyFacebook() {
 
   if (error) throw error;
 
-  return (data || []).map((c) => ({
+  return (data || [])
+  .filter((c) => String(c.ocupada_por || "").trim() === String(session.usuario).trim())
+  .map((c) => ({
     email: c.email,
     estado: c.estado || "desconocido",
     plataforma: "facebook",
     cuenta_id: null,
     ident: c.email,
   }));
+
 }
 
 async function cargarCuentasNuevasAsignadas() {
@@ -712,16 +715,10 @@ async function guardarPublicacion() {
     return;
   }
 
-  const plat = getPlataformaSeleccionada();
-  const tipo = getTipoSeleccionado();
+  const plat = getPlataformaSeleccionada?.() || "marketplace";
+  const tipo = getTipoSeleccionado?.() || "";
 
-  // Validaciones de selección
-  if (plat === "facebook" && !tipo) {
-    log("❌ En Facebook tenés que elegir Tipo RRSS (muro/grupo/historia/reel)");
-    return;
-  }
-
-  const meta = Number(getMetaPorCuenta() || 0);
+  const meta = Number(getMetaPorCuenta?.() || categoriaAsignada?.marketplace_daily || 0);
   if (meta > 0 && Number(cuentaSeleccionada.publicacionesHoy || 0) >= meta) {
     log("❌ Ya completaste la meta diaria para esta cuenta");
     return;
@@ -742,6 +739,7 @@ async function guardarPublicacion() {
     return;
   }
 
+  // ✅ Encontrar contenido actual por ID (titulo+categoria)
   const contenidoId = hashString(titulo + "||" + categoria);
   const contenidoActual = csvData.find((row) => row._id === contenidoId);
   if (!contenidoActual) {
@@ -761,32 +759,40 @@ async function guardarPublicacion() {
     const payload = {
       usuario: session.usuario,
       facebook_account_usada: cuentaSeleccionada.ident,
-
-      // 🔥 lo que tu UI pide:
-      plataforma: plat,
-      tipo_rrss: plat === "facebook" ? tipo : null,
-
       fecha_publicacion: new Date().toISOString(),
+
+      // 🔥 guardamos plataforma/tipo para reportes
+      plataforma: plat,
+      tipo_rrss: plat === "facebook" ? (tipo || null) : null,
+
+      // 🔥 guardamos en AMBOS campos para que no “desaparezca”
       marketplace_link_publicacion: link,
+      link_publicacion: link,
 
       titulo,
       descripcion: descripcion || "",
       categoria,
-      etiquetas_usadas: normalizeTags(etiquetasCategoria).join(", "),
+      etiquetas_usadas: String(etiquetasCategoria || "").trim(),
     };
 
-    const { error } = await supabaseClient.from(TABLA_MARKETPLACE_ACTIVIDAD).insert([payload]);
-    if (error) throw error;
+    const { error } = await supabaseClient
+      .from(TABLA_MARKETPLACE_ACTIVIDAD)
+      .insert([payload]);
+
+    if (error) {
+      log(`❌ Error insert: ${error.message}`);
+      console.error("Insert error:", error, "Payload:", payload);
+      return;
+    }
 
     contenidoActual._usado = true;
     contenidoUsado.add(contenidoActual._id);
 
-    log("✅ Publicación guardada correctamente");
+    log("✅ Publicación guardada");
     $("#marketplaceLinkInput").value = "";
 
     await cargarHistorialHoy();
-    await refrescarContadoresPorCuenta();
-    renderTablaCuentas();
+    await cargarCuentas();
     mostrarEstadisticasContenido();
 
     const nuevo = seleccionarContenidoAutomatico();
@@ -798,6 +804,7 @@ async function guardarPublicacion() {
     disable("#btnGuardarPublicacion", false);
   }
 }
+
 
 // ============================
 // Eventos
