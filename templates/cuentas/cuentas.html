@@ -9,6 +9,66 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="../../assets/js/supabase.js"></script>
+
+  <style>
+    /* ===== Fix visual tabla cuentas ===== */
+    .card { overflow: hidden; }
+    .table-wrap { overflow:auto; border-radius: 14px; }
+    table.table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed; /* CLAVE */
+      min-width: 980px;    /* evita que explote en pantallas medianas */
+    }
+    .table th, .table td {
+      padding: 12px 12px;
+      vertical-align: middle;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap; /* por defecto: corte prolijo */
+    }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .muted { opacity: .8; }
+
+    /* Column sizing (ajustá si querés) */
+    th.col-plataforma, td.col-plataforma { width: 110px; }
+    th.col-nombre, td.col-nombre { width: 180px; }
+    th.col-correo, td.col-correo { width: 210px; }
+    th.col-pass, td.col-pass { width: 190px; }
+    th.col-2fa, td.col-2fa { width: 220px; }
+    th.col-ocupada, td.col-ocupada { width: 140px; }
+    th.col-estado, td.col-estado { width: 110px; }
+    th.col-link, td.col-link { width: 180px; }
+
+    /* Celda “valor + copiar” */
+    .cell-flex {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width: 0;
+    }
+    .cell-flex .val {
+      min-width: 0;
+      overflow:hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .btn-mini {
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color: inherit;
+      cursor: pointer;
+      flex: 0 0 auto;
+    }
+    .btn-mini:hover { background: rgba(255,255,255,.10); }
+
+    /* En mobile: que no se “aplane” feo */
+    @media (max-width: 900px) {
+      table.table { min-width: 1100px; } /* permití scroll horizontal */
+    }
+  </style>
 </head>
 
 <body>
@@ -18,29 +78,29 @@
     <section class="card">
       <h2 style="margin:0 0 8px;">Gestión de cuentas sociales</h2>
       <div class="muted">
-        Facebook se lee desde <span class="mono">cuentas_facebook</span>.
-        IG/TikTok desde <span class="mono">cuentas</span> + <span class="mono">cuentas_asignadas</span>.
+        Facebook se lee desde <strong>cuentas_facebook</strong>. IG/TikTok desde <strong>cuentas</strong> + <strong>cuentas_asignadas</strong>.
+        El operador ve <strong>solo lo asignado</strong>.
       </div>
     </section>
 
     <section class="card" style="margin-top:14px;">
       <h3 style="margin:0 0 10px;">Cuentas</h3>
       <div class="muted" style="margin-bottom:10px;">
-        El gerente ve contraseñas y 2FA. El operador ve solo cuentas asignadas (sin datos sensibles).
+        El gerente ve todo. El operador ve solo las asignadas. En ambas vistas, los datos sensibles se muestran solo en cuentas visibles.
       </div>
 
-      <div style="overflow:auto;">
+      <div class="table-wrap">
         <table class="table" id="tablaCuentas">
           <thead>
             <tr class="muted">
-              <th>Plataforma</th>
-              <th>Nombre</th>
-              <th>Correo</th>
-              <th class="col-sensible">Contraseña</th>
-              <th class="col-sensible">2FA</th>
-              <th>Ocupada por</th>
-              <th>Estado</th>
-              <th>Link/Handle</th>
+              <th class="col-plataforma">PLATAFORMA</th>
+              <th class="col-nombre">NOMBRE</th>
+              <th class="col-correo">CORREO</th>
+              <th class="col-pass">CONTRASEÑA</th>
+              <th class="col-2fa">2FA</th>
+              <th class="col-ocupada">OCUPADA POR</th>
+              <th class="col-estado">ESTADO</th>
+              <th class="col-link">LINK/HANDLE</th>
             </tr>
           </thead>
           <tbody></tbody>
