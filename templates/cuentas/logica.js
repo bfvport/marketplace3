@@ -42,35 +42,29 @@ function pillEstado(text) {
   return `<span class="${cls}">${escapeHtml(text || "—")}</span>`;
 }
 
-function shortText(v, max = 16) {
-  const s = String(v || "");
-  if (!s) return "—";
-  if (s.length <= max) return s;
-  return s.slice(0, max) + "…";
+function safeStr(v) {
+  const s = String(v ?? "").trim();
+  return s;
 }
 
-function cellCopy(value) {
-  const full = String(value || "");
-  const shown = shortText(full, 18);
-  const safeTitle = escapeHtml(full);
+function linkCell(v) {
+  const s = safeStr(v);
+  if (!s) return `<span class="muted">—</span>`;
+  return `<a class="linkish" href="${escapeHtml(s)}" target="_blank" rel="noopener" title="${escapeHtml(s)}">${escapeHtml(s.slice(0, 18))}${s.length > 18 ? "…" : ""}</a>`;
+}
 
-  if (!full) {
-    return `<span class="muted">—</span>`;
-  }
+// Celda secreta: muestra •••• + Ver + Copiar
+function secretCell(fullValue, key) {
+  const v = safeStr(fullValue);
+  if (!v) return `<span class="muted">—</span>`;
 
   return `
-    <div class="cell-flex">
-      <span class="val mono" title="${safeTitle}">${escapeHtml(shown)}</span>
-      <button class="btn-mini" data-copy="${escapeHtml(full)}">Copiar</button>
+    <div class="secret">
+      <span class="val mono" data-secret-val="${escapeHtml(v)}" data-secret-key="${escapeHtml(key)}">••••••••</span>
+      <button class="btn-mini" data-action="toggle" data-key="${escapeHtml(key)}">Ver</button>
+      <button class="btn-mini" data-action="copy" data-copy="${escapeHtml(v)}">Copiar</button>
     </div>
   `;
-}
-
-function cellLink(v) {
-  const s = String(v || "").trim();
-  if (!s) return `<span class="muted">—</span>`;
-  const shown = escapeHtml(shortText(s, 28));
-  return `<a href="${escapeHtml(s)}" target="_blank" rel="noopener" style="color:#60a5fa;" title="${escapeHtml(s)}">${shown}</a>`;
 }
 
 async function cargarUsuario() {
@@ -79,13 +73,12 @@ async function cargarUsuario() {
     .select("*")
     .eq("usuario", session.usuario)
     .single();
+
   if (error) throw error;
   usuarioActual = data;
 }
 
-// ----------------------------
-// Facebook (legacy) - FUENTE ÚNICA para facebook
-// ----------------------------
+// Facebook legacy (FUENTE ÚNICA)
 async function fetchFacebookVisibles() {
   let q = sb
     .from(TABLA_FB)
@@ -109,10 +102,7 @@ async function fetchFacebookVisibles() {
   }));
 }
 
-// ----------------------------
-// Cuentas unificadas (solo IG/TikTok/etc). IMPORTANTE:
-// si la tabla "cuentas" tiene plataforma facebook, la IGNORAMOS para no duplicar.
-// ----------------------------
+// IG/TikTok/etc (ignorando facebook para no duplicar)
 async function fetchCuentasNoFacebookVisibles() {
   if (isGerente()) {
     const { data, error } = await sb
@@ -130,13 +120,12 @@ async function fetchCuentasNoFacebookVisibles() {
         correo: c.email || "—",
         pass: c.contra || "",
         twofa: c.two_fa || "",
-        ocupadaPor: "—", // la asignación se ve en otra pantalla; acá es vista unificada
+        ocupadaPor: "—",
         estado: c.estado || (c.activo ? "activa" : "inactiva"),
         link: c.url || c.handle || "",
       }));
   }
 
-  // Operador: solo asignadas desde cuentas_asignadas
   const { data, error } = await sb
     .from(TABLA_ASIG)
     .select(`
@@ -166,9 +155,6 @@ async function fetchCuentasNoFacebookVisibles() {
     }));
 }
 
-// ----------------------------
-// Dedupe final (para asegurar 0 repetidos)
-// ----------------------------
 function dedupeRows(rows) {
   const seen = new Set();
   const out = [];
@@ -187,37 +173,8 @@ function dedupeRows(rows) {
   return out;
 }
 
-function render(rows) {
-  const tbody = $("#tablaCuentas tbody");
-  if (!tbody) return;
-
-  tbody.innerHTML = "";
-
-  if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="8" class="muted">No hay cuentas visibles.</td></tr>`;
-    return;
-  }
-
-  for (const r of rows) {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td class="col-plataforma">${pill(r.plataforma)}</td>
-      <td class="col-nombre"><strong title="${escapeHtml(r.nombre)}">${escapeHtml(r.nombre)}</strong></td>
-      <td class="col-correo mono" title="${escapeHtml(r.correo)}">${escapeHtml(r.correo)}</td>
-
-      <td class="col-pass">${cellCopy(r.pass)}</td>
-      <td class="col-2fa">${cellCopy(r.twofa)}</td>
-
-      <td class="col-ocupada mono" title="${escapeHtml(r.ocupadaPor)}">${escapeHtml(r.ocupadaPor)}</td>
-      <td class="col-estado">${pillEstado(r.estado)}</td>
-      <td class="col-link">${cellLink(r.link)}</td>
-    `;
-
-    tbody.appendChild(tr);
-  }
-
-  // bind copy buttons
-  tbody.querySelectorAll("[data-copy]").forEach((btn) => {
+function bindTableActions(tbody) {
+  tbody.querySelectorAll("[data-action='copy']").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const val = btn.getAttribute("data-copy") || "";
       try {
@@ -229,6 +186,61 @@ function render(rows) {
       }
     });
   });
+
+  tbody.querySelectorAll("[data-action='toggle']").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.getAttribute("data-key");
+      const span = tbody.querySelector(`[data-secret-key="${CSS.escape(key)}"]`);
+      if (!span) return;
+
+      const current = span.textContent;
+      const full = span.getAttribute("data-secret-val") || "";
+
+      if (current === "••••••••") {
+        span.textContent = full;
+        btn.textContent = "Ocultar";
+      } else {
+        span.textContent = "••••••••";
+        btn.textContent = "Ver";
+      }
+    });
+  });
+}
+
+function render(rows) {
+  const tbody = $("#tablaCuentas tbody");
+  if (!tbody) return;
+
+  tbody.innerHTML = "";
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="muted">No hay cuentas visibles.</td></tr>`;
+    return;
+  }
+
+  rows.forEach((r, idx) => {
+    const tr = document.createElement("tr");
+
+    const passKey = `pass-${idx}`;
+    const twofaKey = `twofa-${idx}`;
+
+    tr.innerHTML = `
+      <td class="col-plat">${pill(r.plataforma)}</td>
+      <td class="col-nom"><strong title="${escapeHtml(r.nombre)}">${escapeHtml(r.nombre)}</strong></td>
+      <td class="col-mail mono" title="${escapeHtml(r.correo)}">${escapeHtml(r.correo)}</td>
+
+      <td class="col-pass">${secretCell(r.pass, passKey)}</td>
+      <td class="col-2fa">${secretCell(r.twofa, twofaKey)}</td>
+
+      <td class="col-ocu mono" title="${escapeHtml(r.ocupadaPor)}">${escapeHtml(r.ocupadaPor)}</td>
+      <td class="col-est">${pillEstado(r.estado)}</td>
+      <td class="col-link">${linkCell(r.link)}</td>
+    `;
+
+    tbody.appendChild(tr);
+  });
+
+  bindTableActions(tbody);
 }
 
 async function cargarTodo() {
