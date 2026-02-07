@@ -242,6 +242,8 @@ async function cargarAsignacionCategoria() {
 // Cuentas (solo las asignadas al operador)
 // ============================
 async function fetchFacebookAsignadas() {
+  // operador: solo las que tiene ocupada_por = usuario
+  // gerente: podés ampliarlo después si querés, pero ahora lo dejamos estricto para evitar “cuentas que no le asignaron”
   let q = supabaseClient
     .from(TABLA_CUENTAS_FB)
     .select("email, estado, ocupada_por")
@@ -287,6 +289,19 @@ async function fetchNuevasAsignadas() {
     }));
 }
 
+function dedupeCuentasPorIdent(lista) {
+  const seen = new Set();
+  const out = [];
+  for (const c of lista || []) {
+    const k = String(c?.ident || "");
+    if (!k) continue;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(c);
+  }
+  return out;
+}
+
 async function contarPorCuentaHoy(ident) {
   const hoy = fmtDateAR();
   const plat = getPlataforma();
@@ -320,8 +335,14 @@ async function cargarCuentas() {
       nuevas = [];
     }
 
-    cuentasAsignadas = [...fb, ...nuevas];
+    // Evitar duplicados:
+    // - Facebook se gestiona en la tabla legacy (cuentas_facebook). Si también existen facebook dentro de "cuentas",
+    //   acá los ignoramos para no mostrar la misma cuenta dos veces.
+    const nuevasSinFacebook = (nuevas || []).filter((c) => String(c.plataforma || "").toLowerCase() !== "facebook");
 
+    cuentasAsignadas = dedupeCuentasPorIdent([...fb, ...nuevasSinFacebook]);
+
+    // contadores por cuenta SOLO para la plataforma seleccionada
     const visibles = cuentasVisiblesSegunPlataforma();
     for (const c of visibles) {
       try {
@@ -576,10 +597,6 @@ function renderTablaHistorial(rows) {
 
     const hora = new Date(item.fecha_publicacion).toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
 
-    // Compat: algunos inserts viejos guardaban el link solo en marketplace_link_publicacion.
-    // A partir de ahora guardamos en ambas columnas y leemos de la que exista.
-    const linkPub = String(item.link_publicacion || item.marketplace_link_publicacion || "");
-
     tr.innerHTML = `
       <td>${escapeHtml(hora)}</td>
       <td>${escapeHtml(item.plataforma || "-")}</td>
@@ -587,18 +604,18 @@ function renderTablaHistorial(rows) {
       <td class="mono">${escapeHtml(item.facebook_account_usada || "-")}</td>
       <td>
         ${
-          linkPub
-            ? `<a href="${escapeHtml(linkPub)}" target="_blank" style="color:#60a5fa;">${escapeHtml(String(linkPub).slice(0, 60))}${String(linkPub).length > 60 ? "..." : ""}</a>`
+          item.marketplace_link_publicacion
+            ? `<a href="${escapeHtml(item.marketplace_link_publicacion)}" target="_blank" style="color:#60a5fa;">${escapeHtml(String(item.marketplace_link_publicacion).slice(0, 60))}${String(item.marketplace_link_publicacion).length > 60 ? "..." : ""}</a>`
             : "Sin link"
         }
       </td>
       <td style="text-align:right;">
-        <button class="btn2" data-copy="${escapeHtml(linkPub)}">Copiar link</button>
+        <button class="btn2" data-copy="${escapeHtml(item.marketplace_link_publicacion || "")}">Copiar link</button>
       </td>
     `;
 
     tr.querySelector("button")?.addEventListener("click", () => {
-      navigator.clipboard.writeText(linkPub);
+      navigator.clipboard.writeText(item.marketplace_link_publicacion || "");
       log("📋 Link copiado");
     });
 
@@ -633,6 +650,12 @@ async function guardarPublicacion() {
   const categoria = String($("#categoriaUsadaInput")?.value || "").trim();
   const descripcion = String($("#descripcionUsadaInput")?.value || "").trim();
   const etiquetas = String($("#etiquetasUsadasInput")?.value || "").trim();
+  const etiquetasArr = etiquetas
+    ? etiquetas
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean)
+    : [];
 
   if (!titulo || !categoria) {
     log("❌ Faltan campos (Título y Categoría)");
@@ -653,13 +676,15 @@ async function guardarPublicacion() {
       usuario: session.usuario,
       facebook_account_usada: cuentaSeleccionada.ident,
       fecha_publicacion: new Date().toISOString(),
-      // Guardamos en ambas columnas para que Verificación + Historial siempre encuentren el link.
+      // Guardamos en ambas columnas por compatibilidad con pantallas viejas/nuevas
+      // (verificación/historial leen una u otra según versión).
       link_publicacion: link,
       marketplace_link_publicacion: link,
       titulo,
       descripcion: descripcion || "",
       categoria,
-      etiquetas_usadas: etiquetas,          // texto simple (no array)
+      // En BD este campo suele ser text[]; si mandamos string da "malformed array literal".
+      etiquetas_usadas: etiquetasArr,
       plataforma: plat,
       tipo_rrss: plat === "facebook" ? tipo : null,
     };
