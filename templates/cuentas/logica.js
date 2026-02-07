@@ -1,6 +1,23 @@
-import { escapeHtml } from "../../assets/js/app.js";
+import { getSession, loadSidebar, escapeHtml } from "../../assets/js/app.js";
 
-const $ = (s) => document.querySelector(s);
+const $ = (sel) => document.querySelector(sel);
+
+const TABLA_USUARIOS = "usuarios";
+const TABLA_CUENTAS_FB = "cuentas_facebook";
+const TABLA_CUENTAS = "cuentas";
+const TABLA_CUENTAS_ASIGNADAS = "cuentas_asignadas";
+
+let session = null;
+let supabaseClient = null;
+let usuarioActual = null;
+
+function log(msg) {
+  const el = $("#log");
+  if (!el) return;
+  const t = new Date().toTimeString().slice(0, 8);
+  el.innerHTML += `[${t}] ${escapeHtml(msg)}<br>`;
+  el.scrollTop = el.scrollHeight;
+}
 
 async function waitSupabaseClient(timeoutMs = 2000) {
   const start = Date.now();
@@ -11,493 +28,230 @@ async function waitSupabaseClient(timeoutMs = 2000) {
   return null;
 }
 
-const session = JSON.parse(localStorage.getItem("mp_session_v1") || "{}");
-let sb = null;
+async function cargarUsuario() {
+  const { data, error } = await supabaseClient
+    .from(TABLA_USUARIOS)
+    .select("*")
+    .eq("usuario", session.usuario)
+    .single();
 
-let filtroPlataforma = "all";
-let editMode = { tipo: null, id: null }; // tipo: "fb" | "new"
+  if (error) throw error;
+  usuarioActual = data;
 
-// ==========================
-// Log seguro (no rompe nunca)
-// ==========================
-function log(msg) {
-  const el = $("#log");
-  if (!el) return;
-  const t = new Date().toTimeString().slice(0, 8);
-  el.innerHTML += `[${t}] ${escapeHtml(msg)}<br>`;
-  el.scrollTop = el.scrollHeight;
+  $("#userInfo").innerHTML = `
+    <div><strong>Usuario:</strong> ${escapeHtml(data.usuario)}</div>
+    <div><strong>Rol:</strong> ${escapeHtml(data.rol || "no definido")}</div>
+    <div><strong>Email:</strong> ${escapeHtml(data.email || "-")}</div>
+  `;
 }
 
-// ==========================
-// UI chips
-// ==========================
-function setupChips() {
-  document.querySelectorAll(".chip").forEach((c) => {
-    c.onclick = async () => {
-      document.querySelectorAll(".chip").forEach((x) => x.classList.remove("active"));
-      c.classList.add("active");
-      filtroPlataforma = c.dataset.pl || "all";
-      await cargarPantalla();
-    };
+function isGerente() {
+  return String(usuarioActual?.rol || "").toLowerCase() === "gerente";
+}
+
+function setSensitiveColumnsVisible(show) {
+  document.querySelectorAll(".col-sensible").forEach((el) => {
+    el.classList.toggle("hide", !show);
   });
 }
 
-// ==========================
-// Helpers
-// ==========================
-function pillClass(pl) {
-  const p = String(pl || "").toLowerCase();
-  if (p === "facebook") return "fb";
-  if (p === "instagram") return "ig";
-  if (p === "tiktok") return "tt";
-  return "ot";
+function pillEstado(estado) {
+  const e = String(estado || "").toLowerCase();
+  if (e === "activa" || e === "activo") return `<span class="pill pill-success">activa</span>`;
+  if (e === "inactiva") return `<span class="pill pill-warning">inactiva</span>`;
+  if (e === "bloqueada") return `<span class="pill pill-warning">bloqueada</span>`;
+  if (e === "pausada") return `<span class="pill pill-warning">pausada</span>`;
+  return `<span class="pill pill-info">${escapeHtml(estado || "—")}</span>`;
 }
 
-// ==========================
-// CARGA SEGURA DE DATOS
-// ==========================
+function pillPlataforma(p) {
+  const pl = String(p || "otra").toLowerCase();
+  return `<span class="pill pill-info">${escapeHtml(pl)}</span>`;
+}
 
-// 1) Facebook legacy (cuentas_facebook) -> funciona SIEMPRE
-async function fetchFacebookLegacy() {
-  let q = sb.from("cuentas_facebook").select("*").order("id", { ascending: true });
+// =======================
+// CARGA FACEBOOK
+// =======================
+async function fetchCuentasFacebook() {
+  // Gerente: ve todas
+  // Operador: ve solo las que ocupa (ocupada_por)
+  let q = supabaseClient
+    .from(TABLA_CUENTAS_FB)
+    .select("id, nombre, email, contra, two_fa, ocupada_por, estado");
 
-  if (session.rol !== "gerente") {
-    q = q.eq("ocupada_por", session.usuario);
-  }
+  if (!isGerente()) q = q.eq("ocupada_por", session.usuario);
 
-  const { data, error } = await q;
+  const { data, error } = await q.order("id", { ascending: true });
   if (error) throw error;
 
-  return (data || []).map((r) => ({
-    tipo: "fb",
+  return (data || []).map((c) => ({
     plataforma: "facebook",
-    id: r.id,
-    nombre: r.nombre || r.email || "(sin nombre)",
-    estado: r.estado || "activo",
-    asignada_a: r.ocupada_por || null,
-    raw: r,
+    nombre: c.nombre || c.email || "—",
+    correo: c.email || "—",
+    password: c.contra || "—",
+    twofa: c.two_fa || "—",
+    ocupada_por: c.ocupada_por || "libre",
+    estado: c.estado || "—",
+    link_o_handle: "—",
   }));
 }
 
-// 2) Nuevas cuentas (cuentas + cuentas_asignadas)
-// - gerente: ve todo en "cuentas"
-// - operador: trae ids desde cuentas_asignadas y luego hace .in()
-async function fetchCuentasNuevas() {
-  if (session.rol === "gerente") {
-    const { data, error } = await sb
-      .from("cuentas")
-      .select("*")
+// =======================
+// CARGA IG / TIKTOK (cuentas + cuentas_asignadas)
+// =======================
+async function fetchCuentasSociales() {
+  // Queremos mostrar quién la ocupa según cuentas_asignadas.
+  // Gerente: todas las cuentas + su asignación (si existe)
+  // Operador: solo las asignadas a él
+  //
+  // Nota: tu tabla "cuentas" no tiene correo/password/2fa. Mostramos "—" por ahora.
+
+  if (isGerente()) {
+    const { data, error } = await supabaseClient
+      .from(TABLA_CUENTAS)
+      .select(`
+        id, plataforma, nombre, handle, url, activo,
+        cuentas_asignadas:cuentas_asignadas ( usuario )
+      `)
       .order("id", { ascending: true });
+
     if (error) throw error;
 
-    return (data || []).map((c) => ({
-      tipo: "new",
-      plataforma: c.plataforma || "otra",
-      id: c.id,
-      nombre: c.nombre_visible || c.usuario_handle || `Cuenta ${c.id}`,
-      estado: c.activo ? "activa" : "inactiva",
-      asignada_a: null, // la mostramos solo si querés (se puede cargar con otra query)
-      raw: c,
-    }));
+    return (data || []).map((c) => {
+      const asign = Array.isArray(c.cuentas_asignadas) && c.cuentas_asignadas.length > 0
+        ? c.cuentas_asignadas.map(a => a.usuario).filter(Boolean).join(", ")
+        : "libre";
+
+      return {
+        plataforma: String(c.plataforma || "otra").toLowerCase(),
+        nombre: c.nombre || `Cuenta ${c.id}`,
+        correo: "—",
+        password: "—",
+        twofa: "—",
+        ocupada_por: asign || "libre",
+        estado: c.activo ? "activa" : "inactiva",
+        link_o_handle: c.url || c.handle || "—",
+      };
+    });
   }
 
-  // Operador
-  const { data: asig, error: errAsig } = await sb
-    .from("cuentas_asignadas")
-    .select("cuenta_id")
-    .eq("usuario", session.usuario);
+  // Operador: traer solo las asignadas a él
+  const { data, error } = await supabaseClient
+    .from(TABLA_CUENTAS_ASIGNADAS)
+    .select(`
+      usuario,
+      cuenta_id,
+      cuentas:cuenta_id ( id, plataforma, nombre, handle, url, activo )
+    `)
+    .eq("usuario", session.usuario)
+    .order("cuenta_id", { ascending: true });
 
-  if (errAsig) throw errAsig;
+  if (error) throw error;
 
-  const ids = (asig || []).map((x) => x.cuenta_id).filter(Boolean);
-  if (!ids.length) return [];
-
-  const { data: cuentas, error: errC } = await sb
-    .from("cuentas")
-    .select("*")
-    .in("id", ids)
-    .order("id", { ascending: true });
-
-  if (errC) throw errC;
-
-  return (cuentas || []).map((c) => ({
-    tipo: "new",
-    plataforma: c.plataforma || "otra",
-    id: c.id,
-    nombre: c.nombre_visible || c.usuario_handle || `Cuenta ${c.id}`,
-    estado: c.activo ? "activa" : "inactiva",
-    asignada_a: session.usuario,
-    raw: c,
-  }));
+  return (data || [])
+    .map((r) => r.cuentas)
+    .filter(Boolean)
+    .map((c) => ({
+      plataforma: String(c.plataforma || "otra").toLowerCase(),
+      nombre: c.nombre || `Cuenta ${c.id}`,
+      correo: "—",
+      password: "—",
+      twofa: "—",
+      ocupada_por: session.usuario,
+      estado: c.activo ? "activa" : "inactiva",
+      link_o_handle: c.url || c.handle || "—",
+    }));
 }
 
-// ==========================
+// =======================
 // RENDER
-// ==========================
+// =======================
 function renderTabla(rows) {
-  const tbody = $("#tbodyCuentas");
-  if (!tbody) return;
-
-  const filtradas =
-    filtroPlataforma === "all"
-      ? rows
-      : rows.filter((r) => String(r.plataforma).toLowerCase() === filtroPlataforma);
-
+  const tbody = $("#tablaCuentas tbody");
   tbody.innerHTML = "";
 
-  if (!filtradas.length) {
-    const msg =
-      session.rol === "gerente"
-        ? "No hay cuentas para mostrar con este filtro."
-        : "No tenés cuentas asignadas todavía. Pedile al gerente que te asigne.";
-    tbody.innerHTML = `<tr><td colspan="5" class="muted2">${msg}</td></tr>`;
+  if (!rows || rows.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" class="muted">No hay cuentas para mostrar</td></tr>`;
     return;
   }
 
-  filtradas.forEach((r) => {
+  for (const r of rows) {
     const tr = document.createElement("tr");
 
-    const pl = String(r.plataforma || "otra").toLowerCase();
-    const plLabel =
-      pl === "facebook" ? "Facebook" : pl === "instagram" ? "Instagram" : pl === "tiktok" ? "TikTok" : "Otra";
-
-    let acciones = "";
-
-    if (r.tipo === "fb") {
-      // gerente: editar FB legacy desde panel (lo dejamos ahí)
-      // operador: modal login rápido
-      if (session.rol !== "gerente") {
-        acciones += `<button class="btn2" data-action="loginfb" data-id="${r.id}">🔐 Iniciar sesión</button>`;
-      } else {
-        acciones += `<button class="btn2" data-action="editfb" data-id="${r.id}">Editar</button>`;
-      }
-    } else {
-      if (session.rol === "gerente") {
-        acciones += `<button class="btn2" data-action="editnew" data-id="${r.id}">Editar</button>`;
-      } else {
-        acciones += `<span class="muted2">Asignada</span>`;
-      }
-    }
-
     tr.innerHTML = `
-      <td><span class="pill ${pillClass(pl)}">● ${escapeHtml(plLabel)}</span></td>
+      <td>${pillPlataforma(r.plataforma)}</td>
       <td>
-        <div style="font-weight:800; color:#e5e7eb;">${escapeHtml(r.nombre)}</div>
-        <div class="muted2 mono">${r.tipo === "fb" ? escapeHtml(r.raw.email || "") : escapeHtml(r.raw.usuario_handle || "")}</div>
+        <div style="font-weight:800;color:#e5e7eb;">${escapeHtml(r.nombre)}</div>
       </td>
-      <td>${escapeHtml(r.estado || "-")}</td>
-      <td>${r.asignada_a ? `<span class="pill ot">👤 ${escapeHtml(r.asignada_a)}</span>` : `<span class="pill tt">🟢 Libre</span>`}</td>
-      <td style="display:flex; gap:8px; flex-wrap:wrap;">${acciones}</td>
+      <td class="mono">${escapeHtml(r.correo || "—")}</td>
+      <td class="mono col-sensible">${escapeHtml(r.password || "—")}</td>
+      <td class="mono col-sensible">${escapeHtml(r.twofa || "—")}</td>
+      <td class="mono">${escapeHtml(r.ocupada_por || "libre")}</td>
+      <td>${pillEstado(r.estado)}</td>
+      <td>
+        ${
+          r.link_o_handle && r.link_o_handle !== "—"
+            ? `<a href="${escapeHtml(r.link_o_handle)}" target="_blank" style="color:#60a5fa;">${escapeHtml(r.link_o_handle.slice(0, 50))}${r.link_o_handle.length > 50 ? "…" : ""}</a>`
+            : `<span class="muted">—</span>`
+        }
+        ${r.link_o_handle && !String(r.link_o_handle).startsWith("http") ? `<div class="sub muted mono">${escapeHtml(r.link_o_handle)}</div>` : ""}
+      </td>
     `;
 
     tbody.appendChild(tr);
-  });
-}
-
-// ==========================
-// GERENTE: cargar combos
-// ==========================
-async function cargarOperadoresYCombos() {
-  if (session.rol !== "gerente") return;
-
-  // Operadores
-  const { data: ops, error: errOps } = await sb
-    .from("usuarios")
-    .select("usuario")
-    .eq("rol", "operador")
-    .order("usuario", { ascending: true });
-
-  if (errOps) {
-    log("⚠️ No pude cargar operadores: " + errOps.message);
-  } else {
-    const selOp = $("#selOperador");
-    if (selOp) {
-      selOp.innerHTML = (ops || []).map((u) => `<option value="${u.usuario}">${u.usuario}</option>`).join("");
-    }
-  }
-
-  // Cuentas nuevas (para asignar)
-  const { data: cuentas, error: errC } = await sb
-    .from("cuentas")
-    .select("id, plataforma, nombre_visible, usuario_handle")
-    .order("id", { ascending: true });
-
-  if (errC) {
-    log("⚠️ No pude cargar cuentas nuevas para asignación: " + errC.message);
-  } else {
-    const selCuenta = $("#selCuenta");
-    if (selCuenta) {
-      selCuenta.innerHTML = (cuentas || [])
-        .map((c) => {
-          const label = `${(c.plataforma || "otra").toUpperCase()} — ${c.nombre_visible || c.usuario_handle || "Cuenta " + c.id}`;
-          return `<option value="${c.id}">${escapeHtml(label)}</option>`;
-        })
-        .join("");
-    }
   }
 }
 
-// ==========================
-// Acciones gerente (guardar / asignar)
-// ==========================
-async function guardarCuentaGerente() {
-  if (session.rol !== "gerente") return;
+// =======================
+// MAIN LOAD
+// =======================
+async function cargarTodo() {
+  log("⏳ Cargando cuentas…");
 
-  const plataforma = ($("#plataforma").value || "facebook").toLowerCase();
-  const nombre_visible = ($("#nombre_visible").value || "").trim();
-  const usuario_handle = ($("#usuario_handle").value || "").trim();
-  const url = ($("#url").value || "").trim();
-  const activo = ($("#activo").value || "true") === "true";
+  // 1) Facebook
+  const fb = await fetchCuentasFacebook();
 
-  // Si es FB legacy, se guarda en cuentas_facebook (para NO perder lo que ya está)
-  if (plataforma === "facebook") {
-    const payload = {
-      email: ($("#fb_email").value || "").trim(),
-      contra: ($("#fb_contra").value || "").trim(),
-      two_fa: ($("#fb_twofa").value || "").trim(),
-      nombre: nombre_visible || null,
-      estado: ($("#fb_estado").value || "activo"),
-      calidad: ($("#fb_calidad").value || "caliente"),
-      // ocupada_por no la tocamos acá (se maneja desde cuentas_fb o si querés la agregamos)
-    };
+  // 2) IG/TikTok/etc
+  const social = await fetchCuentasSociales();
 
-    if (!payload.email) {
-      alert("FB legacy: el email es obligatorio.");
-      return;
-    }
+  // Unificar lista
+  const rows = [...fb, ...social];
 
-    const res = editMode.tipo === "fb" && editMode.id
-      ? await sb.from("cuentas_facebook").update(payload).eq("id", editMode.id)
-      : await sb.from("cuentas_facebook").insert([payload]);
+  // Mostrar / ocultar columnas sensibles
+  setSensitiveColumnsVisible(isGerente());
 
-    if (res.error) {
-      alert("No se pudo guardar FB: " + res.error.message);
-      return;
-    }
-
-    log("✅ Guardada cuenta Facebook (legacy)");
-    editMode = { tipo: null, id: null };
-    $("#editInfo").textContent = "";
-    await cargarPantalla();
-    return;
-  }
-
-  // IG/TikTok a tabla cuentas
-  const payload = {
-    plataforma,
-    nombre_visible: nombre_visible || null,
-    usuario_handle: usuario_handle || null,
-    url: url || null,
-    activo,
-  };
-
-  const res = editMode.tipo === "new" && editMode.id
-    ? await sb.from("cuentas").update(payload).eq("id", editMode.id)
-    : await sb.from("cuentas").insert([payload]);
-
-  if (res.error) {
-    alert("No se pudo guardar cuenta: " + res.error.message);
-    return;
-  }
-
-  log("✅ Guardada cuenta nueva (" + plataforma + ")");
-  editMode = { tipo: null, id: null };
-  $("#editInfo").textContent = "";
-  await cargarOperadoresYCombos();
-  await cargarPantalla();
+  renderTabla(rows);
+  log(`✅ Listo: ${rows.length} cuenta(s)`);
 }
 
-async function asignarCuenta() {
-  if (session.rol !== "gerente") return;
-
-  const usuario = ($("#selOperador").value || "").trim();
-  const cuenta_id = Number($("#selCuenta").value);
-
-  if (!usuario || !cuenta_id) return alert("Faltan datos para asignar");
-
-  const { error } = await sb.from("cuentas_asignadas").insert([{ usuario, cuenta_id }]);
-  if (error) {
-    alert("No se pudo asignar: " + error.message);
-    return;
-  }
-
-  log(`✅ Asignada cuenta ${cuenta_id} a ${usuario}`);
-  await cargarPantalla();
-}
-
-// ==========================
-// Login FB modal (operador)
-// ==========================
-async function abrirFBLoginPorId(id) {
-  const { data, error } = await sb.from("cuentas_facebook").select("*").eq("id", id).single();
-  if (error) {
-    log("❌ No pude abrir login FB: " + error.message);
-    return;
-  }
-  window.abrirFBLogin(data.email || "", data.contra || "");
-}
-
-window.abrirFBLogin = function(email, pass) {
-  const modal = document.getElementById("fbLoginModal");
-  const inpEmail = document.getElementById("fbEmail");
-  const inpPass = document.getElementById("fbPass");
-  const msg = document.getElementById("fbMsg");
-  if (!modal || !inpEmail || !inpPass || !msg) return;
-
-  inpEmail.value = email || "";
-  inpPass.value = pass || "";
-  msg.textContent = "";
-  modal.style.display = "flex";
-
-  window.open("https://www.facebook.com/marketplace/", "_blank", "noopener");
-};
-
-window.cerrarFBModal = function() {
-  const modal = document.getElementById("fbLoginModal");
-  if (modal) modal.style.display = "none";
-};
-
-window.copiarFB = async function(id) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  try {
-    await navigator.clipboard.writeText(el.value || "");
-    const msg = document.getElementById("fbMsg");
-    if (msg) msg.textContent = "✅ Copiado";
-  } catch {
-    alert("No se pudo copiar. Copiá manualmente.");
-  }
-};
-
-window.abrirFacebook = function() {
-  window.open("https://www.facebook.com/login", "_blank", "noopener");
-};
-window.abrirMarketplace = function() {
-  window.open("https://www.facebook.com/marketplace/", "_blank", "noopener");
-};
-
-// ==========================
-// Acciones de tabla (delegación)
-// ==========================
-function bindTablaAcciones(rows) {
-  const tbody = $("#tbodyCuentas");
-  if (!tbody) return;
-
-  tbody.onclick = async (e) => {
-    const btn = e.target.closest("button");
-    if (!btn) return;
-
-    const action = btn.dataset.action;
-    const id = Number(btn.dataset.id);
-
-    if (action === "loginfb") {
-      await abrirFBLoginPorId(id);
-      return;
-    }
-
-    if (action === "editfb" && session.rol === "gerente") {
-      const row = rows.find((r) => r.tipo === "fb" && r.id === id);
-      if (!row) return;
-
-      editMode = { tipo: "fb", id };
-      $("#editInfo").textContent = `Editando FB legacy ID ${id}`;
-
-      $("#plataforma").value = "facebook";
-      $("#nombre_visible").value = row.raw.nombre || "";
-      $("#usuario_handle").value = "";
-      $("#url").value = "";
-      $("#activo").value = "true";
-
-      $("#fb_email").value = row.raw.email || "";
-      $("#fb_contra").value = row.raw.contra || "";
-      $("#fb_twofa").value = row.raw.two_fa || "";
-      $("#fb_estado").value = row.raw.estado || "activo";
-      $("#fb_calidad").value = row.raw.calidad || "caliente";
-      return;
-    }
-
-    if (action === "editnew" && session.rol === "gerente") {
-      const row = rows.find((r) => r.tipo === "new" && r.id === id);
-      if (!row) return;
-
-      editMode = { tipo: "new", id };
-      $("#editInfo").textContent = `Editando cuenta ID ${id}`;
-
-      $("#plataforma").value = (row.raw.plataforma || "instagram").toLowerCase();
-      $("#nombre_visible").value = row.raw.nombre_visible || "";
-      $("#usuario_handle").value = row.raw.usuario_handle || "";
-      $("#url").value = row.raw.url || "";
-      $("#activo").value = row.raw.activo ? "true" : "false";
-      return;
-    }
-  };
-}
-
-// ==========================
-// Cargar pantalla completa
-// ==========================
-async function cargarPantalla() {
-  try {
-    const fb = await fetchFacebookLegacy();
-    let nuevas = [];
-    try {
-      nuevas = await fetchCuentasNuevas();
-    } catch (e) {
-      // Importante: si falla, NO rompemos la pantalla
-      log("⚠️ Cuentas nuevas no disponibles: " + e.message);
-      nuevas = [];
-    }
-
-    const rows = [...fb, ...nuevas];
-    renderTabla(rows);
-    bindTablaAcciones(rows);
-    log(`✅ Cargadas: ${rows.length} cuenta(s) (FB + otras)`);
-
-  } catch (e) {
-    console.error(e);
-    $("#tbodyCuentas").innerHTML = `<tr><td colspan="5" class="muted2">Error cargando cuentas: ${escapeHtml(e.message)}</td></tr>`;
-    log("❌ Error cargando cuentas: " + e.message);
-  }
-}
-
-// ==========================
-// Init
-// ==========================
 document.addEventListener("DOMContentLoaded", async () => {
-  sb = await waitSupabaseClient();
-  if (!sb) {
-    log("❌ Supabase no inicializado");
+  session = getSession();
+  if (!session?.usuario) {
+    $("#log").innerHTML = "❌ No hay sesión activa. Volvé al login.";
     return;
   }
 
-  setupChips();
+  await loadSidebar({ activeKey: "cuentas", basePath: "../" });
 
-  // Panel gerente
-  if (session.rol === "gerente") {
-    $("#panelGerente").style.display = "grid";
-    await cargarOperadoresYCombos();
-
-    $("#btnGuardarCuenta").onclick = guardarCuentaGerente;
-    $("#btnAsignar").onclick = asignarCuenta;
-
-    $("#btnNuevaCuenta").onclick = () => {
-      editMode = { tipo: null, id: null };
-      $("#editInfo").textContent = "";
-      $("#nombre_visible").value = "";
-      $("#usuario_handle").value = "";
-      $("#url").value = "";
-      $("#activo").value = "true";
-
-      $("#fb_email").value = "";
-      $("#fb_contra").value = "";
-      $("#fb_twofa").value = "";
-      $("#fb_estado").value = "activo";
-      $("#fb_calidad").value = "caliente";
-      log("🧼 Formulario limpio");
-    };
+  supabaseClient = await waitSupabaseClient(2000);
+  if (!supabaseClient) {
+    log("❌ No se pudo conectar con Supabase");
+    return;
   }
 
-  $("#btnRefresh").onclick = cargarPantalla;
+  try {
+    await cargarUsuario();
+    await cargarTodo();
+  } catch (e) {
+    log(`❌ Error: ${e.message}`);
+    console.error(e);
+  }
 
-  await cargarPantalla();
+  $("#btnRefrescar")?.addEventListener("click", async () => {
+    try {
+      await cargarTodo();
+    } catch (e) {
+      log(`❌ Error refrescando: ${e.message}`);
+    }
+  });
 });
